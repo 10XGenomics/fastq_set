@@ -6,7 +6,6 @@
 - Platform for future experimentation: new aligners, etc.
 - Others??
 
-
 ## High-level Goals
 - Reusable toolkit applicable to all pipelines that start with FASTQ data
 - Very high-performance
@@ -28,3 +27,15 @@
 - Design a general purpose 'read-cluster' container that stores all R1/R2/I1/I2 data & does basic
   validation of FASTQ correctness
 - 
+
+
+## High Level TODOs
+- Finish shardio v2, review API, switch existing clients over, polish (https://github.com/10XGenomics/rust-shardio/tree/pmarks/bam-gen)
+- Design & test Read / Gem Group / Read Group / Barcode / UMI trait scheme (fastq/src/new./rs)
+- Basic cutadapt clone (see fastq/src/cutadapt.rs) (cover cases used by Agora, GEX, VDJ)
+- Road-test rust-bwa: https://github.com/10XGenomics/rust-bwa/
+- Build rust-STAR
+- Better ergonomics for writing Rust stages? (see https://github.com/10XDev/TDA_rust/blob/master/src/cmd_sort_fastq.rs#L613)
+  - Can we do type-driven interface & get rid of JSON handling?
+  - Martian code-gen?
+  - What would the simplest possible stage definition look like?
