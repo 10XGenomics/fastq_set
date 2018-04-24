@@ -23,18 +23,13 @@
 - General-purpose data-quality metrics: replace most of REPORT_BASIC & provide hooks to extend metric suite.
 
 
-## Detailed Design Notes
-- Design a general purpose 'read-cluster' container that stores all R1/R2/I1/I2 data & does basic
-  validation of FASTQ correctness
-- 
-
-
-## High Level TODOs
-- Finish shardio v2, review API, switch existing clients over, polish (https://github.com/10XGenomics/rust-shardio/tree/pmarks/bam-gen)
-- Design & test Read / Gem Group / Read Group / Barcode / UMI trait scheme (fastq/src/new./rs)
-- Basic cutadapt clone (see fastq/src/cutadapt.rs) (cover cases used by Agora, GEX, VDJ)
-- Road-test rust-bwa: https://github.com/10XGenomics/rust-bwa/
-- Build rust-STAR
+## Components & current status
+- Rust metrics framework - pretty complete - (where is this?)
+- Shardio - v2 need API review, switch existing clients over, polish - (https://github.com/10XGenomics/rust-shardio/tree/pmarks/bam-gen)
+- Read / GemGroup / ReadGroup / Barcode / UMI trait scheme - need lots more design work - (fastq/src/new./rs)
+- cutadapt clone - needs lots of work to cover cases used by Agora, GEX, VDJ - (see fastq/src/cutadapt.rs) 
+- rust-bwa - in-process BWA wrapper. in a working state, needs stress-testing : https://github.com/10XGenomics/rust-bwa/
+- rust-STAR - in-process STAR wrapper. not really started.
 - Better ergonomics for writing Rust stages? (see https://github.com/10XDev/TDA_rust/blob/master/src/cmd_sort_fastq.rs#L613)
   - Can we do type-driven interface & get rid of JSON handling?
   - Martian code-gen?
