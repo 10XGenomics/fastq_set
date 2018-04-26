@@ -34,3 +34,35 @@
   - Can we do type-driven interface & get rid of JSON handling?
   - Martian code-gen?
   - What would the simplest possible stage definition look like?
+
+
+## Read Container 
+
+From the FASTQs: 
+- 4 read parts w/ (header, seq, qual)
+- which read is which (i1 / i2 / r1 / r2)
+
+Where the read came from:
+- Gem Group (unique int)
+- SAM Read Group: (flowcell, lane, sample, library)
+
+
+- reads from the same Gem Group can be in different read groups
+- reads from different libraries can have the sample Gem group
+- any relationship constraints on sample <--> Gem group relation?
+
+Barcode:
+
+enum {
+  Invalid(gem_group, seq)
+  Valid(gem_group, seq)
+}
+
+- single sort order for all reads with or without a valid barcode.
+- Sort by Invalid/Valid, Gem_group, Seq. Provide methods to get ranges
+  with particular partitioning. (Tie in to shardio?)
+- for shardio compat it needs to be self-contained (ie no references).
+- can it be a fixed-size type (no vector allocation?)?? - otherwise it needs
+  to be generic. Should be OK to fix at 16bp for the forseeable future.
+
+- how to handle double-barcode Maverick scheme? (Ignore for now)

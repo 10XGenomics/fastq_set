@@ -20,6 +20,12 @@ pub enum WhichRead {
     I2 = 3,
 }
 
+impl WhichRead {
+    pub fn read_types() -> [WhichRead; 4] {
+        [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2]
+    }
+}
+
 pub enum ReadPart {
     Header,
     Seq,
@@ -38,14 +44,12 @@ pub struct ReadPair {
 
 impl ReadPair {
     
-    pub fn new2<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
+    pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
 
         let mut offsets = [ReadOffset::default(); 4];
         let mut buf: Vec<u8> = Vec::new();
 
-        let rps = [(WhichRead::R1), (WhichRead::R2), (WhichRead::I1), (WhichRead::I2)];
-
-        for (_rec, which) in rr.iter().zip(rps.iter()) {
+        for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
             match _rec {
                 &Some(ref rec) => {
                     let start = buf.len() as u16;
@@ -67,32 +71,10 @@ impl ReadPair {
 
 
 
-    pub fn new<R: Record>(r1: Option<R>, r2: Option<R>, i1: Option<R>, i2: Option<R>) -> ReadPair {
-
-        let mut offsets = [ReadOffset::default(); 4];
-        let mut buf: Vec<u8> = Vec::new();
-
-        let rps = [(r1, WhichRead::R1), (r2, WhichRead::R2), (i1, WhichRead::I1), (i2, WhichRead::I2)];
-
-        for &(ref _rec, ref which) in rps.iter() {
-            match _rec {
-                &Some(ref rec) => {
-                    let start = buf.len() as u16;
-                    buf.extend(rec.head());
-                    let head = buf.len() as u16;
-                    buf.extend(rec.seq());  
-                    let seq = buf.len() as u16;
-                    buf.extend(rec.head());
-                    let qual = buf.len() as u16;
-                    let read_offset = ReadOffset { exists: true, start, head, seq, qual };
-                    offsets[*which as usize] = read_offset;
-                },
-                &None => (), // default ReadOffsets is exists = false
-            }
-        } 
-
-        ReadPair { offsets, data: buf }
+    pub fn new_by_part<R: Record>(r1: Option<R>, r2: Option<R>, i1: Option<R>, i2: Option<R>) -> ReadPair {
+        Self::new([r1,r2,i1,i2])
     }
+
 
     /// Get a ReadPart `part` from a read `which` in this cluster
     pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
@@ -109,21 +91,72 @@ impl ReadPair {
     }
 }
 
+/// Represent a (possibly-correct 10x barcode sequence)
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub enum Barcode {
+    Invalid { gem_group: u16, sequence: [u8;16] },
+    Valid   { gem_group: u16, sequence: [u8;16] },
+}
+
+use self::Barcode::{Valid, Invalid};
+
+impl Barcode {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            &Valid { gem_group, sequence } => true,
+            &Invalid { gem_group, sequence } => false,
+        }
+    }
+
+    pub fn sequence(&self) -> &[u8] {
+        match self {
+            &Valid { gem_group, ref sequence } => sequence,
+            &Invalid { gem_group, ref sequence } => sequence,
+        }
+    }
+}
+
+trait HasBarcode {
+    fn barcode(&self) -> Barcode;
+}
+
+pub struct Umi {
+    length: u8,
+    sequence: [u8; 16],
+}
+
+trait HasUmi {
+    fn umi(&self) -> Umi;
+    fn correct_umi(&mut self, corrected_umi: &[u8]);
+}
+
 
 #[derive(Serialize, Deserialize, PartialOrd, Ord, Eq, PartialEq)]
-pub struct CrReadPair {
-    gem_group: u8,
-    corrected_bc: Option<u32>,
-
-    read_group: String,
-    bc_length: u8,
-    trim_r1: u8,
+pub struct InlineBcPair {
     data: ReadPair,
+    barcode: Barcode,
+    read_group_id: u16,
+    trim_r1: u8,
+    
 }
 
 /// A container for the components of a paired-end, barcoded Chromium Genome read.
 /// We assume the the 10x barcode is at the beginning of R1
-impl CrReadPair {
+impl InlineBcPair {
+    const bc_length: usize = 16;
+
+    pub fn new(data: ReadPair, read_group_id: u16, trim_r1: u8, barcode: Barcode) -> InlineBcPair {
+        assert!(data.get(WhichRead::R1, ReadPart::Seq).is_some());
+        assert!(data.get(WhichRead::R1, ReadPart::Seq).is_some());
+
+        InlineBcPair {
+            data,
+            barcode,
+            read_group_id,
+            trim_r1,
+        }
+    }
+
     /// FASTQ read header
     pub fn header(&self) -> &[u8] {
         self.data.get(WhichRead::R1, ReadPart::Header).unwrap()
@@ -161,31 +194,31 @@ impl CrReadPair {
 
     /// Raw, uncorrected barcode sequence
     pub fn raw_bc_seq(&self) -> &[u8] {
-        &self.r1_seq_raw()[0..self.bc_length as usize]
+        &self.r1_seq_raw()[0..Self::bc_length as usize]
     }
 
     /// Raw barcode QVs
     pub fn raw_bc_qual(&self) -> &[u8] {
-        &self.r1_qual_raw()[0..self.bc_length as usize]
+        &self.r1_qual_raw()[0..Self::bc_length as usize]
     }
 
     /// Bases trimmed after the 10x BC, before the start of bases used from R1
     pub fn r1_trim_seq(&self) -> &[u8] {
-        &self.r1_seq_raw()[self.bc_length as usize.. (self.bc_length+self.trim_r1) as usize]
+        &self.r1_seq_raw()[Self::bc_length as usize..(Self::bc_length+self.trim_r1 as usize)]
     }
 
     /// QVs trimmed after the 10x BC, before the start of bases used from R1
     pub fn r1_trim_qual(&self) -> &[u8] {
-        &self.r1_qual_raw()[self.bc_length as usize .. (self.bc_length+self.trim_r1) as usize]
+        &self.r1_qual_raw()[Self::bc_length as usize..(Self::bc_length+self.trim_r1 as usize)]
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_seq(&self) -> &[u8] {
-        &self.r1_seq_raw()[(self.bc_length+self.trim_r1) as usize..]
+        &self.r1_seq_raw()[(Self::bc_length+self.trim_r1 as usize)..]
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_qual(&self) -> &[u8] {
-        &self.r1_qual_raw()[(self.bc_length+self.trim_r1) as usize..]
+        &self.r1_qual_raw()[(Self::bc_length+self.trim_r1 as usize)..]
     }
 }
