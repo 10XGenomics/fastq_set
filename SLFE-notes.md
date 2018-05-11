@@ -10,6 +10,11 @@
 - Reusable toolkit applicable to all pipelines that start with FASTQ data
 - Very high-performance
 - Easy to adopt into a pipeline without being a Rust expert
+- Clear separation of 'heavy-duty Rust infrastructure' and 'bioinformatics' in code.
+  Ideally each 'bioinformatics' step is captured in a trait that can be implemented
+  in a few simple function that don't need to know anything about advanced Rust
+  features or special setups that improve performance (e.g. threading, channels,
+  custom iterators, or lifetimes).
 
 ## Feature Requirements
 - Subsampling to an exact number of reads

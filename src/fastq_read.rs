@@ -1,5 +1,6 @@
 use fastq::{self, RecordRefIter};
-use new::{ReadPair, WhichRead};
+use raw::{ReadPair, WhichRead};
+use FastqFiles;
 
 use failure::Error;
 use std::path::Path;
@@ -12,8 +13,8 @@ use std::io::{Read, BufReader};
 
 /// Read from a parallel set of FASTQ files.
 /// TODO: support interleaved R1/R2 files.
-pub struct ReadPairIter<R: Read> {
-    iters: [Option<RecordRefIter<R>>; 4],
+pub struct ReadPairIter {
+    iters: [Option<RecordRefIter<Box<Read>>>; 4],
     // Each input file can interleave up to 2 -- declare those here
     targets: [[Option<WhichRead>; 2]; 4]
 }
@@ -32,9 +33,17 @@ pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Result<Box<Read>, Error> {
 }
 
 
-impl<R: Read> ReadPairIter<R> {
+impl ReadPairIter {
+    pub fn from_fastq_files(fastq_files: FastqFiles) -> Result<ReadPairIter, Error> {
+        if fastq_files.r1_interleaved {
+            assert!(fastq_files.r2.is_none());
+            Self::new_interleaved_gz(fastq_files.r1, fastq_files.i1, fastq_files.i2)
+        } else {
+            Self::new_gz(Some(fastq_files.r1), fastq_files.r2, fastq_files.i1, fastq_files.i2)
+        }
+    }
 
-    pub fn new_gz<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>) -> Result<ReadPairIter<Box<Read>>, Error> {
+    pub fn new_gz<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>) -> Result<ReadPairIter, Error> {
 
         let mut iters = [None, None, None, None];
         let mut targets = [[None,None]; 4];
@@ -56,7 +65,7 @@ impl<R: Read> ReadPairIter<R> {
         Ok(ReadPairIter{ iters, targets })
     }
 
-    pub fn new_interleaved_gz<P: AsRef<Path>>(r1_r2_interleaved: P, i1: Option<P>, i2: Option<P>) -> Result<ReadPairIter<Box<Read>>, Error> {
+    pub fn new_interleaved_gz<P: AsRef<Path>>(r1_r2_interleaved: P, i1: Option<P>, i2: Option<P>) -> Result<ReadPairIter, Error> {
 
         let mut iters = [None, None, None, None];
         let mut targets = [[None,None]; 4];
@@ -116,7 +125,7 @@ impl<R: Read> ReadPairIter<R> {
     }
 }
 
-impl<R: Read> Iterator for ReadPairIter<R> {
+impl Iterator for ReadPairIter {
     type Item = Result<ReadPair, Error>;
 
     fn next(&mut self) -> Option<Result<ReadPair, Error>> {

@@ -6,8 +6,16 @@ authors = ["Patrick Marks <patrick@10xgenomics.com>"]
 [dependencies]
 ordered-float = "0.3.0"
 flate2 = "*"
-serde = "*"
 serde_derive = "*"
+serde_json = "*"
+serde = "*"
+rust-htslib = "*"
+shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
+rayon = "*"
+log = "*"
+bincode = "*"
+fxhash = "0.2.1"
+rand = "*"
 
 # Switch back to crates once PR is upstreamed.
 fastq = { git = "https://github.com/pmarks/fastq-rs.git", rev = "e042ef2e59fff6365c1"}

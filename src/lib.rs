@@ -1,140 +1,247 @@
 extern crate flate2;
 extern crate ordered_float;
 extern crate fastq;
+extern crate rust_htslib;
 
 #[macro_use] 
 extern crate failure;
 
 #[macro_use]
 extern crate serde_derive;
+extern crate serde;
+extern crate bincode;
 
-use std::path::Path;
-use std::fs::{File};
-use std::io::{Read, BufRead, BufReader, Lines};
-use std::boxed::Box;
-use flate2::read::MultiGzDecoder;
+#[macro_use]
+extern crate log;
 
+extern crate rayon;
+extern crate shardio;
+extern crate fxhash;
+extern crate rand;
+extern crate serde_json;
+
+pub mod raw;
 pub mod fastq_read;
-pub mod new;
+
 pub mod barcode;
+pub mod bc_sort;
+pub mod utils;
 
-/// Head, Seq, Qual from single FASTQ
-pub type FqRec = (Vec<u8>, Vec<u8>, Vec<u8>);
+pub mod dna_read;
+pub mod rna_read;
 
-/// R1, R2, optional SI
-pub type RawReadSet = (FqRec, FqRec, Option<FqRec>);
+use std::path::PathBuf;
 
-/// Read a single FqRec from a line 
-pub fn get_fastq_item<R: BufRead>(lines: &mut Lines<R>) -> Option<FqRec>{
-    match lines.next() {
-        Some(head) => {
-            let r1 = lines.next().unwrap().unwrap().into_bytes();
-            let _  = lines.next().unwrap().unwrap().into_bytes();
-            let q1 = lines.next().unwrap().unwrap().into_bytes();
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
+enum FastqMode {
+    BCL_PROCESSOR,
+    ILMN_BCL2FASTQ,
+}
 
-            // trim after first space of head
-            //let head_str = head.unwrap();
-            //let mut split = head_str.split_whitespace();
-            //let trim_head = split.next().unwrap().to_string().into_bytes();
+/// Pointer to one logical set of FASTQ from a unique (library, gem_group) tuple
+#[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub struct SampleDef {
+    fastq_mode: FastqMode,
+    gem_group: Option<u16>,
+    lanes: Option<Vec<usize>>,
+    library_type: String,
+    read_path: PathBuf,
+    sample_indices: Option<Vec<String>>,
+    sample_names: Option<Vec<String>>,
+}
 
-            Some((head.unwrap().into_bytes(), r1, q1))
-        },
-        None => None
+impl SampleDef {
+    pub fn interleaved(&self) -> bool {
+        self.fastq_mode == FastqMode::BCL_PROCESSOR
+    }
+
+
+
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FastqFiles {
+    r1: String,
+    r2: Option<String>,
+    i1: Option<String>,
+    i2: Option<String>,
+    r1_interleaved: bool,
+}
+
+impl SampleDef {
+    pub fn get_fastqs(&self) -> Vec<FastqFiles> {
+        vec![]
     }
 }
 
-pub struct FastqPairIter {
-    r1: Lines<BufReader<Box<Read>>>,
-    r2: Lines<BufReader<Box<Read>>>,
-    si: Option<Lines<BufReader<Box<Read>>>>,
-}
+/*
+Possible conversions:
+SampleDef --> FASTQ filenames --> Iterator of Raw Read Pairs
 
-pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Box<Read> {
-    let r = File::open(p.as_ref()).unwrap();
+(RawReadPair, ChemistryDefinition) --> RnaReadPair
 
-    if p.as_ref().extension().unwrap() == "gz" {
-        let gz = MultiGzDecoder::new(r);
-        let buf_reader = BufReader::with_capacity(32*1024, gz);
-        Box::new(buf_reader)
-    } else {
-        let buf_reader = BufReader::with_capacity(32*1024, r);
-        Box::new(buf_reader)
-    }
+
+*/
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+struct SSeq {
+    length: u8,
+    sequence: [u8; 23],
 }
 
 
-pub fn open_fastq_pair_iter<P: AsRef<Path>>(r1: P, r2: P, si: Option<P>) -> Box<Iterator<Item=RawReadSet>> {
-    Box::new(
-    FastqPairIter::init(
-        open_w_gz(r1),
-        open_w_gz(r2),
-        si.map(|si| open_w_gz(si)),
-    ))
-}
+impl SSeq {
+    pub fn new(seq: &[u8]) -> SSeq {
+        assert!(seq.len() <= 23);
 
-impl FastqPairIter {
-    pub fn init(r1: Box<Read>, r2: Box<Read>, si: Option<Box<Read>>) -> FastqPairIter {
+        let mut sequence = [0u8; 23];
+        sequence[0..seq.len()].copy_from_slice(&seq);
 
-        FastqPairIter {
-            r1: BufReader::new(r1).lines(),
-            r2: BufReader::new(r2).lines(),
-            si: si.map(|x| BufReader::new(x).lines()),
+        SSeq {
+            length: seq.len() as u8,
+            sequence,
         }
     }
-}
 
-impl Iterator for FastqPairIter {
-    type Item = RawReadSet;
-
-    fn next(&mut self) -> Option<RawReadSet> {
-
-        match get_fastq_item(&mut self.r1) {
-            Some(f_r1) => {
-                let f_r2 = get_fastq_item(&mut self.r2).unwrap();
-                
-                let f_si = self.si.as_mut().map(|_si| get_fastq_item(_si).unwrap());
-                Some((f_r1, f_r2, f_si))
-            }
-            None => None,
-        }
+    pub fn seq(&self) -> &[u8] {
+        &self.sequence[0..self.length as usize]
     }
 }
 
-pub struct InterleavedFastqPairIter {
-    ra: Lines<BufReader<Box<Read>>>,
-    si: Option<Lines<BufReader<Box<Read>>>>,
-}
-
-pub fn open_interleaved_fastq_pair_iter<P: AsRef<Path>>(ra: P, si: Option<P>) -> Box<Iterator<Item=RawReadSet>> {
-    Box::new(
-    InterleavedFastqPairIter::init(
-        open_w_gz(ra),
-        si.map(|si| open_w_gz(si)),
-    ))
-}
-
-impl InterleavedFastqPairIter {
-
-    pub fn init(ra: Box<Read>, si: Option<Box<Read>>) -> InterleavedFastqPairIter {
-        InterleavedFastqPairIter {
-            ra: BufReader::new(ra).lines(),
-            si: si.map(|x| BufReader::new(x).lines()),
-        }
+impl AsRef<[u8]> for SSeq {
+    fn as_ref(&self) -> &[u8] {
+        self.seq()
     }
 }
 
-impl Iterator for InterleavedFastqPairIter {
-    type Item = RawReadSet;
+/// Represent a (possibly-correct 10x barcode sequence)
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+pub struct Barcode {
+    gem_group: u16, 
+    sequence: SSeq,
+    valid: bool
+}
 
-    fn next(&mut self) -> Option<RawReadSet> {
-
-        match get_fastq_item(&mut self.ra) {
-            Some(f_r1) => {
-                let f_r2 = get_fastq_item(&mut self.ra).unwrap();
-                let f_si = self.si.as_mut().map(|_si| get_fastq_item(_si).unwrap());
-                Some((f_r1, f_r2, f_si))
-            }
-            None => None,
+impl Barcode {
+    pub fn new(gem_group: u16, sequence: &[u8], valid: bool) -> Barcode {
+        Barcode {
+            gem_group,
+            sequence: SSeq::new(sequence),
+            valid
         }
     }
+    
+    pub fn valid(&self) -> bool {
+        self.valid
+    }
+
+    pub fn sequence(&self) -> &[u8] {
+        self.sequence.seq()
+    }
 }
+
+pub trait HasBarcode {
+    fn barcode(&self) -> Barcode;
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)] 
+pub struct Umi {
+    sequence: SSeq,
+}
+
+impl Umi {
+    pub fn new(sequence: &[u8]) -> Umi {
+        Umi {
+            sequence: SSeq::new(sequence),
+        }
+    }
+
+    pub fn sequence(&self) -> &[u8] {
+        self.sequence.seq()
+    }
+}
+
+pub trait HasUmi {
+    fn umi(&self) -> Umi;
+    fn correct_umi(&mut self, corrected_umi: &[u8]);
+}
+
+pub trait ToBam {
+    fn to_bam(&self) -> rust_htslib::bam::Record;
+}
+
+pub trait AlignableRead {
+    fn alignable_reads(&self) -> (Option<&[u8]>, Option<&[u8]>);
+}
+
+pub trait FastqProcessor<ReadType> {
+    fn process_read(&self, read: raw::ReadPair) -> Option<ReadType>;
+    fn description(&self) -> String;
+    fn fastq_files(&self) -> FastqFiles;
+
+    fn bc_subsample_rate(&self) -> f64;
+    fn read_subsample_rate(&self) -> f64;
+}
+
+/*
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    pub fn test_bcl_processor()
+    {
+        let sd = r#"
+[
+        {
+            "fastq_mode": "BCL_PROCESSOR",
+            "gem_group": null,
+            "lanes": null,
+            "library_type": null,
+            "read_path": "test/bcl_processor/",
+            "sample_indices": [
+                "GGTTTACT"
+            ]
+        }
+]
+        "#;
+
+        let mut wl = HashMap::new();
+        wl.insert(Vec::from(b"AAAAA".as_ref()), 1);
+        wl.insert(Vec::from(b"AAGAC".as_ref()), 2);
+        wl.insert(Vec::from(b"ACGAA".as_ref()), 3);
+        wl.insert(Vec::from(b"ACGTT".as_ref()), 4);
+
+        let mut counts = HashMap::new();
+        counts.insert((0,1), 100);
+        counts.insert((0,2), 11);
+        counts.insert((0,3), 2);
+
+        let val = BarcodeValidator {
+            max_expected_barcode_errors: 1.0,
+            bc_confidence_threshold: 0.95,
+            whitelist: &wl,
+            bc_counts: &counts,
+        };
+
+        // Easy
+        assert_eq!(val.correct_barcode(0, b"AAAAA", &vec![66,66,66,66,66]), Some(1));
+
+        // Low quality
+        assert_eq!(val.correct_barcode(0, b"AAAAA", &vec![34,34,34,66,66]), None);
+
+        // Trivial correction
+        assert_eq!(val.correct_barcode(0, b"AAAAT", &vec![66,66,66,66,40]), Some(1));
+
+        // Pseudo-count kills you
+        assert_eq!(val.correct_barcode(0, b"ACGAT", &vec![66,66,66,66,66]), None);
+
+        // Quality help you
+        assert_eq!(val.correct_barcode(0, b"ACGAT", &vec![66,66,66,66,40]), Some(3));
+
+        // Counts help you
+        assert_eq!(val.correct_barcode(0, b"ACAAA", &vec![66,66,66,66,40]), Some(1));
+    }
+}
+*/
