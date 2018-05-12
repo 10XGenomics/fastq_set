@@ -67,7 +67,7 @@ fn reduce_counts_err<K: Hash + Eq>(v1: Result<HashMap<K, u32>, Error>, v2: Resul
 
 
 
-struct SortAndCorrect<ProcType, ReadType> {
+pub struct SortAndCorrect<ProcType, ReadType> {
     fastq_inputs: Vec<ProcType>,
     phantom: PhantomData<ReadType>,
 }
@@ -76,14 +76,20 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
     ProcType: FastqProcessor<ReadType> + Send + Sync + Clone,
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync, 
 {
+    pub fn new(fastq_inputs: Vec<ProcType>) -> SortAndCorrect<ProcType, ReadType> {
+        SortAndCorrect {
+            fastq_inputs,
+            phantom: PhantomData
+        }
+    }
 
     #[inline(never)]
     pub fn sort_bcs(&self,
-        read_path: &Path,
-        bc_count_path: &Path,
+        read_path: impl AsRef<Path>,
+        bc_count_path: impl AsRef<Path>,
         num_threads: usize) -> Result<(), Error> {
 
-        let ref writer = ShardWriter::<ReadType, Barcode, BcSort>::new(read_path, 256, 2048, 1<<21);
+        let ref writer = ShardWriter::<ReadType, Barcode, BcSort>::new(read_path, 256, 8192, 1<<22);
 
         let fq_w_senders: Vec<(ProcType, ShardSender<ReadType>)> = 
         self.fastq_inputs.iter().cloned().map(|fq| (fq, writer.get_sender())).collect();
@@ -97,7 +103,7 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
             Ok(counts)
         }).reduce(|| Ok(HashMap::default()), reduce_counts_err)?;
 
-        utils::write_obj(&bc_counts, bc_count_path).expect("error writing BC counts");
+        utils::write_obj(&bc_counts, bc_count_path.as_ref()).expect("error writing BC counts");
         Ok(())
     }
 
@@ -115,7 +121,8 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
         let bc_subsample_thresh = chunk.bc_subsample_rate();
         let read_subsample_rate = chunk.read_subsample_rate();
 
-        let iter = ::fastq_read::ReadPairIter::from_fastq_files(chunk.fastq_files())?;
+        let fastqs = chunk.fastq_files();
+        let iter = ::fastq_read::ReadPairIter::from_fastq_files(fastqs)?;
 
         for _r in iter {
             let r = _r?;

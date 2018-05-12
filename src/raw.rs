@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::fmt::Debug;
 use fastq::Record;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
@@ -12,7 +12,10 @@ struct ReadOffset {
     qual: u16,
 }
 
-/// The possible reads from a Illumina cluster
+/// The possible reads from a Illumina cluster. R1 and R2 are the two
+/// 'primary' reads, I1 and I2 are the two 'index' samples. I1 is
+/// often referred to as the 'sample index read', or I7.  I2 contains
+/// the 10x barcode sequence in some 10x assays.
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum WhichRead {
     R1 = 0,
@@ -102,35 +105,48 @@ pub struct ReadPair {
 }
 
 impl ReadPair {
-    
-    pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
 
-        let mut offsets = [ReadOffset::default(); 4];
-        let mut buf: Vec<u8> = Vec::new();
+    pub(super) fn empty() -> ReadPair {
+        let offsets = [ReadOffset::default(); 4];
+        let data = Vec::new();
+        ReadPair { offsets, data }
+    }
+
+    fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
+        let offsets = [ReadOffset::default(); 4];
+        let data = Vec::new();
+        let mut rp = ReadPair { offsets, data };
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
             match _rec {
                 &Some(ref rec) => {
-                    let start = buf.len() as u16;
-                    buf.extend(rec.head());
-                    let head = buf.len() as u16;
-                    buf.extend(rec.seq());  
-                    let seq = buf.len() as u16;
-                    buf.extend(rec.head());
-                    let qual = buf.len() as u16;
-                    let read_offset = ReadOffset { exists: true, start, head, seq, qual };
-                    offsets[*which as usize] = read_offset;
+                    rp.push_read(rec, *which)
                 },
                 &None => (), // default ReadOffsets is exists = false
             }
         } 
 
-        ReadPair { offsets, data: buf }
+        rp
     }
 
     pub fn new_by_part<R: Record>(r1: Option<R>, r2: Option<R>, i1: Option<R>, i2: Option<R>) -> ReadPair {
         Self::new([r1,r2,i1,i2])
     }
+
+    pub(super) fn push_read<R:Record>(&mut self, rec: &R, which: WhichRead) {
+        let buf = &mut self.data;
+
+        let start = buf.len() as u16;
+        buf.extend(rec.head());
+        let head = buf.len() as u16;
+        buf.extend(rec.seq());  
+        let seq = buf.len() as u16;
+        buf.extend(rec.head());
+        let qual = buf.len() as u16;
+        let read_offset = ReadOffset { exists: true, start, head, seq, qual };
+        self.offsets[which as usize] = read_offset;
+    }
+
 
     #[inline]
     /// Get a ReadPart `part` from a read `which` in this cluster

@@ -16,7 +16,7 @@ use std::io::{Read, BufReader};
 pub struct ReadPairIter {
     iters: [Option<RecordRefIter<Box<Read>>>; 4],
     // Each input file can interleave up to 2 -- declare those here
-    targets: [[Option<WhichRead>; 2]; 4]
+    r1_interleaved: bool,
 }
 
 pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Result<Box<Read>, Error> {
@@ -35,18 +35,12 @@ pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Result<Box<Read>, Error> {
 
 impl ReadPairIter {
     pub fn from_fastq_files(fastq_files: FastqFiles) -> Result<ReadPairIter, Error> {
-        if fastq_files.r1_interleaved {
-            assert!(fastq_files.r2.is_none());
-            Self::new_interleaved_gz(fastq_files.r1, fastq_files.i1, fastq_files.i2)
-        } else {
-            Self::new_gz(Some(fastq_files.r1), fastq_files.r2, fastq_files.i1, fastq_files.i2)
-        }
+        Self::new_gz(Some(fastq_files.r1), fastq_files.r2, fastq_files.i1, fastq_files.i2, fastq_files.r1_interleaved)
     }
 
-    pub fn new_gz<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>) -> Result<ReadPairIter, Error> {
+    pub fn new_gz<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
 
         let mut iters = [None, None, None, None];
-        let mut targets = [[None,None]; 4];
 
         let read_types = WhichRead::read_types();
 
@@ -56,72 +50,54 @@ impl ReadPairIter {
                     let rdr = open_w_gz(p)?;
                     let parser = fastq::Parser::new(rdr);
                     iters[idx] = Some(parser.ref_iter());
-                    targets[idx] = [Some(read_types[idx]), None]
                 },
                 _ => (),
             }
         }
 
-        Ok(ReadPairIter{ iters, targets })
+        Ok(ReadPairIter{ iters, r1_interleaved })
     }
-
-    pub fn new_interleaved_gz<P: AsRef<Path>>(r1_r2_interleaved: P, i1: Option<P>, i2: Option<P>) -> Result<ReadPairIter, Error> {
-
-        let mut iters = [None, None, None, None];
-        let mut targets = [[None,None]; 4];
-
-        let read_types = WhichRead::read_types();
-
-        let rdr = open_w_gz(r1_r2_interleaved)?;
-        let ra_iter = fastq::Parser::new(rdr).ref_iter();
-        iters[0] = Some(ra_iter);
-        targets[0] = [Some(WhichRead::R1), Some(WhichRead::R2)];
-
-        for (idx, r) in [i1,i2].into_iter().enumerate() {
-            match r {
-                &Some(ref p) => {
-                    let rdr = open_w_gz(p)?;
-                    let iter = fastq::Parser::new(rdr).ref_iter();
-                    iters[idx] = Some(iter);
-                    targets[idx] = [Some(read_types[idx]), None]
-                },
-                _ => (),
-            }
-        }
-
-        Ok(ReadPairIter{ iters, targets })
-    }
-
 
     fn get_next(&mut self) -> Result<Option<ReadPair>, Error> {
 
-        let mut read_parts = [None, None, None, None];
         let mut iter_ended = false;
+        let mut rp = ReadPair::empty();
 
         for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
             match iter_opt {
                 &mut Some(ref mut iter) => {
                     iter.advance()?;
-                    let record = iter.get();
-                    if record.is_none() {
-                        iter_ended = true;
+                    {
+                        let record = iter.get();
+                        if record.is_none() {
+                            iter_ended = true;
+                        }
+
+                        let which = WhichRead::read_types()[idx];
+                        record.map(|r| rp.push_read(&r, which));
                     }
-                    read_parts[idx] = record;
+
+                    // If R1 is interleaved, read another entry
+                    // and store it as R2
+                    if idx == 0 && self.r1_interleaved {
+                        iter.advance()?;
+                        let record = iter.get();
+                        if record.is_none() {
+                            iter_ended = true;
+                        }
+                        let which = WhichRead::read_types()[idx+1];
+                        record.map(|r| rp.push_read(&r, which));
+                    }
                 },
                 &mut None => ()
             }
         }
         // FIXME -- should we error out if the files have different lengths?
         if iter_ended {
-            if !read_parts.iter().all(|x| x.is_none()) {
-                // One of the FASTQ ended before the other -- raise an error
-                return Err(format_err!("fastq ended early"));
-            }
-
             return Ok(None);
         }
 
-        Ok(Some(ReadPair::new(read_parts)))
+        Ok(Some(rp))
     }
 }
 

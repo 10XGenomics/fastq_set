@@ -60,7 +60,7 @@ impl SampleDef {
 
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FastqFiles {
     r1: String,
     r2: Option<String>,
@@ -117,9 +117,9 @@ impl AsRef<[u8]> for SSeq {
 /// Represent a (possibly-correct 10x barcode sequence)
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Barcode {
+    valid: bool,
     gem_group: u16, 
     sequence: SSeq,
-    valid: bool
 }
 
 impl Barcode {

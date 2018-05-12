@@ -2,7 +2,7 @@
 use {HasBarcode, Barcode, FastqProcessor, AlignableRead, SampleDef, FastqFiles, SSeq};
 use raw::{ReadPair, WhichRead, ReadPart, RpRange};
 
-#[derive(Serialize, Deserialize, PartialOrd, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialOrd, PartialEq, Debug, Clone)]
 pub struct DnaChunk {
     barcode: Option<String>,
     barcode_reverse_complement: bool,
@@ -43,7 +43,7 @@ impl FastqProcessor<DnaRead> for DnaChunk {
         Some(DnaRead {
             data: read,
             barcode,
-            read_group_id: self.read_group_id.unwrap(),
+            read_group_id: self.read_group_id.expect("need to set read group id"),
             trim_r1: 8
         })
     }
@@ -71,7 +71,7 @@ impl FastqProcessor<DnaRead> for DnaChunk {
     }
 }
 
-#[derive(PartialOrd, Ord, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, PartialOrd, Ord, Eq, PartialEq)]
 pub struct DnaRead {
     data: ReadPair,
     barcode: Barcode,
@@ -170,22 +170,40 @@ mod test_dna_cfg {
     use super::*;
     use serde_json;
 
+    fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
+        let mut c: Vec<DnaChunk> = serde_json::from_str(chunk_json).unwrap();
+
+        for i in 0 .. c.len() {
+            c[i].read_group_id = Some(i as u16);
+        }
+
+        c
+    }
+
     #[test]
     fn test_crg_cfg() {
-        let c: Vec<DnaChunk> = serde_json::from_str(CRG_CFG).unwrap();
+        let c = load_dna_chunk_def(CRG_CFG);
         println!("{:?}", c);
     }
 
     #[test]
     fn test_atac_cfg() {
-        let c: Vec<DnaChunk> = serde_json::from_str(ATAC_CFG).unwrap();
+        let c = load_dna_chunk_def(ATAC_CFG);
         println!("{:?}", c);
     }
 
     #[test]
     fn test_scdna_cfg() {
-        let c: Vec<DnaChunk> = serde_json::from_str(SCDNA_CFG).unwrap();
+        let c = load_dna_chunk_def(SCDNA_CFG);
         println!("{:?}", c);
+    }
+
+    #[test]
+    fn test_load_atac() {
+        let c = load_dna_chunk_def(ATAC_CFG_TEST);
+        println!("{:?}", c);
+        let sorter = ::bc_sort::SortAndCorrect::<_,DnaRead>::new(c);
+        sorter.sort_bcs("test/rp_atac/reads", "test/rp_atac/bc_counts", 2).unwrap();
     }
 
     const CRG_CFG: &str = r#"
@@ -464,6 +482,34 @@ mod test_dna_cfg {
             "subsample_rate": 0.3224737982551789
         }
     ]"#;
+
+    const ATAC_CFG_TEST: &str = r#"
+    [
+        {
+            "barcode": "test/bcl_processor/atac/read-I2_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
+            "barcode_reverse_complement": false,
+            "gem_group": 1,
+            "read1": "test/bcl_processor/atac/read-RA_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
+            "read2": null,
+            "read_group": "66333:66333:1:HC7WVDMXX:1",
+            "reads_interleaved": true,
+            "sample_index": "test/bcl_processor/atac/read-I1_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
+            "subsample_rate": 0.37474273634185645
+        },
+        {
+            "barcode": "test/bcl_processor/atac/read-I2_si-GACCTATT_lane-001-chunk-001.fastq.gz",
+            "barcode_reverse_complement": false,
+            "gem_group": 1,
+            "read1": "test/bcl_processor/atac/read-RA_si-GACCTATT_lane-001-chunk-001.fastq.gz",
+            "read2": null,
+            "read_group": "66333:66333:1:HC7WVDMXX:1",
+            "reads_interleaved": true,
+            "sample_index": "test/bcl_processor/atac/read-I1_si-GACCTATT_lane-001-chunk-001.fastq.gz",
+            "subsample_rate": 0.37474273634185645
+        }
+    ]
+    "#;
+
 
     const ATAC_CFG: &str = r#"
     [
