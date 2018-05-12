@@ -1,6 +1,10 @@
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-use {HasBarcode, Barcode, FastqProcessor, AlignableRead, SampleDef, FastqFiles, SSeq};
+use {HasBarcode, Barcode, FastqProcessor, AlignableRead, FastqFiles};
+use barcode::BarcodeChecker;
 use raw::{ReadPair, WhichRead, ReadPart, RpRange};
+use std::sync::Arc;
+use std::ops::Range;
 
 #[derive(Serialize, Deserialize, PartialOrd, PartialEq, Debug, Clone)]
 pub struct DnaChunk {
@@ -15,50 +19,63 @@ pub struct DnaChunk {
     reads_interleaved: bool,
     sample_index: Option<String>,
     subsample_rate: f64,
-    read_group_id: Option<u16>
 }
 
-#[derive(Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
-pub struct DnaFastqChunk {
-    bc_in_read: Option<usize>,
-    gem_group: usize,
-    read_group: String,
-    read_group_id: u16,
-    trim_r1: u8,
-    sample_def: SampleDef,
+#[derive(Clone)]
+pub struct DnaProcessor {
+    chunk: DnaChunk,
+    chunk_id: u16,
+    barcode_checker: Arc<BarcodeChecker>,
 }
 
-impl FastqProcessor<DnaRead> for DnaChunk {
+
+impl FastqProcessor<DnaRead> for DnaProcessor {
     fn process_read(&self, read: ReadPair) -> Option<DnaRead> {
         assert!(read.get(WhichRead::R1, ReadPart::Seq).is_some());
         assert!(read.get(WhichRead::R2, ReadPart::Seq).is_some());
 
+        let chunk = &self.chunk;
         // Setup initial (uncorrected) bacode
-        let bc_range = match self.bc_in_read {
-            Some(r) => RpRange::new(WhichRead::R1, 0, Some(r as usize)),
-            None => RpRange::new(WhichRead::I2, 0, None),
+        let bc_length = chunk.bc_length.unwrap_or(16);
+
+        let bc_range = match chunk.bc_in_read {
+            Some(1) => RpRange::new(WhichRead::R1, 0, Some(bc_length)),
+            None => RpRange::new(WhichRead::I2, 0, chunk.bc_length),
+            _ => panic!("unsupported barcode location")
         };
-        let barcode = Barcode::new(self.gem_group, read.get_range(&bc_range, ReadPart::Seq).unwrap(), true);
+
+        // Snip out barcode
+        let mut barcode = Barcode::new(chunk.gem_group, read.get_range(&bc_range, ReadPart::Seq).unwrap(), true);
+        // Mark check barcode against whitelist & mark correct if it matches.
+        self.barcode_checker.check(&mut barcode);
+
+
+        // FIXME -- do cutadapt trimming here?
 
         Some(DnaRead {
             data: read,
             barcode,
-            read_group_id: self.read_group_id.expect("need to set read group id"),
-            trim_r1: 8
+            bc_range,
+            chunk_id: self.chunk_id,
+
+            // FIXME -- get the right trim length
+            trim_r1: 7,
+            trim_r2: 0,
+
         })
     }
 
     fn description(&self) -> String {
-        self.read1.clone()
+        self.chunk.read1.clone()
     }
 
     fn fastq_files(&self) -> FastqFiles {
         FastqFiles {
-            r1: self.read1.clone(),
-            r2: self.read2.clone(),
-            i1: self.sample_index.clone(),
-            i2: self.barcode.clone(),
-            r1_interleaved: self.reads_interleaved,
+            r1: self.chunk.read1.clone(),
+            r2: self.chunk.read2.clone(),
+            i1: self.chunk.sample_index.clone(),
+            i2: self.chunk.barcode.clone(),
+            r1_interleaved: self.chunk.reads_interleaved,
         }
     }
 
@@ -71,12 +88,14 @@ impl FastqProcessor<DnaRead> for DnaChunk {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialOrd, Ord, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub struct DnaRead {
     data: ReadPair,
     barcode: Barcode,
+    bc_range: RpRange,
     trim_r1: u8,
-    read_group_id: u16,
+    trim_r2: u8,
+    chunk_id: u16,
 }
 
 impl HasBarcode for DnaRead {
@@ -88,8 +107,6 @@ impl HasBarcode for DnaRead {
 /// A container for the components of a paired-end, barcoded Chromium Genome read.
 /// We assume the the 10x barcode is at the beginning of R1
 impl DnaRead {
-    const bc_length: usize = 16;
-
 
     /// FASTQ read header
     pub fn header(&self) -> &[u8] {
@@ -128,32 +145,48 @@ impl DnaRead {
 
     /// Raw, uncorrected barcode sequence
     pub fn raw_bc_seq(&self) -> &[u8] {
-        &self.r1_seq_raw()[0..Self::bc_length as usize]
+        self.data.get_range(&self.bc_range, ReadPart::Seq).unwrap()
     }
 
     /// Raw barcode QVs
     pub fn raw_bc_qual(&self) -> &[u8] {
-        &self.r1_qual_raw()[0..Self::bc_length as usize]
+       self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+    }
+
+    #[inline]
+    pub fn r1_trim_range(&self) -> Range<usize> {
+        if self.bc_range.read() == WhichRead::R1 {
+            let bcr = self.bc_range;
+            let start = bcr.offset() + bcr.len().unwrap_or(0);
+
+            start .. start + self.trim_r1 as usize
+        } else {
+            0 .. self.trim_r1 as usize
+        }  
     }
 
     /// Bases trimmed after the 10x BC, before the start of bases used from R1
     pub fn r1_trim_seq(&self) -> &[u8] {
-        &self.r1_seq_raw()[Self::bc_length as usize..(Self::bc_length+self.trim_r1 as usize)]
+        let rng = self.r1_trim_range();
+        &self.r1_seq_raw()[rng]
     }
 
     /// QVs trimmed after the 10x BC, before the start of bases used from R1
     pub fn r1_trim_qual(&self) -> &[u8] {
-        &self.r1_qual_raw()[Self::bc_length as usize..(Self::bc_length+self.trim_r1 as usize)]
+        let rng = self.r1_trim_range();
+        &self.r1_qual_raw()[rng]
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_seq(&self) -> &[u8] {
-        &self.r1_seq_raw()[(Self::bc_length+self.trim_r1 as usize)..]
+        let rng = self.r1_trim_range();
+        &self.r1_seq_raw()[rng.end..]
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_qual(&self) -> &[u8] {
-        &self.r1_qual_raw()[(Self::bc_length+self.trim_r1 as usize)..]
+        let rng = self.r1_trim_range();
+        &self.r1_qual_raw()[rng.end..]
     }
 }
 
@@ -171,13 +204,7 @@ mod test_dna_cfg {
     use serde_json;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
-        let mut c: Vec<DnaChunk> = serde_json::from_str(chunk_json).unwrap();
-
-        for i in 0 .. c.len() {
-            c[i].read_group_id = Some(i as u16);
-        }
-
-        c
+        serde_json::from_str(chunk_json).unwrap()
     }
 
     #[test]
@@ -200,10 +227,25 @@ mod test_dna_cfg {
 
     #[test]
     fn test_load_atac() {
-        let c = load_dna_chunk_def(ATAC_CFG_TEST);
-        println!("{:?}", c);
-        let sorter = ::bc_sort::SortAndCorrect::<_,DnaRead>::new(c);
-        sorter.sort_bcs("test/rp_atac/reads", "test/rp_atac/bc_counts", 2).unwrap();
+        let chunks = load_dna_chunk_def(ATAC_CFG_TEST);
+        println!("{:?}", chunks);
+
+        let wl = BarcodeChecker::new("10K-agora-dev.txt").unwrap();
+        let arc = Arc::new(wl);
+
+        let mut procs = Vec::new();
+        for (idx, chunk) in chunks.into_iter().enumerate() {
+            let prc = DnaProcessor {
+                chunk: chunk,
+                barcode_checker: arc.clone(),
+                chunk_id: idx as u16,
+            };
+
+            procs.push(prc);
+        }
+
+        let sorter = ::bc_sort::SortAndCorrect::<_,DnaRead>::new(procs);
+        sorter.sort_bcs("test/rp_atac/reads", "test/rp_atac/bc_counts").unwrap();
     }
 
     const CRG_CFG: &str = r#"

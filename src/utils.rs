@@ -1,13 +1,10 @@
-//
-// Copyright (c) 2017 10X Genomics, Inc. All rights reserved.
-//
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
 //! Various useful methods (could be cleaned up)
 
 use std::fs::File;
 use std::path::{Path};
 use std::io::{BufReader, BufWriter};
-use std::io::BufRead;
 
 use std::fmt::Debug;
 

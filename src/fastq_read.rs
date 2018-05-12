@@ -1,3 +1,5 @@
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
+
 use fastq::{self, RecordRefIter};
 use raw::{ReadPair, WhichRead};
 use FastqFiles;
@@ -8,18 +10,18 @@ use std::fs::File;
 
 use std::boxed::Box;
 use flate2::read::MultiGzDecoder;
-use std::io::{Read, BufReader};
+use std::io::{BufRead, BufReader};
 
 
 /// Read from a parallel set of FASTQ files.
 /// TODO: support interleaved R1/R2 files.
 pub struct ReadPairIter {
-    iters: [Option<RecordRefIter<Box<Read>>>; 4],
+    iters: [Option<RecordRefIter<Box<BufRead>>>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,
 }
 
-pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Result<Box<Read>, Error> {
+pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
     let r = File::open(p.as_ref())?;
 
     if p.as_ref().extension().unwrap() == "gz" {
@@ -41,8 +43,6 @@ impl ReadPairIter {
     pub fn new_gz<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
 
         let mut iters = [None, None, None, None];
-
-        let read_types = WhichRead::read_types();
 
         for (idx, r) in [r1,r2,i1,i2].into_iter().enumerate() {
             match r {

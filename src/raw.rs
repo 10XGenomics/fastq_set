@@ -1,4 +1,5 @@
-use std::fmt::Debug;
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
+
 use fastq::Record;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record

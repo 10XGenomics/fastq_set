@@ -1,3 +1,5 @@
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
+
 use std::collections::HashMap;
 use raw::{ReadPart, ReadPair, WhichRead, RpRange};
 use {Barcode, HasBarcode, Umi, FastqProcessor, FastqFiles};

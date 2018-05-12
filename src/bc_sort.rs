@@ -1,6 +1,5 @@
-//
-// Copyright (c) 2017 10X Genomics, Inc. All rights reserved.
-//
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
+
 
 //! Read FASTQs write to shardio buckets by barcode while counting barcodes. 
 //! Reads without a correct barcode go to a special 'unbarcoded' bucket.
@@ -15,11 +14,7 @@ use std::collections::HashMap;
 use std::hash::{Hash};
 
 use fxhash;
-use rand;
-//use utils::{load_barcode_whitelist2, load_barcode_whitelist_inverse};
 use shardio::{ShardWriter, ShardSender, ShardReaderSet, SortKey};
-
-
 
 use rayon::prelude::*;
 use utils;
@@ -31,7 +26,7 @@ use serde::ser::Serialize;
 use serde::de::DeserializeOwned;
 
 use {Barcode, HasBarcode, FastqProcessor};
-use barcode::BarcodeValidator;
+use barcode::{BarcodeCorrector};
 use std::marker::PhantomData;
 
 use failure::Error;
@@ -45,7 +40,6 @@ impl<T> SortKey<T,Barcode> for BcSort where T: HasBarcode {
         v.barcode()
     }
 }
-
 
 fn reduce_counts<K: Hash + Eq>(mut v1: HashMap<K, u32>, mut v2: HashMap<K, u32>) -> HashMap<K, u32> {
     for (k,v) in v2.drain() {
@@ -63,8 +57,6 @@ fn reduce_counts_err<K: Hash + Eq>(v1: Result<HashMap<K, u32>, Error>, v2: Resul
         (_, Err(e2)) => Err(e2), 
     }
 }
-
-
 
 
 pub struct SortAndCorrect<ProcType, ReadType> {
@@ -86,11 +78,11 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
     #[inline(never)]
     pub fn sort_bcs(&self,
         read_path: impl AsRef<Path>,
-        bc_count_path: impl AsRef<Path>,
-        num_threads: usize) -> Result<(), Error> {
+        bc_count_path: impl AsRef<Path>) -> Result<(), Error> {
 
         let ref writer = ShardWriter::<ReadType, Barcode, BcSort>::new(read_path, 256, 8192, 1<<22);
 
+        // FIXME - configure thread consumption
         let fq_w_senders: Vec<(ProcType, ShardSender<ReadType>)> = 
         self.fastq_inputs.iter().cloned().map(|fq| (fq, writer.get_sender())).collect();
 
@@ -163,7 +155,7 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
     pub fn process_unbarcoded<'a>(
         bc_corrected_reads_fn: &str,
         unbarcoded_read_shards: Vec<String>,
-        barcode_validator: &BarcodeValidator<'a>,
+        barcode_validator: &BarcodeCorrector<'a>,
         bc_subsample_rate: Option<f64>) -> HashMap<Barcode, u32> {
 
         let ref writer: ShardWriter<ReadType, Barcode, BcSort> = 
