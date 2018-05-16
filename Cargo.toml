@@ -10,7 +10,8 @@ serde_derive = "*"
 serde_json = "*"
 serde = "*"
 rust-htslib = "*"
-shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
+#shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
+shardio = { path = "../../rust-shardio" }
 rayon = "*"
 log = "*"
 bincode = "*"
@@ -20,3 +21,6 @@ rand = "*"
 # Switch back to crates once PR is upstreamed.
 fastq = { git = "https://github.com/pmarks/fastq-rs.git", rev = "e042ef2e59fff6365c1"}
 failure = "*"
+
+[profile.release]
+debug = true

@@ -1,11 +1,11 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
+//! Process 10x FASTQs
+//! 
 extern crate flate2;
 extern crate ordered_float;
 extern crate fastq;
 extern crate rust_htslib;
-
-#[macro_use] 
 extern crate failure;
 
 #[macro_use]
@@ -22,8 +22,9 @@ extern crate fxhash;
 extern crate rand;
 extern crate serde_json;
 
-pub mod raw;
-pub mod fastq_read;
+pub mod read_pair;
+pub mod read_pair_iter;
+pub mod sample_def;
 
 pub mod barcode;
 pub mod bc_sort;
@@ -32,38 +33,9 @@ pub mod utils;
 pub mod dna_read;
 pub mod rna_read;
 
-use std::path::PathBuf;
-
-#[allow(non_camel_case_types)]
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
-enum FastqMode {
-    BCL_PROCESSOR,
-    ILMN_BCL2FASTQ,
-}
-
-/// Pointer to one logical set of FASTQ from a unique (library, gem_group) tuple
-#[derive(Serialize, Deserialize, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct SampleDef {
-    fastq_mode: FastqMode,
-    gem_group: Option<u16>,
-    lanes: Option<Vec<usize>>,
-    library_type: String,
-    read_path: PathBuf,
-    sample_indices: Option<Vec<String>>,
-    sample_names: Option<Vec<String>>,
-}
-
-impl SampleDef {
-    pub fn interleaved(&self) -> bool {
-        self.fastq_mode == FastqMode::BCL_PROCESSOR
-    }
-
-
-
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct FastqFiles {
+pub struct InputFastqs {
     r1: String,
     r2: Option<String>,
     i1: Option<String>,
@@ -71,21 +43,8 @@ pub struct FastqFiles {
     r1_interleaved: bool,
 }
 
-impl SampleDef {
-    pub fn get_fastqs(&self) -> Vec<FastqFiles> {
-        vec![]
-    }
-}
 
-/*
-Possible conversions:
-SampleDef --> FASTQ filenames --> Iterator of Raw Read Pairs
-
-(RawReadPair, ChemistryDefinition) --> RnaReadPair
-
-
-*/
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 struct SSeq {
     length: u8,
     sequence: [u8; 23],
@@ -108,6 +67,10 @@ impl SSeq {
     pub fn seq(&self) -> &[u8] {
         &self.sequence[0..self.length as usize]
     }
+
+    pub fn len(&self) -> usize {
+        self.length as usize
+    }
 }
 
 impl AsRef<[u8]> for SSeq {
@@ -115,6 +78,18 @@ impl AsRef<[u8]> for SSeq {
         self.seq()
     }
 }
+
+use std::fmt;
+impl fmt::Debug for SSeq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = String::new();
+        for pos in 0..self.len() {
+            s.push(self.sequence[pos] as char);
+        }
+        write!(f, "{}", s)
+    }
+}
+
 
 /// Represent a (possibly-correct 10x barcode sequence)
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
@@ -133,6 +108,33 @@ impl Barcode {
         }
     }
     
+    /// First possible valid barcode value. Use to query valid/invlaid barcode ranges.
+    pub fn first_valid() -> Barcode {
+        Barcode {
+            valid: true,
+            gem_group: 0,
+            sequence: SSeq::new(b""),
+        }
+    }
+
+    #[cfg(test)]
+    fn test_valid(sequence: &[u8]) -> Barcode {
+        Barcode {
+            gem_group: 1,
+            sequence: SSeq::new(sequence),
+            valid: true
+        }
+    }
+
+    #[cfg(test)]
+    fn test_invalid(sequence: &[u8]) -> Barcode {
+        Barcode {
+            gem_group: 1,
+            sequence: SSeq::new(sequence),
+            valid: false
+        }
+    }
+
     pub fn valid(&self) -> bool {
         self.valid
     }
@@ -144,6 +146,8 @@ impl Barcode {
 
 pub trait HasBarcode {
     fn barcode(&self) -> Barcode;
+    fn barcode_qual(&self) -> &[u8];
+    fn set_barcode(&mut self, barcode: Barcode);
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)] 
@@ -177,73 +181,10 @@ pub trait AlignableRead {
 }
 
 pub trait FastqProcessor<ReadType> {
-    fn process_read(&self, read: raw::ReadPair) -> Option<ReadType>;
+    fn process_read(&self, read: read_pair::ReadPair) -> Option<ReadType>;
     fn description(&self) -> String;
-    fn fastq_files(&self) -> FastqFiles;
+    fn fastq_files(&self) -> InputFastqs;
 
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
 }
-
-/*
-#[cfg(test)]
-mod test {
-    use super::*;
-    use std::collections::HashMap;
-
-    #[test]
-    pub fn test_bcl_processor()
-    {
-        let sd = r#"
-[
-        {
-            "fastq_mode": "BCL_PROCESSOR",
-            "gem_group": null,
-            "lanes": null,
-            "library_type": null,
-            "read_path": "test/bcl_processor/",
-            "sample_indices": [
-                "GGTTTACT"
-            ]
-        }
-]
-        "#;
-
-        let mut wl = HashMap::new();
-        wl.insert(Vec::from(b"AAAAA".as_ref()), 1);
-        wl.insert(Vec::from(b"AAGAC".as_ref()), 2);
-        wl.insert(Vec::from(b"ACGAA".as_ref()), 3);
-        wl.insert(Vec::from(b"ACGTT".as_ref()), 4);
-
-        let mut counts = HashMap::new();
-        counts.insert((0,1), 100);
-        counts.insert((0,2), 11);
-        counts.insert((0,3), 2);
-
-        let val = BarcodeValidator {
-            max_expected_barcode_errors: 1.0,
-            bc_confidence_threshold: 0.95,
-            whitelist: &wl,
-            bc_counts: &counts,
-        };
-
-        // Easy
-        assert_eq!(val.correct_barcode(0, b"AAAAA", &vec![66,66,66,66,66]), Some(1));
-
-        // Low quality
-        assert_eq!(val.correct_barcode(0, b"AAAAA", &vec![34,34,34,66,66]), None);
-
-        // Trivial correction
-        assert_eq!(val.correct_barcode(0, b"AAAAT", &vec![66,66,66,66,40]), Some(1));
-
-        // Pseudo-count kills you
-        assert_eq!(val.correct_barcode(0, b"ACGAT", &vec![66,66,66,66,66]), None);
-
-        // Quality help you
-        assert_eq!(val.correct_barcode(0, b"ACGAT", &vec![66,66,66,66,40]), Some(3));
-
-        // Counts help you
-        assert_eq!(val.correct_barcode(0, b"ACAAA", &vec![66,66,66,66,40]), Some(1));
-    }
-}
-*/

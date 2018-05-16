@@ -1,8 +1,11 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
+//! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries. 
+//! Provides access to the barcode and allows for dynamic trimming.
+
 use std::collections::HashMap;
-use raw::{ReadPart, ReadPair, WhichRead, RpRange};
-use {Barcode, HasBarcode, Umi, FastqProcessor, FastqFiles};
+use read_pair::{ReadPart, ReadPair, WhichRead, RpRange};
+use {Barcode, HasBarcode, Umi, FastqProcessor, InputFastqs};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct ChemistryDef {
@@ -69,9 +72,9 @@ impl FastqProcessor<RnaRead> for RnaChunk {
         })
     }
 
-    fn fastq_files(&self) -> FastqFiles {
+    fn fastq_files(&self) -> InputFastqs {
         let r1 = self.read_chunks.get(&WhichRead::R1).unwrap().clone().unwrap().clone();
-        FastqFiles {
+        InputFastqs {
             r1: r1,
             r2: self.read_chunks.get(&WhichRead::R2).unwrap_or(&None).clone(),
             i1: self.read_chunks.get(&WhichRead::I1).unwrap_or(&None).clone(),
@@ -99,6 +102,14 @@ pub struct RnaRead {
 impl HasBarcode for RnaRead {
     fn barcode(&self) -> Barcode {
         self.bc
+    }
+
+    fn set_barcode(&mut self, barcode: Barcode) {
+        self.bc = barcode;
+    }
+
+    fn barcode_qual(&self) -> &[u8] {
+        self.raw_bc_qual()
     }
 }
 

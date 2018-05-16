@@ -1,5 +1,8 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
+//! Container for the FASTQ data from a single sequencing 'cluster',
+//! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
+
 use fastq::Record;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
@@ -31,20 +34,23 @@ impl WhichRead {
     }
 }
 
+/// Components of a FASTQ record.
 pub enum ReadPart {
-    Header,
+    Header, 
     Seq,
     Qual,
 }
 
-/// A compact representation of a slice into a ReadPair.
-/// Use this when you need to store a 
+/// Compact representation of selected ReadPart and a interval in that read.
+/// Supports offsets and lengths up to 32K.
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct RpRange {
     val: u32
 }
 
 impl RpRange {
+    /// Create a `RpRange` that represent the interval [offset, offset_length) in
+    /// the `read` component of a ReadPair.
     pub fn new(read: WhichRead, offset: usize, len: Option<usize>) -> RpRange {
         assert!(offset < (1<<15));
         let len_bits = match len {
@@ -86,7 +92,7 @@ impl RpRange {
         }
     }
 
-    pub fn slice<'a>(&self, input: &'a[u8]) -> &'a[u8] {
+    fn slice<'a>(&self, input: &'a[u8]) -> &'a[u8] {
         match self.len() {
             Some(l) => &input[self.offset() .. self.offset() + l],
             None => &input[self.offset() .. ],
@@ -94,9 +100,9 @@ impl RpRange {
     }
 }
 
-
 /// Container for all read data from a single Illumina cluster. Faithfully represents
 /// the FASTQ data from all available reads, if available.
+/// Generally should be created by a `ReadPairIter`.
 #[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct ReadPair {
     offsets: [ReadOffset; 4],
@@ -113,7 +119,7 @@ impl ReadPair {
         ReadPair { offsets, data }
     }
 
-    fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
+    pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
         let offsets = [ReadOffset::default(); 4];
         let data = Vec::new();
         let mut rp = ReadPair { offsets, data };
@@ -128,10 +134,6 @@ impl ReadPair {
         } 
 
         rp
-    }
-
-    pub fn new_by_part<R: Record>(r1: Option<R>, r2: Option<R>, i1: Option<R>, i2: Option<R>) -> ReadPair {
-        Self::new([r1,r2,i1,i2])
     }
 
     pub(super) fn push_read<R:Record>(&mut self, rec: &R, which: WhichRead) {
@@ -165,6 +167,7 @@ impl ReadPair {
     }
 
     #[inline]
+    /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
     pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
         let read = self.get(rp_range.read(), part);
         read.map(|r| rp_range.slice(r))

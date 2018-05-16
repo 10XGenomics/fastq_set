@@ -1,10 +1,11 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Various useful methods (could be cleaned up)
+//! Utility methods.
 
 use std::fs::File;
 use std::path::{Path};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter};
+use std::boxed::Box;
 
 use std::fmt::Debug;
 
@@ -12,6 +13,23 @@ use bincode;
 use serde::{Serialize};
 use serde::de::DeserializeOwned;
 use bincode::{serialize_into, deserialize_from};
+
+use flate2::read::MultiGzDecoder;
+use failure::Error;
+
+/// Open a (possibly gzipped) file into a BufReader.
+pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
+    let r = File::open(p.as_ref())?;
+
+    if p.as_ref().extension().unwrap() == "gz" {
+        let gz = MultiGzDecoder::new(r);
+        let buf_reader = BufReader::with_capacity(32*1024, gz);
+        Ok(Box::new(buf_reader))
+    } else {
+        let buf_reader = BufReader::with_capacity(32*1024, r);
+        Ok(Box::new(buf_reader))
+    }
+}
 
 
 

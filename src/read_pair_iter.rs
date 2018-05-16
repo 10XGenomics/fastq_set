@@ -1,53 +1,42 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-use fastq::{self, RecordRefIter};
-use raw::{ReadPair, WhichRead};
-use FastqFiles;
+//! Read a set of FASTQs, convert into an Iterator over ReadPairs.
 
-use failure::Error;
 use std::path::Path;
-use std::fs::File;
+use failure::Error;
 
-use std::boxed::Box;
-use flate2::read::MultiGzDecoder;
-use std::io::{BufRead, BufReader};
+use fastq::{self, RecordRefIter};
+use read_pair::{ReadPair, WhichRead};
+use InputFastqs;
+
+use std::io::BufRead;
+use utils;
 
 
 /// Read from a parallel set of FASTQ files.
-/// TODO: support interleaved R1/R2 files.
+/// Supports any combination of R1/R2/I1/I2 read files,
+/// as well as a interleaved R1/R2 file.
 pub struct ReadPairIter {
     iters: [Option<RecordRefIter<Box<BufRead>>>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,
 }
 
-pub fn open_w_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
-    let r = File::open(p.as_ref())?;
-
-    if p.as_ref().extension().unwrap() == "gz" {
-        let gz = MultiGzDecoder::new(r);
-        let buf_reader = BufReader::with_capacity(32*1024, gz);
-        Ok(Box::new(buf_reader))
-    } else {
-        let buf_reader = BufReader::with_capacity(32*1024, r);
-        Ok(Box::new(buf_reader))
-    }
-}
-
-
 impl ReadPairIter {
-    pub fn from_fastq_files(fastq_files: FastqFiles) -> Result<ReadPairIter, Error> {
-        Self::new_gz(Some(fastq_files.r1), fastq_files.r2, fastq_files.i1, fastq_files.i2, fastq_files.r1_interleaved)
+    /// Open a `ReadPairIter` given a `InputFastqs` describing a set of FASTQ files
+    /// for the available parts of a read.
+    pub fn from_fastq_files(input_fastqs: InputFastqs) -> Result<ReadPairIter, Error> {
+        Self::new(Some(input_fastqs.r1), input_fastqs.r2, input_fastqs.i1, input_fastqs.i2, input_fastqs.r1_interleaved)
     }
 
-    pub fn new_gz<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
+    pub fn new<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
 
         let mut iters = [None, None, None, None];
 
         for (idx, r) in [r1,r2,i1,i2].into_iter().enumerate() {
             match r {
                 &Some(ref p) => {
-                    let rdr = open_w_gz(p)?;
+                    let rdr = utils::open_with_gz(p)?;
                     let parser = fastq::Parser::new(rdr);
                     iters[idx] = Some(parser.ref_iter());
                 },

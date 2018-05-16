@@ -1,11 +1,17 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-use {HasBarcode, Barcode, FastqProcessor, AlignableRead, FastqFiles};
+//! ReadPair wrapper object for DNA reads from Linked-Read Genome,  Single-Cell DNA,
+//! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
+//! trimming.
+
+use {HasBarcode, Barcode, FastqProcessor, AlignableRead, InputFastqs};
 use barcode::BarcodeChecker;
-use raw::{ReadPair, WhichRead, ReadPart, RpRange};
+use read_pair::{ReadPair, WhichRead, ReadPart, RpRange};
 use std::sync::Arc;
 use std::ops::Range;
 
+/// Specification of a single set of FASTQs and how to interpret the read
+/// components.
 #[derive(Serialize, Deserialize, PartialOrd, PartialEq, Debug, Clone)]
 pub struct DnaChunk {
     barcode: Option<String>,
@@ -21,6 +27,7 @@ pub struct DnaChunk {
     subsample_rate: f64,
 }
 
+/// Process raw FASTQs into DnaRead parsed objects.
 #[derive(Clone)]
 pub struct DnaProcessor {
     chunk: DnaChunk,
@@ -49,7 +56,6 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
         // Mark check barcode against whitelist & mark correct if it matches.
         self.barcode_checker.check(&mut barcode);
 
-
         // FIXME -- do cutadapt trimming here?
 
         Some(DnaRead {
@@ -69,8 +75,8 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
         self.chunk.read1.clone()
     }
 
-    fn fastq_files(&self) -> FastqFiles {
-        FastqFiles {
+    fn fastq_files(&self) -> InputFastqs {
+        InputFastqs {
             r1: self.chunk.read1.clone(),
             r2: self.chunk.read2.clone(),
             i1: self.chunk.sample_index.clone(),
@@ -84,10 +90,11 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
     }
 
     fn read_subsample_rate(&self) -> f64 {
-        1.0
+        self.chunk.subsample_rate
     }
 }
 
+/// Represents a GEM-barcoded DNA read.
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub struct DnaRead {
     data: ReadPair,
@@ -102,10 +109,16 @@ impl HasBarcode for DnaRead {
     fn barcode(&self) -> Barcode {
         self.barcode
     }
+
+    fn set_barcode(&mut self, barcode: Barcode) {
+        self.barcode = barcode
+    }
+
+    fn barcode_qual(&self) -> &[u8] {
+        self.raw_bc_seq()
+    }
 }
 
-/// A container for the components of a paired-end, barcoded Chromium Genome read.
-/// We assume the the 10x barcode is at the beginning of R1
 impl DnaRead {
 
     /// FASTQ read header
@@ -202,6 +215,7 @@ impl AlignableRead for DnaRead {
 mod test_dna_cfg {
     use super::*;
     use serde_json;
+    use shardio;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()
@@ -244,9 +258,86 @@ mod test_dna_cfg {
             procs.push(prc);
         }
 
-        let sorter = ::bc_sort::SortAndCorrect::<_,DnaRead>::new(procs);
-        sorter.sort_bcs("test/rp_atac/reads", "test/rp_atac/bc_counts").unwrap();
+        let sorter = ::bc_sort::SortByBc::<_,DnaRead>::new(procs);
+        let (_, incorrect) = sorter.sort_bcs("test/rp_atac/reads", "test/rp_atac/bc_counts").unwrap();
+
+        let corrector = 
+            ::barcode::BarcodeCorrector::new(
+                "10K-agora-dev.txt", 
+                &["test/rp_atac/bc_counts"], 1.5, 0.9).unwrap();
+
+        let reader = shardio::ShardReaderSet::<DnaRead, Barcode, ::bc_sort::BcSort>::open(&["test/rp_atac/reads"]);
+
+        let mut correct = 
+            ::bc_sort::CorrectBcs::new(
+                reader,
+                corrector,
+                Some(1.0f64),
+            );
+
+        let (corrected, still_incorrect) = correct.process_unbarcoded("test/rp_atac/bc_repro").unwrap();
+        assert_eq!(incorrect, corrected + still_incorrect);
     }
+
+    use shardio::range::Range;
+
+    //#[test]
+    fn test_read_issue() {
+
+        let reader = shardio::ShardReaderSet::<DnaRead, Barcode, ::bc_sort::BcSort>::open(&["test/rp_atac/reads"]);
+
+        /*
+        let c4 = reader.make_chunks(1, &Range::ends_at(Barcode::first_valid()));
+        let mut rtrue = Vec::new();
+        for c in c4 {
+            let v = reader.iter_range(&c);
+            rtrue.extend(v);
+        }
+        */
+
+        let c7 = reader.make_chunks(7, &Range::ends_at(Barcode::first_valid()));
+        let v: Vec<_> = reader.iter_range(&c7[7]).collect();
+
+        for i in 0 .. 20 {
+            println!("{}: {:?}", i, v[i].barcode());
+        }
+
+        /*
+        let mut rnew : Vec<DnaRead> = Vec::new();
+        for c in c7 {
+            println!("{:?}", c);
+            let true_subset: Vec<_> = rtrue.iter().filter(|x| c.contains(&x.barcode())).collect();
+
+            if true_subset.len() < 1000 {
+                println!("debug");
+            }
+
+            
+            let v: Vec<_> = reader.iter_range(&c).collect();
+            println!("true: {}, obs: {}", true_subset.len(), v.len());
+
+            for i in 0 .. true_subset.len() {
+                if i < 10 || i > true_subset.len() - 10 {
+                    if i < v.len() {
+                        println!("{}: {:?} {:?}", i, true_subset[i].barcode(), v[i].barcode());
+                    } else {
+                        println!("{}: {:?}", i, true_subset[i].barcode());
+                    }
+                }
+            }
+
+            let strue: HashSet<Barcode> = HashSet::from_iter(true_subset.into_iter().map(|x| x.barcode()));
+            let sfalse = HashSet::from_iter(v.into_iter().map(|x| x.barcode()));
+            println!("{:?}", strue.difference(&sfalse));
+        }
+        */
+
+        assert!(false);
+    }
+
+
+
+
 
     const CRG_CFG: &str = r#"
     [
@@ -536,7 +627,7 @@ mod test_dna_cfg {
             "read_group": "66333:66333:1:HC7WVDMXX:1",
             "reads_interleaved": true,
             "sample_index": "test/bcl_processor/atac/read-I1_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
-            "subsample_rate": 0.37474273634185645
+            "subsample_rate": 0.1
         },
         {
             "barcode": "test/bcl_processor/atac/read-I2_si-GACCTATT_lane-001-chunk-001.fastq.gz",
@@ -547,7 +638,7 @@ mod test_dna_cfg {
             "read_group": "66333:66333:1:HC7WVDMXX:1",
             "reads_interleaved": true,
             "sample_index": "test/bcl_processor/atac/read-I1_si-GACCTATT_lane-001-chunk-001.fastq.gz",
-            "subsample_rate": 0.37474273634185645
+            "subsample_rate": 0.1
         }
     ]
     "#;

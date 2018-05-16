@@ -1,20 +1,16 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-
-//! Read FASTQs write to shardio buckets by barcode while counting barcodes. 
-//! Reads without a correct barcode go to a special 'unbarcoded' bucket.
-//! First-pass read subsampling is applied, and bc subsampling is applied.
-//! Then go back over the unbarcoded bucket & correct barcodes, using the 
-//!! BC counts.  Finally sort each bucket and write out FASTH files.
-
-#![allow(dead_code)]
+//! Read input FASTQ data into assay specific read objects that wrap ReadPairs,
+//! and sort reads by GEM barcode. Wrappers provide methods to access technical
+//! read components, such as barcodes and UMIs. 
 
 use std::path::{Path};
-use std::collections::HashMap;
-use std::hash::{Hash};
 
 use fxhash;
-use shardio::{ShardWriter, ShardSender, ShardReaderSet, SortKey};
+use shardio::{ShardWriter, ShardSender, ShardReaderSet, Range, SortKey};
+use std::marker::PhantomData;
+use fxhash::FxHashMap;
+use failure::Error;
 
 use rayon::prelude::*;
 use utils;
@@ -26,14 +22,11 @@ use serde::ser::Serialize;
 use serde::de::DeserializeOwned;
 
 use {Barcode, HasBarcode, FastqProcessor};
-use barcode::{BarcodeCorrector};
-use std::marker::PhantomData;
+use barcode::{BarcodeCorrector, reduce_counts, reduce_counts_err};
+use read_pair_iter::ReadPairIter;
 
-use failure::Error;
 
-const NUM_READS_BUFFER: usize = 2048;
-
-struct BcSort;
+pub struct BcSort;
 
 impl<T> SortKey<T,Barcode> for BcSort where T: HasBarcode {
     fn sort_key(v: &T) -> Barcode {
@@ -41,35 +34,18 @@ impl<T> SortKey<T,Barcode> for BcSort where T: HasBarcode {
     }
 }
 
-fn reduce_counts<K: Hash + Eq>(mut v1: HashMap<K, u32>, mut v2: HashMap<K, u32>) -> HashMap<K, u32> {
-    for (k,v) in v2.drain() {
-        let counter = v1.entry(k).or_insert(0);
-        *counter += v;
-    }
 
-    v1
-}
-
-fn reduce_counts_err<K: Hash + Eq>(v1: Result<HashMap<K, u32>, Error>, v2: Result<HashMap<K, u32>, Error>) -> Result<HashMap<K, u32>, Error> {
-    match (v1, v2) {
-        (Ok(m1), Ok(m2)) => Ok(reduce_counts(m1, m2)),
-        (Err(e1), _) => Err(e1),
-        (_, Err(e2)) => Err(e2), 
-    }
-}
-
-
-pub struct SortAndCorrect<ProcType, ReadType> {
+pub struct SortByBc<ProcType, ReadType> {
     fastq_inputs: Vec<ProcType>,
     phantom: PhantomData<ReadType>,
 }
 
-impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
+impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
     ProcType: FastqProcessor<ReadType> + Send + Sync + Clone,
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync, 
 {
-    pub fn new(fastq_inputs: Vec<ProcType>) -> SortAndCorrect<ProcType, ReadType> {
-        SortAndCorrect {
+    pub fn new(fastq_inputs: Vec<ProcType>) -> SortByBc<ProcType, ReadType> {
+        SortByBc {
             fastq_inputs,
             phantom: PhantomData
         }
@@ -78,9 +54,9 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
     #[inline(never)]
     pub fn sort_bcs(&self,
         read_path: impl AsRef<Path>,
-        bc_count_path: impl AsRef<Path>) -> Result<(), Error> {
+        bc_count_path: impl AsRef<Path>) -> Result<(u32, u32), Error> {
 
-        let ref writer = ShardWriter::<ReadType, Barcode, BcSort>::new(read_path, 256, 8192, 1<<22);
+        let mut writer = ShardWriter::<ReadType, Barcode, BcSort>::new(read_path, 16, 128, 1<<22)?;
 
         // FIXME - configure thread consumption
         let fq_w_senders: Vec<(ProcType, ShardSender<ReadType>)> = 
@@ -91,20 +67,26 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
             info!("start processing: {}", desc); 
 
             let counts = self.process_fastq(fq, sender)?;
+            
             info!("done processing: {}", desc);
             Ok(counts)
-        }).reduce(|| Ok(HashMap::default()), reduce_counts_err)?;
+        }).reduce(|| Ok(FxHashMap::default()), reduce_counts_err)?;
+
+        writer.finish()?;
+        let bc: u32 = bc_counts.iter().filter(|(k,_)| k.valid()).map(|v| v.1).sum();
+        let no_bc: u32 = bc_counts.iter().filter(|(k,_)| !k.valid()).map(|v| v.1).sum();
+        println!("comb bc: {}, no bc: {}", bc, no_bc);
 
         utils::write_obj(&bc_counts, bc_count_path.as_ref()).expect("error writing BC counts");
-        Ok(())
+        Ok((bc, no_bc))
     }
 
     fn process_fastq<'a>(&self,
         chunk: ProcType,
-        mut bc_sender: ShardSender<ReadType>) -> Result<HashMap<Barcode, u32>, Error> {
+        mut bc_sender: ShardSender<ReadType>) -> Result<FxHashMap<Barcode, u32>, Error> {
 
         // Counter for BCs
-        let mut counts = HashMap::new();
+        let mut counts = FxHashMap::default();
 
         // Always subsample deterministically
         let mut rand = XorShiftRng::new_unseeded();
@@ -114,7 +96,7 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
         let read_subsample_rate = chunk.read_subsample_rate();
 
         let fastqs = chunk.fastq_files();
-        let iter = ::fastq_read::ReadPairIter::from_fastq_files(fastqs)?;
+        let iter = ReadPairIter::from_fastq_files(fastqs)?;
 
         for _r in iter {
             let r = _r?;
@@ -148,54 +130,89 @@ impl<ProcType, ReadType> SortAndCorrect<ProcType, ReadType> where
                 }
             }
         }
-
         Ok(counts)
     }
+}
 
-    pub fn process_unbarcoded<'a>(
-        bc_corrected_reads_fn: &str,
-        unbarcoded_read_shards: Vec<String>,
-        barcode_validator: &BarcodeCorrector<'a>,
-        bc_subsample_rate: Option<f64>) -> HashMap<Barcode, u32> {
 
-        let ref writer: ShardWriter<ReadType, Barcode, BcSort> = 
-            ShardWriter::new(Path::new(bc_corrected_reads_fn), 16, 1<<12, 1<<21);
+pub struct CorrectBcs<ReadType> {
+    reader: ShardReaderSet<ReadType, Barcode, BcSort>,
+    corrector: BarcodeCorrector,
+    bc_subsample_rate: Option<f64>,
+    phantom: PhantomData<ReadType>,
+}
 
-        // reader
-        let reader = ShardReaderSet::<ReadType, Barcode, BcSort>::open(&unbarcoded_read_shards);
+impl<ReadType> CorrectBcs<ReadType> where 
+    ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync {
+
+    pub fn new(reader: ShardReaderSet<ReadType, Barcode, BcSort>,
+            corrector: BarcodeCorrector,
+            bc_subsample_rate: Option<f64>) -> CorrectBcs<ReadType> {
+
+        CorrectBcs {
+            reader,
+            corrector,
+            bc_subsample_rate,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn process_unbarcoded(&mut self,
+        corrected_reads_fn: impl AsRef<Path>,
+    ) -> Result<(u32, u32), Error> {
+
+        let mut writer: ShardWriter<ReadType, Barcode, BcSort> = 
+            ShardWriter::new(corrected_reads_fn.as_ref(), 16, 1<<12, 1<<21)?;
+
         // below: 1.0-r "inverts" the sense of the fraction so that values near
         // 1.0 don't overflow.  Values near zero are a problem.
-        let bc_subsample_thresh = bc_subsample_rate.map_or(0,
+        let bc_subsample_thresh = 0;
+        
+        /*= self.bc_subsample_rate.map_or(0,
                                     |r| {   assert!( r > 0.0, "zero barcode fraction passed in");
                                             ((1.0-r) * u64::max_value() as f64) as usize } );
+*/
 
-        let iter = reader.make_chunks(128).iter().cloned().
-            map(|x| (x, writer.get_sender())).collect::<Vec<_>>().
+
+        let chunks = self.reader.make_chunks(8, &Range::ends_at(Barcode::first_valid()));
+        let chunk_results = 
+            chunks.
+            into_iter().
+            map(|range| (range, writer.get_sender())).collect::<Vec<_>>().
             into_par_iter().
-            map(|(x, mut read_sender)| {
+            map(|(range, mut read_sender)| {
 
-            // Counter for BCs
-            let mut counts = HashMap::new();
+                // Counter for BCs
+                let mut counts = FxHashMap::default();
 
-            for mut read_pair in reader.iter() {
+                for mut read_pair in self.reader.iter_range(&range) {
 
-                // Correct the BC, if possible
-                // FIXME
-                //barcode_validator.correct_barcode(read_pair);
+                    // Correct the BC, if possible
+                    match self.corrector.correct_barcode(&read_pair.barcode(), read_pair.barcode_qual()) {
+                        Some(new_barcode) => read_pair.set_barcode(new_barcode),
+                        _ => (),
+                    }
 
-                // Read subsampling has already occured in process_fastq -- don't repeat here
-                // barcode subsampling
-                if fxhash::hash(&read_pair.barcode().sequence()) >= bc_subsample_thresh {
-                    // count reads on each (gem_group, bc)
-                    let c = counts.entry(read_pair.barcode()).or_insert(0);
-                    *c += 1;
-                    read_sender.send(read_pair)
+                    // Read subsampling has already occured in process_fastq -- don't repeat here
+                    // barcode subsampling
+                    if fxhash::hash(&read_pair.barcode().sequence()) >= bc_subsample_thresh {
+                        // count reads on each (gem_group, bc)
+                        let c = counts.entry(read_pair.barcode()).or_insert(0);
+                        *c += 1;
+                        read_sender.send(read_pair)
+                    }
                 }
-            }
 
             counts
         });
         
-        iter.reduce(|| HashMap::default(), reduce_counts)
+        let bc_counts = chunk_results.reduce(|| FxHashMap::default(), reduce_counts);
+        let w_count = writer.finish()?;
+
+        let bc: u32 = bc_counts.iter().filter(|(k,_)| k.valid()).map(|v| v.1).sum();
+        let no_bc: u32 = bc_counts.iter().filter(|(k,_)| !k.valid()).map(|v| v.1).sum();
+        println!("post-corr w: {}, bc: {}, no bc: {}", w_count, bc, no_bc);
+
+        Ok((bc, no_bc))
     }
 }
