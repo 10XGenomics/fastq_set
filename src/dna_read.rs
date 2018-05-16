@@ -215,7 +215,6 @@ impl AlignableRead for DnaRead {
 mod test_dna_cfg {
     use super::*;
     use serde_json;
-    use shardio;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()
@@ -278,66 +277,6 @@ mod test_dna_cfg {
         let (corrected, still_incorrect) = correct.process_unbarcoded("test/rp_atac/bc_repro").unwrap();
         assert_eq!(incorrect, corrected + still_incorrect);
     }
-
-    use shardio::range::Range;
-
-    //#[test]
-    fn test_read_issue() {
-
-        let reader = shardio::ShardReaderSet::<DnaRead, Barcode, ::bc_sort::BcSort>::open(&["test/rp_atac/reads"]);
-
-        /*
-        let c4 = reader.make_chunks(1, &Range::ends_at(Barcode::first_valid()));
-        let mut rtrue = Vec::new();
-        for c in c4 {
-            let v = reader.iter_range(&c);
-            rtrue.extend(v);
-        }
-        */
-
-        let c7 = reader.make_chunks(7, &Range::ends_at(Barcode::first_valid()));
-        let v: Vec<_> = reader.iter_range(&c7[7]).collect();
-
-        for i in 0 .. 20 {
-            println!("{}: {:?}", i, v[i].barcode());
-        }
-
-        /*
-        let mut rnew : Vec<DnaRead> = Vec::new();
-        for c in c7 {
-            println!("{:?}", c);
-            let true_subset: Vec<_> = rtrue.iter().filter(|x| c.contains(&x.barcode())).collect();
-
-            if true_subset.len() < 1000 {
-                println!("debug");
-            }
-
-            
-            let v: Vec<_> = reader.iter_range(&c).collect();
-            println!("true: {}, obs: {}", true_subset.len(), v.len());
-
-            for i in 0 .. true_subset.len() {
-                if i < 10 || i > true_subset.len() - 10 {
-                    if i < v.len() {
-                        println!("{}: {:?} {:?}", i, true_subset[i].barcode(), v[i].barcode());
-                    } else {
-                        println!("{}: {:?}", i, true_subset[i].barcode());
-                    }
-                }
-            }
-
-            let strue: HashSet<Barcode> = HashSet::from_iter(true_subset.into_iter().map(|x| x.barcode()));
-            let sfalse = HashSet::from_iter(v.into_iter().map(|x| x.barcode()));
-            println!("{:?}", strue.difference(&sfalse));
-        }
-        */
-
-        assert!(false);
-    }
-
-
-
-
 
     const CRG_CFG: &str = r#"
     [
