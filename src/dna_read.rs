@@ -215,6 +215,7 @@ impl AlignableRead for DnaRead {
 mod test_dna_cfg {
     use super::*;
     use serde_json;
+    use shardio;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()
@@ -243,7 +244,7 @@ mod test_dna_cfg {
         let chunks = load_dna_chunk_def(ATAC_CFG_TEST);
         println!("{:?}", chunks);
 
-        let wl = BarcodeChecker::new("10K-agora-dev.txt").unwrap();
+        let wl = BarcodeChecker::new("test/10K-agora-dev.txt").unwrap();
         let arc = Arc::new(wl);
 
         let mut procs = Vec::new();
@@ -262,7 +263,7 @@ mod test_dna_cfg {
 
         let corrector = 
             ::barcode::BarcodeCorrector::new(
-                "10K-agora-dev.txt", 
+                "test/10K-agora-dev.txt", 
                 &["test/rp_atac/bc_counts"], 1.5, 0.9).unwrap();
 
         let reader = shardio::ShardReaderSet::<DnaRead, Barcode, ::bc_sort::BcSort>::open(&["test/rp_atac/reads"]);

@@ -7,6 +7,7 @@ extern crate ordered_float;
 extern crate fastq;
 extern crate rust_htslib;
 extern crate failure;
+extern crate itertools;
 
 #[macro_use]
 extern crate serde_derive;
@@ -33,6 +34,7 @@ pub mod utils;
 pub mod dna_read;
 pub mod rna_read;
 
+pub mod dna_align;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InputFastqs {
@@ -176,8 +178,10 @@ pub trait ToBam {
     fn to_bam(&self) -> rust_htslib::bam::Record;
 }
 
-pub trait AlignableRead {
-    fn alignable_reads(&self) -> (Option<&[u8]>, Option<&[u8]>);
+pub trait AlignableReadPair {
+    fn header(&self) -> &[u8];
+    fn alignable_sequence(&self) -> (&[u8], &[u8]);
+    fn alignable_quals(&self) -> (&[u8], &[u8]);
 }
 
 pub trait FastqProcessor<ReadType> {
