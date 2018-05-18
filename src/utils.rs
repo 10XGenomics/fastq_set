@@ -17,13 +17,15 @@ use bincode::{serialize_into, deserialize_from};
 use flate2::read::MultiGzDecoder;
 use failure::Error;
 
+const GZ_BUF_SIZE: usize = 1<<22;
+
 /// Open a (possibly gzipped) file into a BufReader.
 pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
     let r = File::open(p.as_ref())?;
 
     if p.as_ref().extension().unwrap() == "gz" {
         let gz = MultiGzDecoder::new(r);
-        let buf_reader = BufReader::with_capacity(32*1024, gz);
+        let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, gz);
         Ok(Box::new(buf_reader))
     } else {
         let buf_reader = BufReader::with_capacity(32*1024, r);

@@ -5,7 +5,7 @@ authors = ["Patrick Marks <patrick@10xgenomics.com>"]
 
 [dependencies]
 ordered-float = "0.3.0"
-flate2 = "*"
+flate2 = { version = "^1.0", features = ["zlib"], default-features = false }
 serde_derive = "*"
 serde_json = "*"
 serde = "*"

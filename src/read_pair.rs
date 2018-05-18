@@ -112,16 +112,19 @@ pub struct ReadPair {
 }
 
 impl ReadPair {
+    
+    // Make space for the full read pair in one allocation
+    const RP_CAPACITY: usize = 1024;
 
     pub(super) fn empty() -> ReadPair {
         let offsets = [ReadOffset::default(); 4];
-        let data = Vec::new();
+        let data = Vec::with_capacity(Self::RP_CAPACITY);
         ReadPair { offsets, data }
     }
 
     pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
         let offsets = [ReadOffset::default(); 4];
-        let data = Vec::new();
+        let data = Vec::with_capacity(Self::RP_CAPACITY);
         let mut rp = ReadPair { offsets, data };
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
