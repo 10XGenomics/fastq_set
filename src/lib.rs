@@ -23,6 +23,8 @@ extern crate fxhash;
 extern crate rand;
 extern crate serde_json;
 
+extern crate bwa;
+
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod sample_def;
@@ -33,8 +35,6 @@ pub mod utils;
 
 pub mod dna_read;
 pub mod rna_read;
-
-pub mod dna_align;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InputFastqs {
@@ -143,6 +143,17 @@ impl Barcode {
 
     pub fn sequence(&self) -> &[u8] {
         self.sequence.seq()
+    }
+
+    /// ASCII string of corrected, GEM group appended form of 
+    /// barcode, suitable for use in BAM files (CB or BX tags)
+    /// For example: "AGCCGATA-1"
+    pub fn to_corrected_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::with_capacity(self.sequence.len() + 2);
+        v.extend(self.sequence());
+        v.push(b'-');
+        v.extend(format!("{}", self.gem_group).as_bytes());
+        v
     }
 }
 

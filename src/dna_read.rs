@@ -4,7 +4,7 @@
 //! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
 //! trimming.
 
-use {HasBarcode, Barcode, FastqProcessor, AlignableRead, InputFastqs};
+use {HasBarcode, Barcode, FastqProcessor, AlignableReadPair, InputFastqs};
 use barcode::BarcodeChecker;
 use read_pair::{ReadPair, WhichRead, ReadPart, RpRange};
 use std::sync::Arc;
@@ -204,9 +204,17 @@ impl DnaRead {
 }
 
 
-impl AlignableRead for DnaRead {
-    fn alignable_reads(&self) -> (Option<&[u8]>, Option<&[u8]>) {
-        (Some(self.r1_seq()), Some(self.r2_seq()))
+impl AlignableReadPair for DnaRead {
+    fn header(&self) -> &[u8] {
+        self.header()
+    }
+
+    fn alignable_sequence(&self) -> (&[u8], &[u8]) {
+        (self.r1_seq(), self.r2_seq())
+    }
+
+    fn alignable_quals(&self) -> (&[u8], &[u8]) {
+        (self.r1_qual(), self.r2_qual())
     }
 }
 
