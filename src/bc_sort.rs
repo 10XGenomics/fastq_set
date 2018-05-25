@@ -7,7 +7,7 @@
 use std::path::{Path};
 
 use fxhash;
-use shardio::{ShardWriter, ShardSender, ShardReaderSet, Range, SortKey};
+use shardio::{ShardWriter, ShardSender, ShardReader, Range, SortKey};
 use std::marker::PhantomData;
 use fxhash::FxHashMap;
 use failure::Error;
@@ -29,7 +29,7 @@ use read_pair_iter::ReadPairIter;
 pub struct BcSort;
 
 impl<T> SortKey<T,Barcode> for BcSort where T: HasBarcode {
-    fn sort_key(v: &T) -> Barcode {
+    fn sort_key(v: &T) -> &Barcode {
         v.barcode()
     }
 }
@@ -109,7 +109,7 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
                     Some(read_pair) => {
 
                         // count reads on each barcode state
-                        let c = counts.entry(read_pair.barcode()).or_insert(0);
+                        let c = counts.entry(*read_pair.barcode()).or_insert(0);
                         *c += 1;
 
                         match read_pair.barcode().valid() {
@@ -136,7 +136,7 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
 
 
 pub struct CorrectBcs<ReadType> {
-    reader: ShardReaderSet<ReadType, Barcode, BcSort>,
+    reader: ShardReader<ReadType, Barcode, BcSort>,
     corrector: BarcodeCorrector,
     bc_subsample_rate: Option<f64>,
     phantom: PhantomData<ReadType>,
@@ -145,7 +145,7 @@ pub struct CorrectBcs<ReadType> {
 impl<ReadType> CorrectBcs<ReadType> where 
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync {
 
-    pub fn new(reader: ShardReaderSet<ReadType, Barcode, BcSort>,
+    pub fn new(reader: ShardReader<ReadType, Barcode, BcSort>,
             corrector: BarcodeCorrector,
             bc_subsample_rate: Option<f64>) -> CorrectBcs<ReadType> {
 
@@ -197,7 +197,7 @@ impl<ReadType> CorrectBcs<ReadType> where
                     // barcode subsampling
                     if fxhash::hash(&read_pair.barcode().sequence()) >= bc_subsample_thresh {
                         // count reads on each (gem_group, bc)
-                        let c = counts.entry(read_pair.barcode()).or_insert(0);
+                        let c = counts.entry(*read_pair.barcode()).or_insert(0);
                         *c += 1;
                         read_sender.send(read_pair)
                     }

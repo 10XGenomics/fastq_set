@@ -106,8 +106,8 @@ pub struct DnaRead {
 }
 
 impl HasBarcode for DnaRead {
-    fn barcode(&self) -> Barcode {
-        self.barcode
+    fn barcode(&self) -> &Barcode {
+        &self.barcode
     }
 
     fn set_barcode(&mut self, barcode: Barcode) {
@@ -274,7 +274,7 @@ mod test_dna_cfg {
                 "test/10K-agora-dev.txt", 
                 &["test/rp_atac/bc_counts"], 1.5, 0.9).unwrap();
 
-        let reader = shardio::ShardReaderSet::<DnaRead, Barcode, ::bc_sort::BcSort>::open(&["test/rp_atac/reads"]);
+        let reader = shardio::ShardReader::<DnaRead, Barcode, ::bc_sort::BcSort>::open("test/rp_atac/reads");
 
         let mut correct = 
             ::bc_sort::CorrectBcs::new(
@@ -575,7 +575,7 @@ mod test_dna_cfg {
             "read_group": "66333:66333:1:HC7WVDMXX:1",
             "reads_interleaved": true,
             "sample_index": "test/bcl_processor/atac/read-I1_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
-            "subsample_rate": 0.1
+            "subsample_rate": 1.0
         },
         {
             "barcode": "test/bcl_processor/atac/read-I2_si-GACCTATT_lane-001-chunk-001.fastq.gz",
@@ -586,7 +586,7 @@ mod test_dna_cfg {
             "read_group": "66333:66333:1:HC7WVDMXX:1",
             "reads_interleaved": true,
             "sample_index": "test/bcl_processor/atac/read-I1_si-GACCTATT_lane-001-chunk-001.fastq.gz",
-            "subsample_rate": 0.1
+            "subsample_rate": 1.0
         }
     ]
     "#;

@@ -12,6 +12,7 @@ extern crate itertools;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
+extern crate serde_bytes;
 extern crate bincode;
 
 #[macro_use]
@@ -158,7 +159,7 @@ impl Barcode {
 }
 
 pub trait HasBarcode {
-    fn barcode(&self) -> Barcode;
+    fn barcode(&self) -> &Barcode;
     fn barcode_qual(&self) -> &[u8];
     fn set_barcode(&mut self, barcode: Barcode);
 }

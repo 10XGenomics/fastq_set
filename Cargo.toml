@@ -9,6 +9,7 @@ flate2 = { version = "^1.0", features = ["zlib"], default-features = false }
 serde_derive = "*"
 serde_json = "*"
 serde = "*"
+serde_bytes = "*"
 
 #rust-htslib = "*"
 rust-htslib = { path = "../../rust-htslib" }

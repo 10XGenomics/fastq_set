@@ -61,11 +61,11 @@ impl FastqProcessor<RnaRead> for RnaChunk {
 
         Some(
             RnaRead {
-                data: read,
-                bc: barcode,
-                umi: umi,
-                bc_range: bc_range,
-                umi_range: umi_range,
+                read,
+                barcode,
+                umi,
+                bc_range,
+                umi_range,
                 r1_range: r1,
                 r2_range: r2,
                 chunk_id: self.chunk_id.unwrap(),
@@ -89,8 +89,8 @@ impl FastqProcessor<RnaRead> for RnaChunk {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct RnaRead {
-    data: ReadPair,
-    bc: Barcode,
+    read: ReadPair,
+    barcode: Barcode,
     umi: Umi,
     bc_range: RpRange,
     umi_range: RpRange,
@@ -100,12 +100,12 @@ pub struct RnaRead {
 }
 
 impl HasBarcode for RnaRead {
-    fn barcode(&self) -> Barcode {
-        self.bc
+    fn barcode(&self) -> &Barcode {
+        &self.barcode
     }
 
     fn set_barcode(&mut self, barcode: Barcode) {
-        self.bc = barcode;
+        self.barcode = barcode;
     }
 
     fn barcode_qual(&self) -> &[u8] {
@@ -118,67 +118,67 @@ impl RnaRead {
 
         /// FASTQ read header
     pub fn header(&self) -> &[u8] {
-        self.data.get(WhichRead::R1, ReadPart::Header).unwrap()
+        self.read.get(WhichRead::R1, ReadPart::Header).unwrap()
     }
 
     /// Full raw R1 sequence
     pub fn r1_seq_raw(&self) -> &[u8] {
-        self.data.get(WhichRead::R1, ReadPart::Seq).unwrap()
+        self.read.get(WhichRead::R1, ReadPart::Seq).unwrap()
     }
 
     /// Full raw R1 QVs
     pub fn r1_qual_raw(&self) -> &[u8] {
-        self.data.get(WhichRead::R1, ReadPart::Qual).unwrap()
+        self.read.get(WhichRead::R1, ReadPart::Qual).unwrap()
     }
 
     /// Full R2 sequence
     pub fn r2_seq_raw(&self) -> &[u8] {
-        self.data.get(WhichRead::R2, ReadPart::Seq).unwrap()
+        self.read.get(WhichRead::R2, ReadPart::Seq).unwrap()
     }
 
     /// Full R2 QVs
     pub fn r2_qual_raw(&self) -> &[u8] {
-        self.data.get(WhichRead::R2, ReadPart::Qual).unwrap()
+        self.read.get(WhichRead::R2, ReadPart::Qual).unwrap()
     }
 
     /// Sample index (I1) sequence
     pub fn si_seq(&self) -> Option<&[u8]> {
-        self.data.get(WhichRead::I1, ReadPart::Seq)
+        self.read.get(WhichRead::I1, ReadPart::Seq)
     }
 
     /// Sample index (I1) QVs
     pub fn si_qual(&self) -> Option<&[u8]> {
-        self.data.get(WhichRead::I1, ReadPart::Qual)
+        self.read.get(WhichRead::I1, ReadPart::Qual)
     }
 
     /// Raw, uncorrected barcode sequence
     pub fn raw_bc_seq(&self) -> &[u8] {
-        self.data.get_range(&self.bc_range, ReadPart::Seq).unwrap()
+        self.read.get_range(&self.bc_range, ReadPart::Seq).unwrap()
     }
 
     /// Raw barcode QVs
     pub fn raw_bc_qual(&self) -> &[u8] {
-        self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+        self.read.get_range(&self.bc_range, ReadPart::Qual).unwrap()
     }
 
     /// Raw, uncorrected barcode sequence
     pub fn raw_umi_seq(&self) -> &[u8] {
-        self.data.get_range(&self.umi_range, ReadPart::Seq).unwrap()
+        self.read.get_range(&self.umi_range, ReadPart::Seq).unwrap()
     }
 
     /// Raw barcode QVs
     pub fn raw_umi_qual(&self) -> &[u8] {
-        self.data.get_range(&self.umi_range, ReadPart::Qual).unwrap()
+        self.read.get_range(&self.umi_range, ReadPart::Qual).unwrap()
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_seq(&self) -> &[u8] {
-        self.data.get_range(&self.r1_range, ReadPart::Seq).unwrap()
+        self.read.get_range(&self.r1_range, ReadPart::Seq).unwrap()
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_qual(&self) -> &[u8] {
-        self.data.get_range(&self.r1_range, ReadPart::Qual).unwrap()
+        self.read.get_range(&self.r1_range, ReadPart::Qual).unwrap()
     }
 }
 
