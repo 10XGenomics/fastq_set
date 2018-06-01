@@ -224,6 +224,7 @@ mod test_dna_cfg {
     use super::*;
     use serde_json;
     use shardio;
+    use tempfile;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()
@@ -252,6 +253,9 @@ mod test_dna_cfg {
         let chunks = load_dna_chunk_def(ATAC_CFG_TEST);
         println!("{:?}", chunks);
 
+        let tmp_dir = tempfile::TempDir::new_in("test").unwrap();
+        let temp = |s| { tmp_dir.path().join(s) };
+
         let wl = BarcodeChecker::new("test/10K-agora-dev.txt").unwrap();
         let arc = Arc::new(wl);
 
@@ -267,14 +271,14 @@ mod test_dna_cfg {
         }
 
         let sorter = ::bc_sort::SortByBc::<_,DnaRead>::new(procs);
-        let (_, incorrect) = sorter.sort_bcs("test/rp_atac/reads", "test/rp_atac/bc_counts").unwrap();
+        let (_, incorrect) = sorter.sort_bcs(temp("reads"), temp("bc_counts")).unwrap();
 
         let corrector = 
             ::barcode::BarcodeCorrector::new(
                 "test/10K-agora-dev.txt", 
-                &["test/rp_atac/bc_counts"], 1.5, 0.9).unwrap();
+                &[temp("bc_counts")], 1.5, 0.9).unwrap();
 
-        let reader = shardio::ShardReader::<DnaRead, Barcode, ::bc_sort::BcSort>::open("test/rp_atac/reads");
+        let reader = shardio::ShardReader::<DnaRead, Barcode, ::bc_sort::BcSort>::open(temp("reads"));
 
         let mut correct = 
             ::bc_sort::CorrectBcs::new(
@@ -283,7 +287,7 @@ mod test_dna_cfg {
                 Some(1.0f64),
             );
 
-        let (corrected, still_incorrect) = correct.process_unbarcoded("test/rp_atac/bc_repro").unwrap();
+        let (corrected, still_incorrect) = correct.process_unbarcoded(temp("bc_repro")).unwrap();
         assert_eq!(incorrect, corrected + still_incorrect);
     }
 

@@ -26,6 +26,9 @@ extern crate serde_json;
 
 extern crate bwa;
 
+#[cfg(test)]
+extern crate tempfile;
+
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod sample_def;
