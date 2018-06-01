@@ -102,7 +102,7 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
             let r = _r?;
 
             // Read subsampling
-            if rand.next_f64() < read_subsample_rate {
+            if rand.gen_range(0.0, 1.0) < read_subsample_rate {
 
                 match chunk.process_read(r) {
                     None => (),

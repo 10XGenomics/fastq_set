@@ -11,12 +11,18 @@ serde_json = "*"
 serde = "*"
 serde_bytes = "*"
 
-#rust-htslib = "*"
-rust-htslib = { path = "../../rust-htslib" }
-#shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
-shardio = { path = "../../rust-shardio" }
+rust-htslib = "0.19"
+
+# Note you may need to use a local checkout rust-htslib to get around
+# dependecy issues in the C htslib build. (bzip2 and lzma).
+#rust-htslib = { path = "../../rust-htslib" }
+
+shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
+
 
 bwa = { path = "../../rust-bwa" }
+# Switch to this once it's made public
+#bwa = { git = "https://github.com/10XGenomics/rust-bwa.git" }
 
 rayon = "*"
 log = "*"
@@ -26,5 +32,5 @@ rand = "*"
 itertools = ">=0.6"
 
 # Switch back to crates once PR is upstreamed.
-fastq = { git = "https://github.com/pmarks/fastq-rs.git", rev = "e042ef2e59fff6365c1"}
+fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}
 failure = "*"
