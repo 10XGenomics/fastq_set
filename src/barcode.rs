@@ -1,6 +1,7 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Types for dealing with 10x barcodes
+//! Tools for dealing with 10x barcodes. Loading barcode whitelists, check barcodes against the whitelist
+//! and correcting incorrect barcodes.
 
 use std::cmp::max;
 use ordered_float::NotNaN;
@@ -13,7 +14,6 @@ use std::hash::Hash;
 
 use {Barcode, SSeq};
 use utils;
-
 
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
@@ -50,8 +50,7 @@ pub(crate) fn reduce_counts_err<K: Hash + Eq>(v1: Result<FxHashMap<K, u32>, Erro
     }
 }
 
-
-
+/// Check an observed barcode sequence against a whitelist of barcodes
 pub struct BarcodeChecker {
     whitelist: FxHashSet<SSeq>
 }
@@ -65,6 +64,8 @@ impl BarcodeChecker {
         Ok(BarcodeChecker { whitelist })
     }
 
+    /// Convert `barcode` to be `is_valid() == true` if the
+    /// barcode sequence exactly matches a whitelist sequence.
     pub fn check(&self, barcode: &mut Barcode) {
         if self.whitelist.contains(&barcode.sequence) {
             barcode.valid = true;
@@ -74,6 +75,7 @@ impl BarcodeChecker {
     }
 }
 
+/// Load barcode count data from a set of serialized files containg FxHashMap<Barcode, u32> counts.
 pub fn load_barcode_counts(count_files: &[impl AsRef<Path>]) -> Result<FxHashMap<Barcode, u32>, Error> {
 
     let mut counts = FxHashMap::default();
@@ -89,6 +91,9 @@ pub fn load_barcode_counts(count_files: &[impl AsRef<Path>]) -> Result<FxHashMap
 const BASE_OPTS: [u8; 4] = [b'A', b'C', b'G', b'T'];
 type Of64 = NotNaN<f64>;
 
+/// Implement the standard 10x barcode correction algorithm. 
+/// Requires the barcode whitelist (`whitelist`), and the observed counts
+/// of each whitelist barcode, prior to correction (`bc_counts`).
 pub struct BarcodeCorrector {
 	whitelist: FxHashSet<SSeq>,
     bc_counts: FxHashMap<Barcode, u32>,
@@ -128,22 +133,29 @@ impl BarcodeCorrector {
         })
     }
 
+    /// Attempt to correct a non-whitelist barcode sequence onto the whitelist. 
+    /// Compute a posterior distribution over whitelist barcodes given:
+    /// # A prior distribution over whitelist bacodes (self.counts)
+    /// # The likelihood of P(orig_barcode | wl_bc; qual) of the `observed_barcode` sequence
+    ///   given a hidden whitelist barcode wl_bc, and the sequencer reported quality values qual.
+    /// Use these components to compute a posterior distribution of wl_bc candidates, and correct 
+    /// the barcode if there's a whitelist barcode with posterior probability greater than 
+    /// self.bc_confidence_threshold
+    pub fn correct_barcode(&self, observed_barcode: &Barcode, qual: &[u8]) -> Option<Barcode> {
 
-    pub fn correct_barcode(&self, orig_barcode: &Barcode, qual: &[u8]) -> Option<Barcode> {
-
-        let mut a = orig_barcode.sequence.clone();
+        let mut a = observed_barcode.sequence.clone();
 
         let mut candidates: Vec<(Of64, Barcode)> = Vec::new();
         let mut total_likelihood = Of64::from(0.0);
          
-	    for pos in 0 .. orig_barcode.sequence.len() {
+	    for pos in 0 .. observed_barcode.sequence.len() {
             let qv = qual[pos];
             let existing = a.sequence[pos];
             for val in BASE_OPTS.iter() {
 
                 if *val == existing { continue; }
                 a.sequence[pos] = *val;
-                let trial_bc = Barcode { valid: true, sequence: a, gem_group: orig_barcode.gem_group };
+                let trial_bc = Barcode { valid: true, sequence: a, gem_group: observed_barcode.gem_group };
 
                 if self.whitelist.contains(&a) {
                     let bc_count = self.bc_counts.get(&trial_bc).cloned().unwrap_or(0);
@@ -157,9 +169,7 @@ impl BarcodeCorrector {
         }
 	
         let thresh = Of64::from(self.bc_confidence_threshold);
-        //println!("cands: {:?}", candidates);
         let best_option = candidates.into_iter().max();
-        
 
         let expected_errors: f64 = qual.iter().cloned().map(probability).sum();
 

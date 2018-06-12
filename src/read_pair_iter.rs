@@ -7,11 +7,20 @@ use failure::Error;
 
 use fastq::{self, RecordRefIter};
 use read_pair::{ReadPair, WhichRead};
-use InputFastqs;
 
 use std::io::BufRead;
 use utils;
 
+
+/// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct InputFastqs {
+    pub r1: String,
+    pub r2: Option<String>,
+    pub i1: Option<String>,
+    pub i2: Option<String>,
+    pub r1_interleaved: bool,
+}
 
 /// Read from a parallel set of FASTQ files.
 /// Supports any combination of R1/R2/I1/I2 read files,
@@ -29,7 +38,7 @@ impl ReadPairIter {
         Self::new(Some(input_fastqs.r1), input_fastqs.r2, input_fastqs.i1, input_fastqs.i2, input_fastqs.r1_interleaved)
     }
 
-    pub fn new<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
+    fn new<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
 
         let mut iters = [None, None, None, None];
 
@@ -93,7 +102,9 @@ impl ReadPairIter {
 impl Iterator for ReadPairIter {
     type Item = Result<ReadPair, Error>;
 
+    /// Iterate over ReadPair objects
     fn next(&mut self) -> Option<Result<ReadPair, Error>> {
+        // Convert Result<Option<_>, Error> to Option<Result<_, Error>>
         match self.get_next() {
             Ok(Some(v)) => Some(Ok(v)),
             Ok(None) => None,

@@ -1,6 +1,8 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
 //! Find FASTQs from SampleDefs which get passed to the input of 10x pipelines.
+//! Work in progress: need to implement bcl2fastq filename lookup conventions
+
 use std::path::PathBuf;
 use InputFastqs;
 

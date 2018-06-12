@@ -5,13 +5,11 @@
 //! trimming.
 
 use {HasBarcode, Barcode, FastqProcessor, AlignableReadPair, InputFastqs, HasBamTags};
-use barcode::BarcodeChecker;
 use read_pair::{ReadPair, WhichRead, ReadPart, RpRange};
-use std::sync::Arc;
 use std::ops::Range;
 
-/// Specification of a single set of FASTQs and how to interpret the read
-/// components.
+/// Specification of a single set of FASTQs and how to interpret the read components.
+/// This structure is produced by the SETUP_CHUNKS stage of DNA pipelines
 #[derive(Serialize, Deserialize, PartialOrd, PartialEq, Debug, Clone)]
 pub struct DnaChunk {
     barcode: Option<String>,
@@ -27,12 +25,12 @@ pub struct DnaChunk {
     subsample_rate: f64,
 }
 
-/// Process raw FASTQs into DnaRead parsed objects.
+/// Process raw FASTQ data into DnaRead objects, based on the DnaChunk parameters.
+/// This is achieved by implementing `FastqProcessor<DnaRead>`.
 #[derive(Clone)]
 pub struct DnaProcessor {
     chunk: DnaChunk,
     chunk_id: u16,
-    barcode_checker: Arc<BarcodeChecker>,
 }
 
 impl FastqProcessor<DnaRead> for DnaProcessor {
@@ -69,10 +67,6 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
         })
     }
 
-    fn description(&self) -> String {
-        self.chunk.read1.clone()
-    }
-
     fn fastq_files(&self) -> InputFastqs {
         InputFastqs {
             r1: self.chunk.read1.clone(),
@@ -92,7 +86,8 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
     }
 }
 
-/// Represents a GEM-barcoded DNA read.
+/// Represents a GEM-barcoded DNA read, with a barcode at the start of R1 or in an index read,
+/// and possibly some bases trimmed the the start of R1 and R2.
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 pub struct DnaRead {
     data: ReadPair,

@@ -82,7 +82,6 @@ impl FastqProcessor<RnaRead> for RnaChunk {
             r1_interleaved: self.reads_interleaved,
         }
     }
-    fn description(&self) -> String { "blah".to_string() }
     fn bc_subsample_rate(&self) -> f64 { 0.0 }
     fn read_subsample_rate(&self) -> f64 { 0.0 }
 }

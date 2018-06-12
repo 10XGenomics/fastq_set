@@ -33,17 +33,17 @@ pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
     }
 }
 
-
-
-pub fn write_obj<T: Serialize, P: AsRef<Path> + Debug>(g: &T, filename: P) -> Result<(), bincode::Error> {
+/// Serialize object `obj` of type `T` to the file `filename`
+pub fn write_obj<T: Serialize, P: AsRef<Path> + Debug>(obj: &T, filename: P) -> Result<(), bincode::Error> {
     let f = match File::create(&filename) {
         Err(err) => panic!("couldn't create file {:?}: {}", filename, err),
         Ok(f) => f,
     };
     let mut writer = BufWriter::new(f);
-    serialize_into(&mut writer, &g)
+    serialize_into(&mut writer, &obj)
 }
 
+/// Serialize an object  of type `T` from the file `filename`
 pub fn read_obj<T: DeserializeOwned, P: AsRef<Path> + Debug>(filename: P) -> Result<T, bincode::Error> {
     let f = match File::open(&filename) {
         Err(err) => panic!("couldn't open file {:?}: {}", filename, err),
@@ -52,4 +52,3 @@ pub fn read_obj<T: DeserializeOwned, P: AsRef<Path> + Debug>(filename: P) -> Res
     let mut reader = BufReader::new(f);
     deserialize_from(&mut reader)
 }
-

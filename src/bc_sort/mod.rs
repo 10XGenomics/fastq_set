@@ -13,20 +13,19 @@ use fxhash::FxHashMap;
 use failure::Error;
 
 use rayon::prelude::*;
-use utils;
 
 use rand::XorShiftRng;
 use rand::Rng;
 
 use serde::ser::Serialize;  
 use serde::de::DeserializeOwned;
+use shardio;
 
 use {Barcode, HasBarcode, FastqProcessor};
 use barcode::{BarcodeChecker, BarcodeCorrector, reduce_counts, reduce_counts_err};
 use read_pair_iter::ReadPairIter;
 use tempfile::TempDir;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 pub struct BcSortOrder;
 
@@ -64,13 +63,8 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
         self.fastq_inputs.iter().cloned().map(|fq| (fq, writer.get_sender())).collect();
 
         let bc_counts = fq_w_senders.into_par_iter().map(|(fq, sender)| {
-            let desc = fq.description();
-            info!("start processing: {}", desc); 
-
-            let counts = self.process_fastq(fq, sender)?;
-            
-            info!("done processing: {}", desc);
-            Ok(counts)
+            info!("start processing: {:?}",  fq.fastq_files()); 
+            self.process_fastq(fq, sender)
         }).reduce(|| Ok(FxHashMap::default()), reduce_counts_err)?;
 
         writer.finish()?;
@@ -241,9 +235,6 @@ pub struct BcSortResults {
     tmp_dir: TempDir,
 }
 
-use dna_read::{DnaRead, DnaChunk, DnaProcessor};
-use shardio;
-
 pub fn barcode_sort_workflow<C, P, R>(chunks: Vec<P>, path: impl AsRef<Path>, barcode_whitelist: impl AsRef<Path>) -> 
     Result<BcSortResults, Error>
 where 
@@ -266,7 +257,7 @@ where
             barcode_whitelist, init_counts.clone(), 1.5, 0.9)?;
 
 
-    let reader = shardio::ShardReader::<DnaRead, Barcode, BcSortOrder>::open(&pass1_fn);
+    let reader = shardio::ShardReader::<R, Barcode, BcSortOrder>::open(&pass1_fn);
 
     let mut correct = 
         CorrectBcs::new(

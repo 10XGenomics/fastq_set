@@ -27,7 +27,6 @@ extern crate tempfile;
 
 extern crate bwa;
 
-
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod sample_def;
@@ -35,68 +34,15 @@ pub mod sample_def;
 pub mod barcode;
 pub mod bc_sort;
 pub mod utils;
+pub mod sseq;
 
 pub mod dna_read;
 pub mod rna_read;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct InputFastqs {
-    r1: String,
-    r2: Option<String>,
-    i1: Option<String>,
-    i2: Option<String>,
-    r1_interleaved: bool,
-}
+use sseq::SSeq;
+use read_pair_iter::InputFastqs;
 
-
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
-struct SSeq {
-    length: u8,
-    sequence: [u8; 23],
-}
-
-
-impl SSeq {
-    pub fn new(seq: &[u8]) -> SSeq {
-        assert!(seq.len() <= 23);
-
-        let mut sequence = [0u8; 23];
-        sequence[0..seq.len()].copy_from_slice(&seq);
-
-        SSeq {
-            length: seq.len() as u8,
-            sequence,
-        }
-    }
-
-    pub fn seq(&self) -> &[u8] {
-        &self.sequence[0..self.length as usize]
-    }
-
-    pub fn len(&self) -> usize {
-        self.length as usize
-    }
-}
-
-impl AsRef<[u8]> for SSeq {
-    fn as_ref(&self) -> &[u8] {
-        self.seq()
-    }
-}
-
-use std::fmt;
-impl fmt::Debug for SSeq {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut s = String::new();
-        for pos in 0..self.len() {
-            s.push(self.sequence[pos] as char);
-        }
-        write!(f, "{}", s)
-    }
-}
-
-
-/// Represent a (possibly-correct 10x barcode sequence)
+/// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Barcode {
     valid: bool,
@@ -140,10 +86,12 @@ impl Barcode {
         }
     }
 
+    /// Does this represent a valid whitelist barcode
     pub fn is_valid(&self) -> bool {
         self.valid
     }
 
+    /// Sequence of the (corrected) barcode
     pub fn sequence(&self) -> &[u8] {
         self.sequence.seq()
     }
@@ -160,12 +108,15 @@ impl Barcode {
     }
 }
 
+/// A trait for objects that carry a 10x barcode, allowing for querying the barcode,
+/// and correcting the barcode.
 pub trait HasBarcode {
     fn barcode(&self) -> &Barcode;
     fn barcode_qual(&self) -> &[u8];
     fn set_barcode(&mut self, barcode: Barcode);
 }
 
+/// A container for a read UMI sequence.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)] 
 pub struct Umi {
     sequence: SSeq,
@@ -183,32 +134,43 @@ impl Umi {
     }
 }
 
+/// A trait for objects that carry a UMI sequence.
 pub trait HasUmi {
+    /// Get a copy of the (possibly corrected) UMI on this read
     fn umi(&self) -> Umi;
     fn correct_umi(&mut self, corrected_umi: &[u8]);
 }
 
-pub trait ToBam {
-    fn to_bam(&self) -> rust_htslib::bam::Record;
-}
-
+/// A trait for objects that carry alignable sequence data.
 pub trait AlignableReadPair {
+    /// The FASTQ header of the underlying Illumina read
     fn header(&self) -> &[u8];
+
+    /// Alignable sequence bases, representing a trimmed version of the input sequence
     fn alignable_sequence(&self) -> (&[u8], &[u8]);
+
+    /// Quality scores corresponding to the alignable sequences.
     fn alignable_quals(&self) -> (&[u8], &[u8]);
 }
 
-// Specifices what BAM tags should be used to encode the non-alignable
-// parts of the read sequence as BAM tags for BAM to FASTQ conversion
+/// Specifices what BAM tags should be used to encode the non-alignable
+/// parts of the read sequence as BAM tags for BAM to FASTQ conversion
 pub trait HasBamTags {
     fn tags(&self) -> Vec<([u8;2], &[u8])>;
 }
 
+/// A specification for a group of input FASTQ data, and how to interpret
+/// the raw sequences as a assay-specific `ReadType` that can provide access to 
+/// barcodes, UMIs, and track trimmed bases.
 pub trait FastqProcessor<ReadType> {
+    /// Convert a `ReadPair` representing the raw data from a single read-pair
+    /// into an assay-specific `ReadType`
     fn process_read(&self, read: read_pair::ReadPair) -> Option<ReadType>;
-    fn description(&self) -> String;
+
+    /// A corresponding set of FASTQ files to read data from.
     fn fastq_files(&self) -> InputFastqs;
 
+    /// Subsampling
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
 }
