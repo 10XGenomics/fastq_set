@@ -110,7 +110,7 @@ impl BarcodeCorrector {
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
         whitelist: impl AsRef<Path>, 
-        count_files: &[impl AsRef<Path>],
+        bc_counts: FxHashMap<Barcode, u32>,
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64
         ) -> Result<BarcodeCorrector, Error> {
@@ -120,13 +120,11 @@ impl BarcodeCorrector {
         let mut whitelist = FxHashSet::default();
         whitelist.extend(wl.keys());
 
-        let counts = load_barcode_counts(count_files)?;
-
         Ok(BarcodeCorrector {
             whitelist: whitelist,
-            bc_counts: counts,
+            bc_counts,
             max_expected_barcode_errors,
-            bc_confidence_threshold
+            bc_confidence_threshold,
         })
     }
 

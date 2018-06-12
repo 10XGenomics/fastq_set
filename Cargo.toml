@@ -10,26 +10,22 @@ serde_derive = "*"
 serde_json = "*"
 serde = "*"
 serde_bytes = "*"
-
-rust-htslib = "0.19"
-
-# Note you may need to use a local checkout rust-htslib to get around
-# dependecy issues in the C htslib build. (bzip2 and lzma).
-#rust-htslib = { path = "../../rust-htslib" }
-
-shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
-bwa = { git = "https://github.com/10XGenomics/rust-bwa.git" }
-
+tempfile = "3"
 rayon = "*"
 log = "*"
 bincode = "*"
 fxhash = "0.2.1"
 rand = "*"
 itertools = ">=0.6"
-
-# Switch back to crates once PR is upstreamed.
-fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}
 failure = "*"
 
-[dev-dependencies]
-tempfile = "3"
+# Note you may need to use a local checkout rust-htslib to get around
+# dependecy issues in the C htslib build. (bzip2 and lzma).
+rust-htslib = "0.19"
+#rust-htslib = { path = "../../rust-htslib" }
+
+shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
+bwa = { git = "https://github.com/10XGenomics/rust-bwa.git" }
+
+# Switch back to crates.io once our PR is released
+fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}

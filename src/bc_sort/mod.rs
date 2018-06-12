@@ -18,25 +18,27 @@ use utils;
 use rand::XorShiftRng;
 use rand::Rng;
 
-use serde::ser::Serialize;
+use serde::ser::Serialize;  
 use serde::de::DeserializeOwned;
 
 use {Barcode, HasBarcode, FastqProcessor};
-use barcode::{BarcodeCorrector, reduce_counts, reduce_counts_err};
+use barcode::{BarcodeChecker, BarcodeCorrector, reduce_counts, reduce_counts_err};
 use read_pair_iter::ReadPairIter;
+use tempfile::TempDir;
+use std::path::PathBuf;
+use std::sync::Arc;
 
+pub struct BcSortOrder;
 
-pub struct BcSort;
-
-impl<T> SortKey<T,Barcode> for BcSort where T: HasBarcode {
+impl<T> SortKey<T,Barcode> for BcSortOrder where T: HasBarcode {
     fn sort_key(v: &T) -> &Barcode {
         v.barcode()
     }
 }
 
-
 pub struct SortByBc<ProcType, ReadType> {
     fastq_inputs: Vec<ProcType>,
+    barcode_checker: BarcodeChecker,
     phantom: PhantomData<ReadType>,
 }
 
@@ -44,19 +46,18 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
     ProcType: FastqProcessor<ReadType> + Send + Sync + Clone,
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync, 
 {
-    pub fn new(fastq_inputs: Vec<ProcType>) -> SortByBc<ProcType, ReadType> {
+    pub fn new(fastq_inputs: Vec<ProcType>, barcode_checker: BarcodeChecker) -> SortByBc<ProcType, ReadType> {
         SortByBc {
             fastq_inputs,
+            barcode_checker,
             phantom: PhantomData
         }
     }
 
     #[inline(never)]
-    pub fn sort_bcs(&self,
-        read_path: impl AsRef<Path>,
-        bc_count_path: impl AsRef<Path>) -> Result<(u32, u32), Error> {
+    pub fn sort_bcs(&self, read_path: impl AsRef<Path>) -> Result<(usize, usize, FxHashMap<Barcode, u32>), Error> {
 
-        let mut writer = ShardWriter::<ReadType, Barcode, BcSort>::new(read_path, 16, 128, 1<<22)?;
+        let mut writer = ShardWriter::<ReadType, Barcode, BcSortOrder>::new(read_path, 16, 128, 1<<22)?;
 
         // FIXME - configure thread consumption
         let fq_w_senders: Vec<(ProcType, ShardSender<ReadType>)> = 
@@ -73,12 +74,12 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
         }).reduce(|| Ok(FxHashMap::default()), reduce_counts_err)?;
 
         writer.finish()?;
-        let bc: u32 = bc_counts.iter().filter(|(k,_)| k.valid()).map(|v| v.1).sum();
-        let no_bc: u32 = bc_counts.iter().filter(|(k,_)| !k.valid()).map(|v| v.1).sum();
-        println!("comb bc: {}, no bc: {}", bc, no_bc);
 
-        utils::write_obj(&bc_counts, bc_count_path.as_ref()).expect("error writing BC counts");
-        Ok((bc, no_bc))
+        // Sum barcode counts to usize
+        let valid_count = count_reads(&bc_counts, true);
+        let invalid_count = count_reads(&bc_counts, false);
+
+        Ok((valid_count, invalid_count, bc_counts))
     }
 
     fn process_fastq<'a>(&self,
@@ -106,13 +107,18 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
 
                 match chunk.process_read(r) {
                     None => (),
-                    Some(read_pair) => {
+                    Some(mut read_pair) => {
+
+                        // Check barcode against whitelist & mark correct if it matches.
+                        let mut bc = read_pair.barcode().clone();
+                        self.barcode_checker.check(&mut bc);
+                        read_pair.set_barcode(bc);
 
                         // count reads on each barcode state
                         let c = counts.entry(*read_pair.barcode()).or_insert(0);
                         *c += 1;
 
-                        match read_pair.barcode().valid() {
+                        match read_pair.barcode().is_valid() {
                             true => {
                                 // barcode subsampling
                                 let hash = fxhash::hash(&read_pair.barcode().sequence()); 
@@ -134,9 +140,17 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
     }
 }
 
+fn count_reads(bc_counts: &FxHashMap<Barcode, u32>, valid: bool) -> usize {
+    bc_counts.
+    iter().
+    filter(|(k,_)| k.is_valid() == valid).
+    map(|v| v.1).
+    fold(0usize, |x,y| x + (*y as usize))
+}
+
 
 pub struct CorrectBcs<ReadType> {
-    reader: ShardReader<ReadType, Barcode, BcSort>,
+    reader: ShardReader<ReadType, Barcode, BcSortOrder>,
     corrector: BarcodeCorrector,
     bc_subsample_rate: Option<f64>,
     phantom: PhantomData<ReadType>,
@@ -145,7 +159,7 @@ pub struct CorrectBcs<ReadType> {
 impl<ReadType> CorrectBcs<ReadType> where 
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync {
 
-    pub fn new(reader: ShardReader<ReadType, Barcode, BcSort>,
+    pub fn new(reader: ShardReader<ReadType, Barcode, BcSortOrder>,
             corrector: BarcodeCorrector,
             bc_subsample_rate: Option<f64>) -> CorrectBcs<ReadType> {
 
@@ -157,11 +171,10 @@ impl<ReadType> CorrectBcs<ReadType> where
         }
     }
 
-    pub fn process_unbarcoded(&mut self,
-        corrected_reads_fn: impl AsRef<Path>,
-    ) -> Result<(u32, u32), Error> {
+    pub fn process_unbarcoded(&mut self, corrected_reads_fn: impl AsRef<Path>,
+    ) -> Result<(usize, usize, FxHashMap<Barcode, u32>), Error> {
 
-        let mut writer: ShardWriter<ReadType, Barcode, BcSort> = 
+        let mut writer: ShardWriter<ReadType, Barcode, BcSortOrder> = 
             ShardWriter::new(corrected_reads_fn.as_ref(), 16, 1<<12, 1<<21)?;
 
         // below: 1.0-r "inverts" the sense of the fraction so that values near
@@ -209,10 +222,86 @@ impl<ReadType> CorrectBcs<ReadType> where
         let bc_counts = chunk_results.reduce(|| FxHashMap::default(), reduce_counts);
         let w_count = writer.finish()?;
 
-        let bc: u32 = bc_counts.iter().filter(|(k,_)| k.valid()).map(|v| v.1).sum();
-        let no_bc: u32 = bc_counts.iter().filter(|(k,_)| !k.valid()).map(|v| v.1).sum();
-        println!("post-corr w: {}, bc: {}, no bc: {}", w_count, bc, no_bc);
+        // Sum barcode counts to usize
+        let valid_count = count_reads(&bc_counts, true);
+        let invalid_count = count_reads(&bc_counts, false);
 
-        Ok((bc, no_bc))
+        Ok((valid_count, invalid_count, bc_counts))
     }
+}
+
+pub struct BcSortResults {
+    init_correct_data: PathBuf,
+    corrected_data: PathBuf,
+    total_read_pairs: usize,
+    init_correct_barcodes: usize,
+    corrected_barcodes: usize,
+    incorrect_barcodes: usize,
+    counts: FxHashMap<Barcode, u32>,
+    tmp_dir: TempDir,
+}
+
+use dna_read::{DnaRead, DnaChunk, DnaProcessor};
+use shardio;
+
+pub fn barcode_sort_workflow<C, P, R>(chunks: Vec<P>, path: impl AsRef<Path>, barcode_whitelist: impl AsRef<Path>) -> 
+    Result<BcSortResults, Error>
+where 
+    P: FastqProcessor<R> + Send + Sync + Clone,
+    R: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync, 
+
+ {
+    let tmp_dir = TempDir::new_in(path)?;
+    let pass1_fn = tmp_dir.path().join("pass1_data.shardio");
+    let pass2_fn = tmp_dir.path().join("pass2_data.shardio");
+
+    // Validate raw barcode sequen
+    let barcode_checker = BarcodeChecker::new(barcode_whitelist.as_ref())?;
+
+    let sorter = SortByBc::<_,_>::new(chunks, barcode_checker);
+    let (init_correct, init_incorrect, init_counts) = sorter.sort_bcs(&pass1_fn)?;
+
+    let corrector = 
+        BarcodeCorrector::new(
+            barcode_whitelist, init_counts.clone(), 1.5, 0.9)?;
+
+
+    let reader = shardio::ShardReader::<DnaRead, Barcode, BcSortOrder>::open(&pass1_fn);
+
+    let mut correct = 
+        CorrectBcs::new(
+            reader,
+            corrector,
+            Some(1.0f64),
+        );
+
+    let (corrected, still_incorrect, corrected_counts) = correct.process_unbarcoded(&pass2_fn)?;
+    assert_eq!(init_incorrect, corrected + still_incorrect);
+
+    // Combine counts
+    let mut final_counts = FxHashMap::default();
+    for (k,v) in init_counts {
+        // initially incorrect reads are handled on the 2nd pass
+        if k.is_valid() {
+            final_counts.insert(k,v);
+        }
+    }
+
+    // update counts with results from 2nd pass
+    for (k, v) in corrected_counts {
+        let e = final_counts.entry(k).or_insert(0);
+        *e += v;
+    }
+
+
+    Ok(BcSortResults {
+        total_read_pairs: init_correct + init_incorrect,
+        init_correct_barcodes: init_correct,
+        corrected_barcodes: corrected,
+        incorrect_barcodes: still_incorrect,
+        counts: final_counts,
+        tmp_dir: tmp_dir,
+        init_correct_data: pass1_fn,
+        corrected_data: pass2_fn,
+    })
 }

@@ -4,7 +4,7 @@
 //! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
 //! trimming.
 
-use {HasBarcode, Barcode, FastqProcessor, AlignableReadPair, InputFastqs};
+use {HasBarcode, Barcode, FastqProcessor, AlignableReadPair, InputFastqs, HasBamTags};
 use barcode::BarcodeChecker;
 use read_pair::{ReadPair, WhichRead, ReadPart, RpRange};
 use std::sync::Arc;
@@ -35,8 +35,9 @@ pub struct DnaProcessor {
     barcode_checker: Arc<BarcodeChecker>,
 }
 
-
 impl FastqProcessor<DnaRead> for DnaProcessor {
+
+    /// Convert raw FASTQ data into DnaRead
     fn process_read(&self, read: ReadPair) -> Option<DnaRead> {
         assert!(read.get(WhichRead::R1, ReadPart::Seq).is_some());
         assert!(read.get(WhichRead::R2, ReadPart::Seq).is_some());
@@ -52,9 +53,7 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
         };
 
         // Snip out barcode
-        let mut barcode = Barcode::new(chunk.gem_group, read.get_range(&bc_range, ReadPart::Seq).unwrap(), true);
-        // Mark check barcode against whitelist & mark correct if it matches.
-        self.barcode_checker.check(&mut barcode);
+        let barcode = Barcode::new(chunk.gem_group, read.get_range(&bc_range, ReadPart::Seq).unwrap(), true);
 
         // FIXME -- do cutadapt trimming here?
 
@@ -67,7 +66,6 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
             // FIXME -- get the right trim length
             trim_r1: 7,
             trim_r2: 0,
-
         })
     }
 
@@ -116,6 +114,17 @@ impl HasBarcode for DnaRead {
 
     fn barcode_qual(&self) -> &[u8] {
         self.raw_bc_seq()
+    }
+}
+
+impl HasBamTags for DnaRead {
+    fn tags(&self) -> Vec<([u8;2], &[u8])> {
+        vec![
+            (*b"RX", self.raw_bc_seq()),
+            (*b"QX", self.raw_bc_qual()),
+            (*b"TR", self.r1_trim_seq()),
+            (*b"TQ", self.r1_trim_qual()),
+        ]
     }
 }
 
@@ -253,42 +262,17 @@ mod test_dna_cfg {
         let chunks = load_dna_chunk_def(ATAC_CFG_TEST);
         println!("{:?}", chunks);
 
-        let tmp_dir = tempfile::TempDir::new_in("test").unwrap();
-        let temp = |s| { tmp_dir.path().join(s) };
-
-        let wl = BarcodeChecker::new("test/10K-agora-dev.txt").unwrap();
-        let arc = Arc::new(wl);
-
         let mut procs = Vec::new();
         for (idx, chunk) in chunks.into_iter().enumerate() {
             let prc = DnaProcessor {
                 chunk: chunk,
-                barcode_checker: arc.clone(),
                 chunk_id: idx as u16,
             };
 
             procs.push(prc);
         }
 
-        let sorter = ::bc_sort::SortByBc::<_,DnaRead>::new(procs);
-        let (_, incorrect) = sorter.sort_bcs(temp("reads"), temp("bc_counts")).unwrap();
-
-        let corrector = 
-            ::barcode::BarcodeCorrector::new(
-                "test/10K-agora-dev.txt", 
-                &[temp("bc_counts")], 1.5, 0.9).unwrap();
-
-        let reader = shardio::ShardReader::<DnaRead, Barcode, ::bc_sort::BcSort>::open(temp("reads"));
-
-        let mut correct = 
-            ::bc_sort::CorrectBcs::new(
-                reader,
-                corrector,
-                Some(1.0f64),
-            );
-
-        let (corrected, still_incorrect) = correct.process_unbarcoded(temp("bc_repro")).unwrap();
-        assert_eq!(incorrect, corrected + still_incorrect);
+        let bc_sort_results = bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
     }
 
     const CRG_CFG: &str = r#"

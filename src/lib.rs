@@ -23,11 +23,10 @@ extern crate shardio;
 extern crate fxhash;
 extern crate rand;
 extern crate serde_json;
+extern crate tempfile;
 
 extern crate bwa;
 
-#[cfg(test)]
-extern crate tempfile;
 
 pub mod read_pair;
 pub mod read_pair_iter;
@@ -141,7 +140,7 @@ impl Barcode {
         }
     }
 
-    pub fn valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         self.valid
     }
 
@@ -197,6 +196,12 @@ pub trait AlignableReadPair {
     fn header(&self) -> &[u8];
     fn alignable_sequence(&self) -> (&[u8], &[u8]);
     fn alignable_quals(&self) -> (&[u8], &[u8]);
+}
+
+// Specifices what BAM tags should be used to encode the non-alignable
+// parts of the read sequence as BAM tags for BAM to FASTQ conversion
+pub trait HasBamTags {
+    fn tags(&self) -> Vec<([u8;2], &[u8])>;
 }
 
 pub trait FastqProcessor<ReadType> {
