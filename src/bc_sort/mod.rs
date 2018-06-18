@@ -27,14 +27,21 @@ use read_pair_iter::ReadPairIter;
 use tempfile::TempDir;
 use std::path::PathBuf;
 
+/// A marker for sorting objects by their barcode sequence. Incorrect barcodes will 
+/// be sorted together at the start, followed by correct barcodes. See the definition of `Barcode` for details.
 pub struct BcSortOrder;
 
+/// Implementation for objects by their barcode. 
 impl<T> SortKey<T,Barcode> for BcSortOrder where T: HasBarcode {
     fn sort_key(v: &T) -> &Barcode {
         v.barcode()
     }
 }
 
+/// Ingest raw FASTQ using the input data and setting encapsulated in `ProcType`, to generate
+/// a stream of 'interpreted' reads of type `ReadType`.  Check the barcodes of each object
+/// against that whitelist to mark them as correct. Send the `ReadType` objects to a shardio
+/// output file.
 pub struct SortByBc<ProcType, ReadType> {
     fastq_inputs: Vec<ProcType>,
     barcode_checker: BarcodeChecker,
@@ -45,6 +52,7 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
     ProcType: FastqProcessor<ReadType> + Send + Sync + Clone,
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync, 
 {
+    /// Check a new SortByBc object.
     pub fn new(fastq_inputs: Vec<ProcType>, barcode_checker: BarcodeChecker) -> SortByBc<ProcType, ReadType> {
         SortByBc {
             fastq_inputs,
@@ -53,6 +61,8 @@ impl<ProcType, ReadType> SortByBc<ProcType, ReadType> where
         }
     }
 
+    /// Execute the sort-by-barcode workflow, send the results to a newly created shardio file with a 
+    /// filename given by `read_path`.
     #[inline(never)]
     pub fn sort_bcs(&self, read_path: impl AsRef<Path>) -> Result<(usize, usize, FxHashMap<Barcode, u32>), Error> {
 
@@ -142,7 +152,8 @@ fn count_reads(bc_counts: &FxHashMap<Barcode, u32>, valid: bool) -> usize {
     fold(0usize, |x,y| x + (*y as usize))
 }
 
-
+/// Iterate over barcodes with initially incorrect barcodes, and attempt to correct them
+/// using `corrector`.
 pub struct CorrectBcs<ReadType> {
     reader: ShardReader<ReadType, Barcode, BcSortOrder>,
     corrector: BarcodeCorrector,
@@ -214,7 +225,7 @@ impl<ReadType> CorrectBcs<ReadType> where
         });
         
         let bc_counts = chunk_results.reduce(|| FxHashMap::default(), reduce_counts);
-        let w_count = writer.finish()?;
+        let _ = writer.finish()?;
 
         // Sum barcode counts to usize
         let valid_count = count_reads(&bc_counts, true);
@@ -224,6 +235,7 @@ impl<ReadType> CorrectBcs<ReadType> where
     }
 }
 
+/// Encapsulates the results from the barcode sorting step.
 pub struct BcSortResults {
     init_correct_data: PathBuf,
     corrected_data: PathBuf,
@@ -235,7 +247,10 @@ pub struct BcSortResults {
     tmp_dir: TempDir,
 }
 
-pub fn barcode_sort_workflow<C, P, R>(chunks: Vec<P>, path: impl AsRef<Path>, barcode_whitelist: impl AsRef<Path>) -> 
+/// Single-machine barcode sorting workflow. FASTQ data and read settings are input via `chunks`. Outputs
+/// are written to a tmp-dir in `path`. `barcode_whitelist` is the path to the 10x barcode whitelist.
+pub fn barcode_sort_workflow<P, R>(
+    chunks: Vec<P>, path: impl AsRef<Path>, barcode_whitelist: impl AsRef<Path>) -> 
     Result<BcSortResults, Error>
 where 
     P: FastqProcessor<R> + Send + Sync + Clone,
@@ -283,7 +298,6 @@ where
         let e = final_counts.entry(k).or_insert(0);
         *e += v;
     }
-
 
     Ok(BcSortResults {
         total_read_pairs: init_correct + init_incorrect,

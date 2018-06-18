@@ -227,8 +227,6 @@ impl AlignableReadPair for DnaRead {
 mod test_dna_cfg {
     use super::*;
     use serde_json;
-    use shardio;
-    use tempfile;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()
@@ -267,7 +265,7 @@ mod test_dna_cfg {
             procs.push(prc);
         }
 
-        let bc_sort_results = bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
+        let bc_sort_results = ::bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
     }
 
     const CRG_CFG: &str = r#"
