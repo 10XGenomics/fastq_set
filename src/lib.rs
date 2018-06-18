@@ -1,28 +1,28 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
 //! Process 10x FASTQs
-//! 
-extern crate flate2;
-extern crate ordered_float;
-extern crate fastq;
-extern crate rust_htslib;
+//!
 extern crate failure;
+extern crate fastq;
+extern crate flate2;
 extern crate itertools;
+extern crate ordered_float;
+extern crate rust_htslib;
 
 #[macro_use]
 extern crate serde_derive;
+extern crate bincode;
 extern crate serde;
 extern crate serde_bytes;
-extern crate bincode;
 
 #[macro_use]
 extern crate log;
 
-extern crate rayon;
-extern crate shardio;
 extern crate fxhash;
 extern crate rand;
+extern crate rayon;
 extern crate serde_json;
+extern crate shardio;
 extern crate tempfile;
 
 extern crate bwa;
@@ -33,20 +33,20 @@ pub mod sample_def;
 
 pub mod barcode;
 pub mod bc_sort;
-pub mod utils;
 pub mod sseq;
+pub mod utils;
 
 pub mod dna_read;
 pub mod rna_read;
 
-use sseq::SSeq;
 use read_pair_iter::InputFastqs;
+use sseq::SSeq;
 
-/// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group 
+/// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Barcode {
     valid: bool,
-    gem_group: u16, 
+    gem_group: u16,
     sequence: SSeq,
 }
 
@@ -55,10 +55,10 @@ impl Barcode {
         Barcode {
             gem_group,
             sequence: SSeq::new(sequence),
-            valid
+            valid,
         }
     }
-    
+
     /// First possible valid barcode value. Use to query valid/invlaid barcode ranges.
     pub fn first_valid() -> Barcode {
         Barcode {
@@ -73,7 +73,7 @@ impl Barcode {
         Barcode {
             gem_group: 1,
             sequence: SSeq::new(sequence),
-            valid: true
+            valid: true,
         }
     }
 
@@ -82,7 +82,7 @@ impl Barcode {
         Barcode {
             gem_group: 1,
             sequence: SSeq::new(sequence),
-            valid: false
+            valid: false,
         }
     }
 
@@ -96,7 +96,7 @@ impl Barcode {
         self.sequence.seq()
     }
 
-    /// ASCII string of corrected, GEM group appended form of 
+    /// ASCII string of corrected, GEM group appended form of
     /// barcode, suitable for use in BAM files (CB or BX tags)
     /// For example: "AGCCGATA-1"
     pub fn to_corrected_bytes(&self) -> Vec<u8> {
@@ -117,7 +117,7 @@ pub trait HasBarcode {
 }
 
 /// A container for a read UMI sequence.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)] 
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Umi {
     sequence: SSeq,
 }
@@ -156,11 +156,11 @@ pub trait AlignableReadPair {
 /// Specifices what BAM tags should be used to encode the non-alignable
 /// parts of the read sequence as BAM tags for BAM to FASTQ conversion
 pub trait HasBamTags {
-    fn tags(&self) -> Vec<([u8;2], &[u8])>;
+    fn tags(&self) -> Vec<([u8; 2], &[u8])>;
 }
 
 /// A specification for a group of input FASTQ data, and how to interpret
-/// the raw sequences as a assay-specific `ReadType` that can provide access to 
+/// the raw sequences as a assay-specific `ReadType` that can provide access to
 /// barcodes, UMIs, and track trimmed bases.
 pub trait FastqProcessor<ReadType> {
     /// Convert a `ReadPair` representing the raw data from a single read-pair

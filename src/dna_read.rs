@@ -4,9 +4,9 @@
 //! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
 //! trimming.
 
-use {HasBarcode, Barcode, FastqProcessor, AlignableReadPair, InputFastqs, HasBamTags};
-use read_pair::{ReadPair, WhichRead, ReadPart, RpRange};
+use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
 use std::ops::Range;
+use {AlignableReadPair, Barcode, FastqProcessor, HasBamTags, HasBarcode, InputFastqs};
 
 /// Specification of a single set of FASTQs and how to interpret the read components.
 /// This structure is produced by the SETUP_CHUNKS stage of DNA pipelines
@@ -34,7 +34,6 @@ pub struct DnaProcessor {
 }
 
 impl FastqProcessor<DnaRead> for DnaProcessor {
-
     /// Convert raw FASTQ data into DnaRead
     fn process_read(&self, read: ReadPair) -> Option<DnaRead> {
         assert!(read.get(WhichRead::R1, ReadPart::Seq).is_some());
@@ -47,11 +46,15 @@ impl FastqProcessor<DnaRead> for DnaProcessor {
         let bc_range = match chunk.bc_in_read {
             Some(1) => RpRange::new(WhichRead::R1, 0, Some(bc_length)),
             None => RpRange::new(WhichRead::I2, 0, chunk.bc_length),
-            _ => panic!("unsupported barcode location")
+            _ => panic!("unsupported barcode location"),
         };
 
         // Snip out barcode
-        let barcode = Barcode::new(chunk.gem_group, read.get_range(&bc_range, ReadPart::Seq).unwrap(), true);
+        let barcode = Barcode::new(
+            chunk.gem_group,
+            read.get_range(&bc_range, ReadPart::Seq).unwrap(),
+            true,
+        );
 
         // FIXME -- do cutadapt trimming here?
 
@@ -113,7 +116,7 @@ impl HasBarcode for DnaRead {
 }
 
 impl HasBamTags for DnaRead {
-    fn tags(&self) -> Vec<([u8;2], &[u8])> {
+    fn tags(&self) -> Vec<([u8; 2], &[u8])> {
         vec![
             (*b"RX", self.raw_bc_seq()),
             (*b"QX", self.raw_bc_qual()),
@@ -124,7 +127,6 @@ impl HasBamTags for DnaRead {
 }
 
 impl DnaRead {
-
     /// FASTQ read header
     pub fn header(&self) -> &[u8] {
         self.data.get(WhichRead::R1, ReadPart::Header).unwrap()
@@ -167,7 +169,7 @@ impl DnaRead {
 
     /// Raw barcode QVs
     pub fn raw_bc_qual(&self) -> &[u8] {
-       self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+        self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
     }
 
     #[inline]
@@ -176,10 +178,10 @@ impl DnaRead {
             let bcr = self.bc_range;
             let start = bcr.offset() + bcr.len().unwrap_or(0);
 
-            start .. start + self.trim_r1 as usize
+            start..start + self.trim_r1 as usize
         } else {
-            0 .. self.trim_r1 as usize
-        }  
+            0..self.trim_r1 as usize
+        }
     }
 
     /// Bases trimmed after the 10x BC, before the start of bases used from R1
@@ -207,7 +209,6 @@ impl DnaRead {
     }
 }
 
-
 impl AlignableReadPair for DnaRead {
     fn header(&self) -> &[u8] {
         self.header()
@@ -221,7 +222,6 @@ impl AlignableReadPair for DnaRead {
         (self.r1_qual(), self.r2_qual())
     }
 }
-
 
 #[cfg(test)]
 mod test_dna_cfg {
@@ -265,7 +265,8 @@ mod test_dna_cfg {
             procs.push(prc);
         }
 
-        let bc_sort_results = ::bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
+        let bc_sort_results =
+            ::bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
     }
 
     const CRG_CFG: &str = r#"
@@ -571,7 +572,6 @@ mod test_dna_cfg {
         }
     ]
     "#;
-
 
     const ATAC_CFG: &str = r#"
     [

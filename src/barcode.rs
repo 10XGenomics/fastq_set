@@ -3,23 +3,22 @@
 //! Tools for dealing with 10x barcodes. Loading barcode whitelists, check barcodes against the whitelist
 //! and correcting incorrect barcodes.
 
-use std::cmp::max;
-use ordered_float::NotNaN;
 use failure::Error;
+use ordered_float::NotNaN;
+use std::cmp::max;
 use std::path::Path;
 
-use std::io::BufRead;
-use fxhash::{FxHashSet, FxHashMap};
+use fxhash::{FxHashMap, FxHashSet};
 use std::hash::Hash;
+use std::io::BufRead;
 
-use {Barcode, SSeq};
 use utils;
+use {Barcode, SSeq};
 
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
 /// Barcodes are numbers starting at 1.
 fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
-
     let reader = utils::open_with_gz(filename)?;
     let mut bc_map = FxHashMap::default();
 
@@ -33,8 +32,11 @@ fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, 
     Ok(bc_map)
 }
 
-pub(crate) fn reduce_counts<K: Hash + Eq>(mut v1: FxHashMap<K, u32>, mut v2: FxHashMap<K, u32>) -> FxHashMap<K, u32> {
-    for (k,v) in v2.drain() {
+pub(crate) fn reduce_counts<K: Hash + Eq>(
+    mut v1: FxHashMap<K, u32>,
+    mut v2: FxHashMap<K, u32>,
+) -> FxHashMap<K, u32> {
+    for (k, v) in v2.drain() {
         let counter = v1.entry(k).or_insert(0);
         *counter += v;
     }
@@ -42,20 +44,23 @@ pub(crate) fn reduce_counts<K: Hash + Eq>(mut v1: FxHashMap<K, u32>, mut v2: FxH
     v1
 }
 
-pub(crate) fn reduce_counts_err<K: Hash + Eq>(v1: Result<FxHashMap<K, u32>, Error>, v2: Result<FxHashMap<K, u32>, Error>) -> Result<FxHashMap<K, u32>, Error> {
+pub(crate) fn reduce_counts_err<K: Hash + Eq>(
+    v1: Result<FxHashMap<K, u32>, Error>,
+    v2: Result<FxHashMap<K, u32>, Error>,
+) -> Result<FxHashMap<K, u32>, Error> {
     match (v1, v2) {
         (Ok(m1), Ok(m2)) => Ok(reduce_counts(m1, m2)),
         (Err(e1), _) => Err(e1),
-        (_, Err(e2)) => Err(e2), 
+        (_, Err(e2)) => Err(e2),
     }
 }
 
 /// Check an observed barcode sequence against a whitelist of barcodes
 pub struct BarcodeChecker {
-    whitelist: FxHashSet<SSeq>
+    whitelist: FxHashSet<SSeq>,
 }
 
-impl BarcodeChecker { 
+impl BarcodeChecker {
     pub fn new(whitelist: impl AsRef<Path>) -> Result<BarcodeChecker, Error> {
         let wl = load_barcode_whitelist(whitelist)?;
 
@@ -76,8 +81,9 @@ impl BarcodeChecker {
 }
 
 /// Load barcode count data from a set of serialized files containg FxHashMap<Barcode, u32> counts.
-pub fn load_barcode_counts(count_files: &[impl AsRef<Path>]) -> Result<FxHashMap<Barcode, u32>, Error> {
-
+pub fn load_barcode_counts(
+    count_files: &[impl AsRef<Path>],
+) -> Result<FxHashMap<Barcode, u32>, Error> {
     let mut counts = FxHashMap::default();
     for f in count_files {
         let shard_counts = ::utils::read_obj(f.as_ref())?;
@@ -87,22 +93,20 @@ pub fn load_barcode_counts(count_files: &[impl AsRef<Path>]) -> Result<FxHashMap
     Ok(counts)
 }
 
-
 const BASE_OPTS: [u8; 4] = [b'A', b'C', b'G', b'T'];
 type Of64 = NotNaN<f64>;
 
-/// Implement the standard 10x barcode correction algorithm. 
+/// Implement the standard 10x barcode correction algorithm.
 /// Requires the barcode whitelist (`whitelist`), and the observed counts
 /// of each whitelist barcode, prior to correction (`bc_counts`).
 pub struct BarcodeCorrector {
-	whitelist: FxHashSet<SSeq>,
+    whitelist: FxHashSet<SSeq>,
     bc_counts: FxHashMap<Barcode, u32>,
-	max_expected_barcode_errors: f64,
-	bc_confidence_threshold: f64,
+    max_expected_barcode_errors: f64,
+    bc_confidence_threshold: f64,
 }
 
 impl BarcodeCorrector {
-
     /// Load a barcode corrector from a whitelist path
     /// and a set of barcode count files.
     /// # Arguments
@@ -114,12 +118,11 @@ impl BarcodeCorrector {
     /// * `bc_confidence_threshold` - if the posterior probability of a correction
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
-        whitelist: impl AsRef<Path>, 
+        whitelist: impl AsRef<Path>,
         bc_counts: FxHashMap<Barcode, u32>,
         max_expected_barcode_errors: f64,
-        bc_confidence_threshold: f64
-        ) -> Result<BarcodeCorrector, Error> {
-
+        bc_confidence_threshold: f64,
+    ) -> Result<BarcodeCorrector, Error> {
         // load whitelist into Set
         let wl = load_barcode_whitelist(whitelist)?;
         let mut whitelist = FxHashSet::default();
@@ -133,29 +136,33 @@ impl BarcodeCorrector {
         })
     }
 
-    /// Attempt to correct a non-whitelist barcode sequence onto the whitelist. 
+    /// Attempt to correct a non-whitelist barcode sequence onto the whitelist.
     /// Compute a posterior distribution over whitelist barcodes given:
     /// # A prior distribution over whitelist bacodes (self.counts)
     /// # The likelihood of P(orig_barcode | wl_bc; qual) of the `observed_barcode` sequence
     ///   given a hidden whitelist barcode wl_bc, and the sequencer reported quality values qual.
-    /// Use these components to compute a posterior distribution of wl_bc candidates, and correct 
-    /// the barcode if there's a whitelist barcode with posterior probability greater than 
+    /// Use these components to compute a posterior distribution of wl_bc candidates, and correct
+    /// the barcode if there's a whitelist barcode with posterior probability greater than
     /// self.bc_confidence_threshold
     pub fn correct_barcode(&self, observed_barcode: &Barcode, qual: &[u8]) -> Option<Barcode> {
-
         let mut a = observed_barcode.sequence.clone();
 
         let mut candidates: Vec<(Of64, Barcode)> = Vec::new();
         let mut total_likelihood = Of64::from(0.0);
-         
-	    for pos in 0 .. observed_barcode.sequence.len() {
+
+        for pos in 0..observed_barcode.sequence.len() {
             let qv = qual[pos];
             let existing = a.sequence[pos];
             for val in BASE_OPTS.iter() {
-
-                if *val == existing { continue; }
+                if *val == existing {
+                    continue;
+                }
                 a.sequence[pos] = *val;
-                let trial_bc = Barcode { valid: true, sequence: a, gem_group: observed_barcode.gem_group };
+                let trial_bc = Barcode {
+                    valid: true,
+                    sequence: a,
+                    gem_group: observed_barcode.gem_group,
+                };
 
                 if self.whitelist.contains(&a) {
                     let bc_count = self.bc_counts.get(&trial_bc).cloned().unwrap_or(0);
@@ -167,7 +174,7 @@ impl BarcodeCorrector {
             }
             a.sequence[pos] = existing;
         }
-	
+
         let thresh = Of64::from(self.bc_confidence_threshold);
         let best_option = candidates.into_iter().max();
 
@@ -175,7 +182,9 @@ impl BarcodeCorrector {
 
         match best_option {
             Some((best_like, best_bc)) => {
-                if expected_errors < self.max_expected_barcode_errors && best_like / total_likelihood > thresh {
+                if expected_errors < self.max_expected_barcode_errors
+                    && best_like / total_likelihood > thresh
+                {
                     return Some(best_bc);
                 }
             }
@@ -186,11 +195,10 @@ impl BarcodeCorrector {
     }
 }
 
-
 pub fn probability(qual: u8) -> f64 {
     //33 is the illumina qual offset
     let q = qual as f64;
-    (10_f64).powf(-(q - 33.0) / 10.0) 
+    (10_f64).powf(-(q - 33.0) / 10.0)
 }
 
 #[cfg(test)]
@@ -198,8 +206,7 @@ mod test {
     use super::*;
 
     #[test]
-    pub fn test_barcode_correction()
-    {
+    pub fn test_barcode_correction() {
         let mut wl = FxHashSet::default();
 
         let b1 = Barcode::test_valid(b"AAAAA");
@@ -229,22 +236,31 @@ mod test {
         //assert_eq!(val.correct_barcode(&t1, &vec![66,66,66,66,66]), Some(Barcode::test_valid(b"AAAAA")));
 
         // Low quality
-        assert_eq!(val.correct_barcode(&t1, &vec![34,34,34,66,66]), None);
+        assert_eq!(val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66]), None);
 
         // Trivial correction
         let t2 = Barcode::test_invalid(b"AAAAT");
-        assert_eq!(val.correct_barcode(&t2, &vec![66,66,66,66,40]), Some(b1));
+        assert_eq!(
+            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40]),
+            Some(b1)
+        );
 
         // Pseudo-count kills you
         let t3 = Barcode::test_invalid(b"ACGAT");
-        assert_eq!(val.correct_barcode(&t3, &vec![66,66,66,66,66]), None);
+        assert_eq!(val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66]), None);
 
         // Quality help you
         let t4 = Barcode::test_invalid(b"ACGAT");
-        assert_eq!(val.correct_barcode(&t4, &vec![66,66,66,66,40]), Some(b3));
+        assert_eq!(
+            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40]),
+            Some(b3)
+        );
 
         // Counts help you
         let t5 = Barcode::test_invalid(b"ACAAA");
-        assert_eq!(val.correct_barcode(&t5, &vec![66,66,66,66,40]), Some(b1));
+        assert_eq!(
+            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40]),
+            Some(b1)
+        );
     }
 }

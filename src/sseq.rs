@@ -2,8 +2,8 @@
 /// Used as a convenient container for barcode or UMI sequences.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct SSeq {
-    pub (crate) length: u8,
-    pub (crate) sequence: [u8; 23],
+    pub(crate) length: u8,
+    pub(crate) sequence: [u8; 23],
 }
 
 impl SSeq {

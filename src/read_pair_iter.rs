@@ -2,15 +2,14 @@
 
 //! Read a set of FASTQs, convert into an Iterator over ReadPairs.
 
-use std::path::Path;
 use failure::Error;
+use std::path::Path;
 
 use fastq::{self, RecordRefIter};
 use read_pair::{ReadPair, WhichRead};
 
 use std::io::BufRead;
 use utils;
-
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -35,29 +34,42 @@ impl ReadPairIter {
     /// Open a `ReadPairIter` given a `InputFastqs` describing a set of FASTQ files
     /// for the available parts of a read.
     pub fn from_fastq_files(input_fastqs: InputFastqs) -> Result<ReadPairIter, Error> {
-        Self::new(Some(input_fastqs.r1), input_fastqs.r2, input_fastqs.i1, input_fastqs.i2, input_fastqs.r1_interleaved)
+        Self::new(
+            Some(input_fastqs.r1),
+            input_fastqs.r2,
+            input_fastqs.i1,
+            input_fastqs.i2,
+            input_fastqs.r1_interleaved,
+        )
     }
 
-    fn new<P: AsRef<Path>>(r1: Option<P>, r2: Option<P>, i1: Option<P>, i2: Option<P>, r1_interleaved: bool) -> Result<ReadPairIter, Error> {
-
+    fn new<P: AsRef<Path>>(
+        r1: Option<P>,
+        r2: Option<P>,
+        i1: Option<P>,
+        i2: Option<P>,
+        r1_interleaved: bool,
+    ) -> Result<ReadPairIter, Error> {
         let mut iters = [None, None, None, None];
 
-        for (idx, r) in [r1,r2,i1,i2].into_iter().enumerate() {
+        for (idx, r) in [r1, r2, i1, i2].into_iter().enumerate() {
             match r {
                 &Some(ref p) => {
                     let rdr = utils::open_with_gz(p)?;
                     let parser = fastq::Parser::new(rdr);
                     iters[idx] = Some(parser.ref_iter());
-                },
+                }
                 _ => (),
             }
         }
 
-        Ok(ReadPairIter{ iters, r1_interleaved })
+        Ok(ReadPairIter {
+            iters,
+            r1_interleaved,
+        })
     }
 
     fn get_next(&mut self) -> Result<Option<ReadPair>, Error> {
-
         let mut iter_ended = false;
         let mut rp = ReadPair::empty();
 
@@ -83,11 +95,11 @@ impl ReadPairIter {
                         if record.is_none() {
                             iter_ended = true;
                         }
-                        let which = WhichRead::read_types()[idx+1];
+                        let which = WhichRead::read_types()[idx + 1];
                         record.map(|r| rp.push_read(&r, which));
                     }
-                },
-                &mut None => ()
+                }
+                &mut None => (),
             }
         }
         // FIXME -- should we error out if the files have different lengths?

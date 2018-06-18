@@ -1,11 +1,11 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries. 
+//! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries.
 //! Provides access to the barcode and allows for dynamic trimming.
 
+use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
 use std::collections::HashMap;
-use read_pair::{ReadPart, ReadPair, WhichRead, RpRange};
-use {Barcode, HasBarcode, Umi, FastqProcessor, InputFastqs};
+use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct ChemistryDef {
@@ -30,7 +30,7 @@ pub struct ChemistryDef {
     strandedness: String,
     umi_read_length: usize,
     umi_read_offset: usize,
-    umi_read_type: WhichRead
+    umi_read_type: WhichRead,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
@@ -43,47 +43,83 @@ pub struct RnaChunk {
     chunk_id: Option<u16>,
 }
 
-
 impl FastqProcessor<RnaRead> for RnaChunk {
     fn process_read(&self, read: ReadPair) -> Option<RnaRead> {
         let chem = &self.chemistry;
-        let bc_range = RpRange::new(chem.barcode_read_type, chem.barcode_read_offset, Some(chem.barcode_read_length));
-        let umi_range = RpRange::new(chem.umi_read_type, chem.umi_read_offset, Some(chem.umi_read_length));
-        let r1 = RpRange::new(chem.rna_read_type, chem.rna_read_offset, chem.rna_read_length);
+        let bc_range = RpRange::new(
+            chem.barcode_read_type,
+            chem.barcode_read_offset,
+            Some(chem.barcode_read_length),
+        );
+        let umi_range = RpRange::new(
+            chem.umi_read_type,
+            chem.umi_read_offset,
+            Some(chem.umi_read_length),
+        );
+        let r1 = RpRange::new(
+            chem.rna_read_type,
+            chem.rna_read_offset,
+            chem.rna_read_length,
+        );
 
         let r2 = match chem.rna_read2_type {
-            Some(read) => Some(RpRange::new(read, chem.rna_read2_offset, chem.rna_read2_length)),
+            Some(read) => Some(RpRange::new(
+                read,
+                chem.rna_read2_offset,
+                chem.rna_read2_length,
+            )),
             None => None,
         };
 
-        let barcode = Barcode::new(self.gem_group, read.get_range(&bc_range, ReadPart::Seq).unwrap(), true);
+        let barcode = Barcode::new(
+            self.gem_group,
+            read.get_range(&bc_range, ReadPart::Seq).unwrap(),
+            true,
+        );
         let umi = Umi::new(read.get_range(&umi_range, ReadPart::Seq).unwrap());
 
-        Some(
-            RnaRead {
-                read,
-                barcode,
-                umi,
-                bc_range,
-                umi_range,
-                r1_range: r1,
-                r2_range: r2,
-                chunk_id: self.chunk_id.unwrap(),
+        Some(RnaRead {
+            read,
+            barcode,
+            umi,
+            bc_range,
+            umi_range,
+            r1_range: r1,
+            r2_range: r2,
+            chunk_id: self.chunk_id.unwrap(),
         })
     }
 
     fn fastq_files(&self) -> InputFastqs {
-        let r1 = self.read_chunks.get(&WhichRead::R1).unwrap().clone().unwrap().clone();
+        let r1 = self.read_chunks
+            .get(&WhichRead::R1)
+            .unwrap()
+            .clone()
+            .unwrap()
+            .clone();
         InputFastqs {
             r1: r1,
-            r2: self.read_chunks.get(&WhichRead::R2).unwrap_or(&None).clone(),
-            i1: self.read_chunks.get(&WhichRead::I1).unwrap_or(&None).clone(),
-            i2: self.read_chunks.get(&WhichRead::I2).unwrap_or(&None).clone(),
+            r2: self.read_chunks
+                .get(&WhichRead::R2)
+                .unwrap_or(&None)
+                .clone(),
+            i1: self.read_chunks
+                .get(&WhichRead::I1)
+                .unwrap_or(&None)
+                .clone(),
+            i2: self.read_chunks
+                .get(&WhichRead::I2)
+                .unwrap_or(&None)
+                .clone(),
             r1_interleaved: self.reads_interleaved,
         }
     }
-    fn bc_subsample_rate(&self) -> f64 { 0.0 }
-    fn read_subsample_rate(&self) -> f64 { 0.0 }
+    fn bc_subsample_rate(&self) -> f64 {
+        0.0
+    }
+    fn read_subsample_rate(&self) -> f64 {
+        0.0
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -113,9 +149,7 @@ impl HasBarcode for RnaRead {
 }
 
 impl RnaRead {
-
-
-        /// FASTQ read header
+    /// FASTQ read header
     pub fn header(&self) -> &[u8] {
         self.read.get(WhichRead::R1, ReadPart::Header).unwrap()
     }
@@ -167,7 +201,9 @@ impl RnaRead {
 
     /// Raw barcode QVs
     pub fn raw_umi_qual(&self) -> &[u8] {
-        self.read.get_range(&self.umi_range, ReadPart::Qual).unwrap()
+        self.read
+            .get_range(&self.umi_range, ReadPart::Qual)
+            .unwrap()
     }
 
     /// Usable R1 bases after removal of BC and trimming
@@ -180,8 +216,6 @@ impl RnaRead {
         self.read.get_range(&self.r1_range, ReadPart::Qual).unwrap()
     }
 }
-
-
 
 #[cfg(test)]
 mod test_rna_cfg {

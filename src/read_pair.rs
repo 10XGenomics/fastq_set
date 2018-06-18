@@ -36,7 +36,7 @@ impl WhichRead {
 
 /// Components of a FASTQ record.
 pub enum ReadPart {
-    Header, 
+    Header,
     Seq,
     Qual,
 }
@@ -45,22 +45,22 @@ pub enum ReadPart {
 /// Supports offsets and lengths up to 32K.
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct RpRange {
-    val: u32
+    val: u32,
 }
 
 impl RpRange {
     /// Create a `RpRange` that represent the interval [offset, offset_length) in
     /// the `read` component of a ReadPair.
     pub fn new(read: WhichRead, offset: usize, len: Option<usize>) -> RpRange {
-        assert!(offset < (1<<15));
+        assert!(offset < (1 << 15));
         let len_bits = match len {
             Some(v) => {
-                assert!(v < (1<<15));
+                assert!(v < (1 << 15));
                 v
-            },
+            }
             None => 0x7FFF,
         };
-        
+
         let val = (read as u32) << 30 | (offset as u32) << 15 | len_bits as u32;
         RpRange { val }
     }
@@ -73,7 +73,7 @@ impl RpRange {
             1 => WhichRead::R2,
             2 => WhichRead::I1,
             3 => WhichRead::I2,
-            _ => unreachable!("bad read id")
+            _ => unreachable!("bad read id"),
         }
     }
 
@@ -92,10 +92,10 @@ impl RpRange {
         }
     }
 
-    fn slice<'a>(&self, input: &'a[u8]) -> &'a[u8] {
+    fn slice<'a>(&self, input: &'a [u8]) -> &'a [u8] {
         match self.len() {
-            Some(l) => &input[self.offset() .. self.offset() + l],
-            None => &input[self.offset() .. ],
+            Some(l) => &input[self.offset()..self.offset() + l],
+            None => &input[self.offset()..],
         }
     }
 }
@@ -115,44 +115,53 @@ pub struct ReadPair {
 }
 
 impl ReadPair {
-    
     // Make space for the full read pair in one allocation
     const RP_CAPACITY: usize = 1024;
 
     pub(super) fn empty() -> ReadPair {
         let offsets = [ReadOffset::default(); 4];
         let data = Vec::with_capacity(Self::RP_CAPACITY);
-        ReadPair { offsets, data: ByteBuf::from(data) }
+        ReadPair {
+            offsets,
+            data: ByteBuf::from(data),
+        }
     }
 
     pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
         let offsets = [ReadOffset::default(); 4];
         let data = Vec::with_capacity(Self::RP_CAPACITY);
-        let mut rp = ReadPair { offsets, data: ByteBuf::from(data) };
+        let mut rp = ReadPair {
+            offsets,
+            data: ByteBuf::from(data),
+        };
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
             match _rec {
-                &Some(ref rec) => {
-                    rp.push_read(rec, *which)
-                },
+                &Some(ref rec) => rp.push_read(rec, *which),
                 &None => (), // default ReadOffsets is exists = false
             }
-        } 
+        }
 
         rp
     }
 
-    pub(super) fn push_read<R:Record>(&mut self, rec: &R, which: WhichRead) {
+    pub(super) fn push_read<R: Record>(&mut self, rec: &R, which: WhichRead) {
         let buf: &mut Vec<u8> = self.data.as_mut();
 
         let start = buf.len() as u16;
         buf.extend(rec.head());
         let head = buf.len() as u16;
-        buf.extend(rec.seq());  
+        buf.extend(rec.seq());
         let seq = buf.len() as u16;
         buf.extend(rec.head());
         let qual = buf.len() as u16;
-        let read_offset = ReadOffset { exists: true, start, head, seq, qual };
+        let read_offset = ReadOffset {
+            exists: true,
+            start,
+            head,
+            seq,
+            qual,
+        };
         self.offsets[which as usize] = read_offset;
     }
 
@@ -162,9 +171,9 @@ impl ReadPair {
         if self.offsets[which as usize].exists {
             let w = self.offsets[which as usize];
             match part {
-                ReadPart::Header => Some(&self.data[w.start as usize .. w.head as usize]),
-                ReadPart::Seq => Some(&self.data[w.head as usize .. w.seq as usize]),
-                ReadPart::Qual => Some(&self.data[w.seq as usize .. w.qual as usize]),
+                ReadPart::Header => Some(&self.data[w.start as usize..w.head as usize]),
+                ReadPart::Seq => Some(&self.data[w.head as usize..w.seq as usize]),
+                ReadPart::Qual => Some(&self.data[w.seq as usize..w.qual as usize]),
             }
         } else {
             None
