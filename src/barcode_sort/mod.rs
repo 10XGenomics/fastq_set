@@ -169,7 +169,7 @@ where
 
     fn process(&mut self, read: T) {
         if read.barcode().is_valid() {
-            self.valid_bc_distribution.observe(read.barcode());
+            self.valid_bc_distribution.observe(read.barcode().clone());
             self.valid_sender.send(read);
             self.valid_reads += 1;
         } else {

@@ -11,11 +11,16 @@ extern crate proptest;
 #[cfg(test)]
 extern crate file_diff;
 
+#[macro_use]
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
 extern crate itertools;
 extern crate ordered_float;
+
+extern crate rust_htslib;
+extern crate regex;
+extern crate glob;
 
 #[macro_use]
 extern crate serde_derive;
@@ -31,9 +36,13 @@ extern crate serde_json;
 extern crate shardio;
 extern crate tempfile;
 
+#[macro_use]
+extern crate log;
 extern crate lz4;
 extern crate metric;
 extern crate bio;
+
+extern crate tenkit;
 
 pub mod read_pair;
 pub mod read_pair_iter;
@@ -123,12 +132,24 @@ impl Barcode {
         v.extend(format!("{}", self.gem_group).as_bytes());
         v
     }
+
+    pub fn gem_group(&self) -> u16 {
+        self.gem_group
+    }
 }
 
 impl std::fmt::Display for Barcode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", String::from_utf8(self.to_corrected_bytes()).unwrap())
     }
+}
+
+/// A trait for reads that have access to raw 10x-barcode and sample-index sequence and qualities
+pub trait TenXReadPair {
+    fn si_seq(&self) -> Option<&[u8]>;
+    fn si_qual(&self) -> Option<&[u8]>;
+    fn raw_bc_seq(&self) -> &[u8];
+    fn raw_bc_qual(&self) -> &[u8];
 }
 
 /// A trait for objects that carry a 10x barcode, allowing for querying the barcode,

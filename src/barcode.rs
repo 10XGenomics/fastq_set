@@ -19,11 +19,11 @@ use {Barcode, SSeq};
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
 /// Barcodes are numbers starting at 1.
-fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
+fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, i64>, Error> {
     let reader = utils::open_with_gz(filename)?;
     let mut bc_map = FxHashMap::default();
 
-    let mut i = 1u32;
+    let mut i = 1i64;
     for l in reader.lines() {
         let seq = SSeq::new(&l?.into_bytes());
         bc_map.insert(seq, i);
@@ -34,15 +34,26 @@ fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, 
 }
 
 pub(crate) fn reduce_counts<K: Hash + Eq>(
-    mut v1: FxHashMap<K, u32>,
-    mut v2: FxHashMap<K, u32>,
-) -> FxHashMap<K, u32> {
+    mut v1: FxHashMap<K, i64>,
+    mut v2: FxHashMap<K, i64>,
+) -> FxHashMap<K, i64> {
     for (k, v) in v2.drain() {
         let counter = v1.entry(k).or_insert(0);
         *counter += v;
     }
 
     v1
+}
+
+pub(crate) fn reduce_counts_err<K: Hash + Eq>(
+    v1: Result<FxHashMap<K, i64>, Error>,
+    v2: Result<FxHashMap<K, i64>, Error>,
+) -> Result<FxHashMap<K, i64>, Error> {
+    match (v1, v2) {
+        (Ok(m1), Ok(m2)) => Ok(reduce_counts(m1, m2)),
+        (Err(e1), _) => Err(e1),
+        (_, Err(e2)) => Err(e2),
+    }
 }
 
 /// Check an observed barcode sequence against a whitelist of barcodes
@@ -70,10 +81,10 @@ impl BarcodeChecker {
     }
 }
 
-/// Load barcode count data from a set of serialized files containg FxHashMap<Barcode, u32> counts.
+/// Load barcode count data from a set of serialized files containg FxHashMap<Barcode, i64> counts.
 pub fn load_barcode_counts(
     count_files: &[impl AsRef<Path>],
-) -> Result<FxHashMap<Barcode, u32>, Error> {
+) -> Result<FxHashMap<Barcode, i64>, Error> {
     let mut counts = FxHashMap::default();
     for f in count_files {
         let shard_counts = ::utils::read_obj(f.as_ref())?;

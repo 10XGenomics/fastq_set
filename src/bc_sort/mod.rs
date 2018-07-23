@@ -5,6 +5,7 @@
 //! read components, such as barcodes and UMIs.
 
 use std::path::Path;
+use std::borrow::Cow;
 
 use failure::Error;
 use fxhash;
@@ -32,12 +33,13 @@ use {Barcode, FastqProcessor, HasBarcode};
 pub struct BcSortOrder;
 
 /// Implementation for objects by their barcode.
-impl<T> SortKey<T, Barcode> for BcSortOrder
+impl<T> SortKey<T> for BcSortOrder
 where
     T: HasBarcode,
 {
-    fn sort_key(v: &T) -> &Barcode {
-        v.barcode()
+    type Key = Barcode;
+    fn sort_key(v: &T) -> Cow<Barcode> {
+        Cow::from(v.barcode())
     }
 }
 
@@ -72,7 +74,7 @@ where
     pub fn sort_bcs(
         &self,
         read_path: impl AsRef<Path>,
-    ) -> Result<(usize, usize, FxHashMap<Barcode, u32>), Error> {
+    ) -> Result<(usize, usize, FxHashMap<Barcode, i64>), Error> {
         let mut writer =
             ShardWriter::<<ProcType as FastqProcessor>::ReadType, Barcode, BcSortOrder>::new(read_path, 16, 128, 1 << 22)?;
 
@@ -157,7 +159,7 @@ where
     }
 }
 
-fn count_reads(bc_counts: &FxHashMap<Barcode, u32>, valid: bool) -> usize {
+fn count_reads(bc_counts: &FxHashMap<Barcode, i64>, valid: bool) -> usize {
     bc_counts
         .iter()
         .filter(|(k, _)| k.is_valid() == valid)
@@ -167,8 +169,8 @@ fn count_reads(bc_counts: &FxHashMap<Barcode, u32>, valid: bool) -> usize {
 
 /// Iterate over barcodes with initially incorrect barcodes, and attempt to correct them
 /// using `corrector`.
-pub struct CorrectBcs<ReadType> {
-    reader: ShardReader<ReadType, Barcode, BcSortOrder>,
+pub struct CorrectBcs<ReadType: HasBarcode> {
+    reader: ShardReader<ReadType, BcSortOrder>,
     corrector: BarcodeCorrector,
     bc_subsample_rate: Option<f64>,
     phantom: PhantomData<ReadType>,
@@ -179,7 +181,7 @@ where
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
 {
     pub fn new(
-        reader: ShardReader<ReadType, Barcode, BcSortOrder>,
+        reader: ShardReader<ReadType, BcSortOrder>,
         corrector: BarcodeCorrector,
         bc_subsample_rate: Option<f64>,
     ) -> CorrectBcs<ReadType> {
@@ -194,7 +196,7 @@ where
     pub fn process_unbarcoded(
         &mut self,
         corrected_reads_fn: impl AsRef<Path>,
-    ) -> Result<(usize, usize, FxHashMap<Barcode, u32>), Error> {
+    ) -> Result<(usize, usize, FxHashMap<Barcode, i64>), Error> {
         let mut writer: ShardWriter<ReadType, Barcode, BcSortOrder> =
             ShardWriter::new(corrected_reads_fn.as_ref(), 16, 1 << 12, 1 << 21)?;
 
@@ -259,7 +261,7 @@ pub struct BcSortResults {
     init_correct_barcodes: usize,
     corrected_barcodes: usize,
     incorrect_barcodes: usize,
-    counts: FxHashMap<Barcode, u32>,
+    counts: FxHashMap<Barcode, i64>,
     tmp_dir: TempDir,
 }
 

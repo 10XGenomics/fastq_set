@@ -2,6 +2,7 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
+use std::str;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
@@ -39,6 +40,12 @@ impl SSeq {
 impl AsRef<[u8]> for SSeq {
     fn as_ref(&self) -> &[u8] {
         self.seq()
+    }
+}
+
+impl Into<String> for SSeq {
+    fn into(self) -> String {
+        String::from(str::from_utf8(self.seq()).unwrap())
     }
 }
 
