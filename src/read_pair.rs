@@ -153,7 +153,7 @@ impl ReadPair {
         let head = buf.len() as u16;
         buf.extend(rec.seq());
         let seq = buf.len() as u16;
-        buf.extend(rec.head());
+        buf.extend(rec.qual());
         let qual = buf.len() as u16;
         let read_offset = ReadOffset {
             exists: true,
