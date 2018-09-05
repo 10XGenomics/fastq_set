@@ -13,19 +13,20 @@ serde_bytes = "*"
 tempfile = "3"
 rayon = "*"
 log = "*"
-bincode = "*"
+bincode = "1.0.1"
 fxhash = "0.2.1"
 rand = "*"
 itertools = ">=0.6"
 failure = "*"
+lz4 = "*"
 
 # Note you may need to use a local checkout rust-htslib to get around
 # dependecy issues in the C htslib build. (bzip2 and lzma).
-rust-htslib = "0.19"
-#rust-htslib = { path = "../../rust-htslib" }
+# rust-htslib = "0.19"
+# rust-htslib = { path = "../rust-htslib" }
 
 shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
-bwa = { git = "https://github.com/10XGenomics/rust-bwa.git" }
+# bwa = { git = "https://github.com/10XGenomics/rust-bwa.git" }
 
 # Switch back to crates.io once our PR is released
 fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}

@@ -16,6 +16,7 @@ use serde::Serialize;
 
 use failure::Error;
 use flate2::read::MultiGzDecoder;
+use lz4;
 
 const GZ_BUF_SIZE: usize = 1 << 22;
 
@@ -23,9 +24,15 @@ const GZ_BUF_SIZE: usize = 1 << 22;
 pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
     let r = File::open(p.as_ref())?;
 
-    if p.as_ref().extension().unwrap() == "gz" {
+    let ext = p.as_ref().extension().unwrap();
+
+    if ext == "gz" {
         let gz = MultiGzDecoder::new(r);
         let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, gz);
+        Ok(Box::new(buf_reader))
+    } else if ext == "lz4" {
+        let lz = lz4::Decoder::new(r)?;
+        let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, lz);
         Ok(Box::new(buf_reader))
     } else {
         let buf_reader = BufReader::with_capacity(32 * 1024, r);

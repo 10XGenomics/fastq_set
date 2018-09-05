@@ -7,7 +7,7 @@ extern crate fastq;
 extern crate flate2;
 extern crate itertools;
 extern crate ordered_float;
-extern crate rust_htslib;
+// extern crate rust_htslib;
 
 #[macro_use]
 extern crate serde_derive;
@@ -25,7 +25,8 @@ extern crate serde_json;
 extern crate shardio;
 extern crate tempfile;
 
-extern crate bwa;
+// extern crate bwa;
+extern crate lz4;
 
 pub mod read_pair;
 pub mod read_pair_iter;
@@ -39,10 +40,15 @@ pub mod utils;
 pub mod dna_read;
 pub mod rna_read;
 
-use read_pair_iter::InputFastqs;
+pub use fastq::Record;
+
+use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
+use std::marker::PhantomData;
+use failure::Error;
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
+/// FIXME : Should we use the `valid` field for `PartialEq`, `Eq`, `Hash`?
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Barcode {
     valid: bool,
@@ -105,6 +111,12 @@ impl Barcode {
         v.push(b'-');
         v.extend(format!("{}", self.gem_group).as_bytes());
         v
+    }
+}
+
+impl std::fmt::Display for Barcode {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", String::from_utf8(self.to_corrected_bytes()).unwrap())
     }
 }
 
@@ -173,4 +185,50 @@ pub trait FastqProcessor<ReadType> {
     /// Subsampling
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
+
+    fn iter(&self) -> FastqProcessorIter<Self, ReadType> where Self: Sized {
+        FastqProcessorIter::new(self).unwrap()
+    }
+}
+
+
+pub struct FastqProcessorIter<'a, Processor, ReadType>
+where
+    Processor: 'a + FastqProcessor<ReadType>
+{
+    read_pair_iter: ReadPairIter,
+    processor: &'a Processor,
+    readtype: PhantomData<ReadType>,
+}
+
+impl<'a, Processor, ReadType> FastqProcessorIter<'a, Processor, ReadType> 
+where
+    Processor: FastqProcessor<ReadType>
+{
+    pub fn new(processor: &'a Processor) -> Result<Self, Error> {
+        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?;
+        Ok(FastqProcessorIter {
+            read_pair_iter,
+            processor: processor,
+            readtype: PhantomData,
+        })
+    }
+}
+
+impl<'a, Processor, ReadType> Iterator for FastqProcessorIter<'a, Processor, ReadType> 
+where
+    Processor: FastqProcessor<ReadType>
+{
+    type Item = Result<ReadType, Error>;
+
+    /// Iterate over ReadType objects
+    fn next(&mut self) -> Option<Result<ReadType, Error>> {
+        match self.read_pair_iter.next() {
+            Some(Ok(rp)) => {
+                Some(Ok(self.processor.process_read(rp)?))
+            },
+            Some(Err(v)) => Some(Err(v)),
+            None => None,
+        }
+    }
 }
