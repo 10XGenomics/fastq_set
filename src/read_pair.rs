@@ -3,7 +3,8 @@
 //! Container for the FASTQ data from a single sequencing 'cluster',
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
-use fastq::Record;
+use fastq::{Record, OwnedRecord};
+use std::collections::HashMap;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
 /// header exists at buf[start .. head], seq exists at buf[head .. seq], etc.
@@ -185,5 +186,22 @@ impl ReadPair {
     pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
         let read = self.get(rp_range.read(), part);
         read.map(|r| rp_range.slice(r))
+    }
+
+    pub fn to_owned_record(self) -> HashMap<WhichRead, OwnedRecord> {
+        let mut result = HashMap::new();
+        for &which in WhichRead::read_types().iter() {
+            if self.offsets[which as usize].exists {
+                let w = self.offsets[which as usize];
+                let rec = OwnedRecord {
+                    head: self.data[w.start as usize..w.head as usize].to_vec(),
+                    seq: self.data[w.head as usize..w.seq as usize].to_vec(),
+                    sep: None,
+                    qual: self.data[w.seq as usize..w.qual as usize].to_vec(),
+                };
+                result.insert(which, rec);
+            }
+        }
+        result
     }
 }
