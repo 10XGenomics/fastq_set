@@ -8,6 +8,89 @@ use std::collections::HashMap;
 use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+/// Define a chemistry supported by our RNA products.
+///
+/// A chemistry tells you where & how to look for various read components
+/// (cell barcode, cDNA sequence, UMI, sample index) from the FASTQ 
+/// cluster data. It is convenient to specify the chemistry as a JSON
+/// file and let `ChemistryDef` deserialize it.
+///
+/// As an example, consider the Single Cell V(D)J read layout below:
+/// ![Plot](../../../../doc-media/fastq/scvdj_chem.png)
+/// The corresponding chemistry definition would be:
+///
+/// - Barcode is present in the first 16 bases of Read 1. 
+/// This translates to a `read_type` "R1", `read_offset` 0
+/// and `read_length` 16. Valid options for `read_type` are
+/// "R1", "R2", "I1", "I2"
+/// ```
+/// {
+///     "barcode_read_length": 16,
+///     "barcode_read_offset": 0,
+///     "barcode_read_type": "R1",
+///     "barcode_whitelist": "737K-august-2016",
+/// ```
+/// - Description and name for the chemistry
+/// ```
+///     "description": "Single Cell V(D)J",
+///     "name": "SCVDJ",
+/// ```
+/// - Specify the `endedness` of the product. This would be `three_prime` for Single Cell
+/// 3' Gene expression and `five_prime` for VDJ and 5' Gene expression
+/// ```
+///     "endedness": "five_prime",
+/// ```
+/// - Filename conventions used by `bcl2fastq` and `bcl_processor`
+/// ```
+///     "read_type_to_bcl2fastq_filename": {
+///         "I1": "I1",
+///         "I2": null,
+///         "R1": "R1",
+///         "R2": "R2"
+///     },
+///     "read_type_to_bcl_processor_filename": {
+///         "I1": "I1",
+///         "I2": null,
+///         "R1": "RA",
+///         "R2": null
+///     },
+/// ```
+/// - Every RNA product will have cDNA sequences in
+/// one or both of read1 and read2. Hence an `rna_read` 
+/// definition is necessary for each chemistry. `rna_read2`
+/// is optional. For V(D)J, `rna_read` would be the bases in read1
+/// beyond the spacer sequence and `rna_read2` would be all the 
+/// bases in read2. It is not necessary that `rna_read` correspond to
+/// read1. For example, in Single Cell 5' R2-only mode, `rna_read` 
+/// would be all of read2 and `rna_read2` would be empty. 
+/// ```
+///     "rna_read_length": null,
+///     "rna_read_offset": 41,
+///     "rna_read_type": "R1",
+/// ```
+/// - Optionally specify `rna_read2`
+/// ```
+///     "rna_read2_length": null,
+///     "rna_read2_offset": 0,
+///     "rna_read2_type": "R2",
+/// ```
+/// - Sample Index read definition
+/// ```
+///     "si_read_length": null,
+///     "si_read_offset": 0,
+///     "si_read_type": "I1",
+/// ```
+/// - [TODO] What strandedness does this refer to?
+/// ```
+///     "strandedness": "+",
+/// ```
+/// - UMI is present in the bases 16-25 of read1
+/// ```
+///     "umi_read_length": 10,
+///     "umi_read_offset": 16,
+///     "umi_read_type": "R1"
+/// }
+/// ```
 pub struct ChemistryDef {
     barcode_read_length: usize,
     barcode_read_offset: usize,
@@ -16,14 +99,14 @@ pub struct ChemistryDef {
     description: String,
     endedness: Option<String>,
     name: String,
-    read_type_to_bcl2fastq_filename: HashMap<String, Option<String>>,
-    read_type_to_bcl_processor_filename: HashMap<String, Option<String>>,
-    rna_read2_length: Option<usize>,
-    rna_read2_offset: usize,
-    rna_read2_type: Option<WhichRead>,
+    read_type_to_bcl2fastq_filename: HashMap<WhichRead, Option<String>>,
+    read_type_to_bcl_processor_filename: HashMap<WhichRead, Option<String>>,
     rna_read_length: Option<usize>,
     rna_read_offset: usize,
     rna_read_type: WhichRead,
+    rna_read2_length: Option<usize>,
+    rna_read2_offset: Option<usize>,
+    rna_read2_type: Option<WhichRead>,
     si_read_length: Option<usize>,
     si_read_offset: usize,
     si_read_type: WhichRead,
@@ -65,7 +148,7 @@ impl FastqProcessor<RnaRead> for RnaChunk {
         let r2 = match chem.rna_read2_type {
             Some(read) => Some(RpRange::new(
                 read,
-                chem.rna_read2_offset,
+                chem.rna_read2_offset.unwrap(),
                 chem.rna_read2_length,
             )),
             None => None,
@@ -122,7 +205,7 @@ impl FastqProcessor<RnaRead> for RnaChunk {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct RnaRead {
     read: ReadPair,
     barcode: Barcode,
@@ -149,28 +232,43 @@ impl HasBarcode for RnaRead {
 }
 
 impl RnaRead {
+
+    pub fn bc_range(&self) -> &RpRange {
+        &self.bc_range
+    }
+    pub fn umi_range(&self) -> &RpRange {
+        &self.umi_range
+    }
+    pub fn readpair(&self) -> &ReadPair {
+        &self.read
+    }
+
+    pub fn is_paired_end(&self) -> bool {
+        self.r2_range.is_some()
+    }
+
     /// FASTQ read header
     pub fn header(&self) -> &[u8] {
         self.read.get(WhichRead::R1, ReadPart::Header).unwrap()
     }
 
     /// Full raw R1 sequence
-    pub fn r1_seq_raw(&self) -> &[u8] {
+    pub fn raw_illumina_read1_seq(&self) -> &[u8] {
         self.read.get(WhichRead::R1, ReadPart::Seq).unwrap()
     }
 
     /// Full raw R1 QVs
-    pub fn r1_qual_raw(&self) -> &[u8] {
+    pub fn raw_illumina_read1_qual(&self) -> &[u8] {
         self.read.get(WhichRead::R1, ReadPart::Qual).unwrap()
     }
 
     /// Full R2 sequence
-    pub fn r2_seq_raw(&self) -> &[u8] {
+    pub fn raw_illumina_read2_seq(&self) -> &[u8] {
         self.read.get(WhichRead::R2, ReadPart::Seq).unwrap()
     }
 
     /// Full R2 QVs
-    pub fn r2_qual_raw(&self) -> &[u8] {
+    pub fn raw_illumina_read2_qual(&self) -> &[u8] {
         self.read.get(WhichRead::R2, ReadPart::Qual).unwrap()
     }
 
@@ -215,6 +313,25 @@ impl RnaRead {
     pub fn r1_qual(&self) -> &[u8] {
         self.read.get_range(&self.r1_range, ReadPart::Qual).unwrap()
     }
+
+    /// Usable R2 bases after removal of BC and trimming
+    pub fn r2_seq(&self) -> Option<&[u8]> {
+        if let Some(range) = self.r2_range {
+            self.read.get_range(&range, ReadPart::Seq)
+        } else {
+            None
+        }
+    }
+
+    /// Usable R2 bases after removal of BC and trimming
+    pub fn r2_qual(&self) -> Option<&[u8]> {
+        if let Some(range) = self.r2_range {
+            self.read.get_range(&range, ReadPart::Qual)
+        } else {
+            None
+        }
+    }
+
 }
 
 #[cfg(test)]
