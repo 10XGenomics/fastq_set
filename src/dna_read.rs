@@ -33,7 +33,8 @@ pub struct DnaProcessor {
     chunk_id: u16,
 }
 
-impl FastqProcessor<DnaRead> for DnaProcessor {
+impl FastqProcessor for DnaProcessor {
+    type ReadType = DnaRead;
     /// Convert raw FASTQ data into DnaRead
     fn process_read(&self, read: ReadPair) -> Option<DnaRead> {
         assert!(read.get(WhichRead::R1, ReadPart::Seq).is_some());

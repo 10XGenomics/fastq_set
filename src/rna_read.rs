@@ -123,10 +123,10 @@ pub struct RnaChunk {
     read_chunks: HashMap<WhichRead, Option<String>>,
     read_group: String,
     reads_interleaved: bool,
-    chunk_id: Option<u16>,
 }
 
-impl FastqProcessor<RnaRead> for RnaChunk {
+impl FastqProcessor for RnaChunk {
+    type ReadType = RnaRead;
     fn process_read(&self, read: ReadPair) -> Option<RnaRead> {
         let chem = &self.chemistry;
         let bc_range = RpRange::new(
@@ -169,7 +169,6 @@ impl FastqProcessor<RnaRead> for RnaChunk {
             umi_range,
             r1_range: r1,
             r2_range: r2,
-            chunk_id: self.chunk_id.unwrap(),
         })
     }
 
@@ -214,7 +213,6 @@ pub struct RnaRead {
     umi_range: RpRange,
     r1_range: RpRange,
     r2_range: Option<RpRange>,
-    chunk_id: u16,
 }
 
 impl HasBarcode for RnaRead {

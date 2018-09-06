@@ -45,26 +45,24 @@ where
 /// a stream of 'interpreted' reads of type `ReadType`.  Check the barcodes of each object
 /// against that whitelist to mark them as correct. Send the `ReadType` objects to a shardio
 /// output file.
-pub struct SortByBc<ProcType, ReadType> {
+pub struct SortByBc<ProcType> {
     fastq_inputs: Vec<ProcType>,
     barcode_checker: BarcodeChecker,
-    phantom: PhantomData<ReadType>,
 }
 
-impl<ProcType, ReadType> SortByBc<ProcType, ReadType>
+impl<ProcType> SortByBc<ProcType>
 where
-    ProcType: FastqProcessor<ReadType> + Send + Sync + Clone,
-    ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    ProcType: FastqProcessor + Send + Sync + Clone,
+    <ProcType as FastqProcessor>::ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
 {
     /// Check a new SortByBc object.
     pub fn new(
         fastq_inputs: Vec<ProcType>,
         barcode_checker: BarcodeChecker,
-    ) -> SortByBc<ProcType, ReadType> {
+    ) -> SortByBc<ProcType> {
         SortByBc {
             fastq_inputs,
             barcode_checker,
-            phantom: PhantomData,
         }
     }
 
@@ -76,10 +74,10 @@ where
         read_path: impl AsRef<Path>,
     ) -> Result<(usize, usize, FxHashMap<Barcode, u32>), Error> {
         let mut writer =
-            ShardWriter::<ReadType, Barcode, BcSortOrder>::new(read_path, 16, 128, 1 << 22)?;
+            ShardWriter::<<ProcType as FastqProcessor>::ReadType, Barcode, BcSortOrder>::new(read_path, 16, 128, 1 << 22)?;
 
         // FIXME - configure thread consumption
-        let fq_w_senders: Vec<(ProcType, ShardSender<ReadType>)> = self.fastq_inputs
+        let fq_w_senders: Vec<(ProcType, ShardSender<<ProcType as FastqProcessor>::ReadType>)> = self.fastq_inputs
             .iter()
             .cloned()
             .map(|fq| (fq, writer.get_sender()))
@@ -105,7 +103,7 @@ where
     fn process_fastq<'a>(
         &self,
         chunk: ProcType,
-        mut bc_sender: ShardSender<ReadType>,
+        mut bc_sender: ShardSender<<ProcType as FastqProcessor>::ReadType>,
     ) -> Result<FxHashMap<Barcode, u32>, Error> {
         // Counter for BCs
         let mut counts = FxHashMap::default();
@@ -267,14 +265,14 @@ pub struct BcSortResults {
 
 /// Single-machine barcode sorting workflow. FASTQ data and read settings are input via `chunks`. Outputs
 /// are written to a tmp-dir in `path`. `barcode_whitelist` is the path to the 10x barcode whitelist.
-pub fn barcode_sort_workflow<P, R>(
+pub fn barcode_sort_workflow<P>(
     chunks: Vec<P>,
     path: impl AsRef<Path>,
     barcode_whitelist: impl AsRef<Path>,
 ) -> Result<BcSortResults, Error>
 where
-    P: FastqProcessor<R> + Send + Sync + Clone,
-    R: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    P: FastqProcessor + Send + Sync + Clone,
+    <P as FastqProcessor>::ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
 {
     let tmp_dir = TempDir::new_in(path)?;
     let pass1_fn = tmp_dir.path().join("pass1_data.shardio");
@@ -283,12 +281,12 @@ where
     // Validate raw barcode sequen
     let barcode_checker = BarcodeChecker::new(barcode_whitelist.as_ref())?;
 
-    let sorter = SortByBc::<_, _>::new(chunks, barcode_checker);
+    let sorter = SortByBc::<_>::new(chunks, barcode_checker);
     let (init_correct, init_incorrect, init_counts) = sorter.sort_bcs(&pass1_fn)?;
 
     let corrector = BarcodeCorrector::new(barcode_whitelist, init_counts.clone(), 1.5, 0.9)?;
 
-    let reader = shardio::ShardReader::<R, Barcode, BcSortOrder>::open(&pass1_fn);
+    let reader = shardio::ShardReader::<<P as FastqProcessor>::ReadType, Barcode, BcSortOrder>::open(&pass1_fn);
 
     let mut correct = CorrectBcs::new(reader, corrector, Some(1.0f64));
 

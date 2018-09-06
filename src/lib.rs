@@ -44,7 +44,6 @@ pub use fastq::Record;
 
 use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
-use std::marker::PhantomData;
 use failure::Error;
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
@@ -174,10 +173,11 @@ pub trait HasBamTags {
 /// A specification for a group of input FASTQ data, and how to interpret
 /// the raw sequences as a assay-specific `ReadType` that can provide access to
 /// barcodes, UMIs, and track trimmed bases.
-pub trait FastqProcessor<ReadType> {
+pub trait FastqProcessor {
+    type ReadType;
     /// Convert a `ReadPair` representing the raw data from a single read-pair
     /// into an assay-specific `ReadType`
-    fn process_read(&self, read: read_pair::ReadPair) -> Option<ReadType>;
+    fn process_read(&self, read: read_pair::ReadPair) -> Option<Self::ReadType>;
 
     /// A corresponding set of FASTQ files to read data from.
     fn fastq_files(&self) -> InputFastqs;
@@ -186,43 +186,41 @@ pub trait FastqProcessor<ReadType> {
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
 
-    fn iter(&self) -> FastqProcessorIter<Self, ReadType> where Self: Sized {
-        FastqProcessorIter::new(self).unwrap()
+    fn iter(&self) -> Result<FastqProcessorIter<Self>, Error> where Self: Sized {
+        FastqProcessorIter::new(self)
     }
 }
 
 
-pub struct FastqProcessorIter<'a, Processor, ReadType>
+pub struct FastqProcessorIter<'a, Processor>
 where
-    Processor: 'a + FastqProcessor<ReadType>
+    Processor: 'a + FastqProcessor
 {
     read_pair_iter: ReadPairIter,
     processor: &'a Processor,
-    readtype: PhantomData<ReadType>,
 }
 
-impl<'a, Processor, ReadType> FastqProcessorIter<'a, Processor, ReadType> 
+impl<'a, Processor> FastqProcessorIter<'a, Processor> 
 where
-    Processor: FastqProcessor<ReadType>
+    Processor: FastqProcessor
 {
     pub fn new(processor: &'a Processor) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?;
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor: processor,
-            readtype: PhantomData,
         })
     }
 }
 
-impl<'a, Processor, ReadType> Iterator for FastqProcessorIter<'a, Processor, ReadType> 
+impl<'a, Processor> Iterator for FastqProcessorIter<'a, Processor> 
 where
-    Processor: FastqProcessor<ReadType>
+    Processor: FastqProcessor
 {
-    type Item = Result<ReadType, Error>;
+    type Item = Result<<Processor as FastqProcessor>::ReadType, Error>;
 
     /// Iterate over ReadType objects
-    fn next(&mut self) -> Option<Result<ReadType, Error>> {
+    fn next(&mut self) -> Option<Self::Item> {
         match self.read_pair_iter.next() {
             Some(Ok(rp)) => {
                 Some(Ok(self.processor.process_read(rp)?))
