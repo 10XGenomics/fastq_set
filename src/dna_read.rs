@@ -266,8 +266,8 @@ mod test_dna_cfg {
             procs.push(prc);
         }
 
-        let bc_sort_results =
-            ::bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
+        // let bc_sort_results =
+            // ::bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
     }
 
     const CRG_CFG: &str = r#"
