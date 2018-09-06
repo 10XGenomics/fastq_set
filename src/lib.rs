@@ -27,15 +27,17 @@ extern crate tempfile;
 
 // extern crate bwa;
 extern crate lz4;
+extern crate metric;
 
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod sample_def;
 
 pub mod barcode;
-pub mod bc_sort;
+// pub mod bc_sort;
 pub mod sseq;
 pub mod utils;
+pub mod barcode_sort;
 
 pub mod dna_read;
 pub mod rna_read;

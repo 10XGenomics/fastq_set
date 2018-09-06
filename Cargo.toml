@@ -30,3 +30,5 @@ shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
 
 # Switch back to crates.io once our PR is released
 fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}
+
+metric = { path = "../metric" }
