@@ -5,6 +5,7 @@ use HasBarcode;
 use shardio::*;
 use failure::Error;
 use metric::{Metric, SimpleHistogram, SerdeFormat};
+use metric_utils::{ConfiguredReadMetric, ReadMetric, DefaultConfig};
 use std::path::Path;
 use serde::Serialize;
 use barcode::BarcodeChecker;
@@ -15,22 +16,26 @@ pub const SEND_BUFFER_SZ: usize = 256;
 pub const DISK_CHUNK_SZ: usize = 2048; // 2MB if ~1kB per record
 pub const ITEM_BUFFER_SZ: usize = 2097152; // 2GB if above holds
 
-pub struct BarcodeSortWorkflow<Processor> 
+pub struct BarcodeSortWorkflow<Processor, MetricType> 
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
+    MetricType: ConfiguredReadMetric<ReadType=<Processor as FastqProcessor>::ReadType>,
 {
     processor: Processor,
     sorter: BarcodeSorter<<Processor as FastqProcessor>::ReadType>,
     checker: BarcodeChecker,
+    metrics: MetricType,
+    config: <MetricType as ConfiguredReadMetric>::ConfigType,
 }
 
-impl<Processor> BarcodeSortWorkflow<Processor>
+impl<Processor, MetricType> BarcodeSortWorkflow<Processor, MetricType>
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
+    MetricType: ReadMetric<ReadType=<Processor as FastqProcessor>::ReadType>,
 {
-    pub fn new<P: AsRef<Path>>(processor: Processor, 
+    pub fn new<P: AsRef<Path>>(processor: Processor,
         valid_path: P, 
         invalid_path: P,
         whitelist_path: P) -> Result<Self, Error> {
@@ -41,6 +46,33 @@ where
             processor,
             sorter,
             checker,
+            metrics: Metric::new(),
+            config: DefaultConfig,
+        })
+    }
+}
+
+impl<Processor, MetricType> BarcodeSortWorkflow<Processor, MetricType>
+where
+    Processor: FastqProcessor,
+    <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
+    MetricType: ConfiguredReadMetric<ReadType=<Processor as FastqProcessor>::ReadType>,
+{
+
+    pub fn new_with_config<P: AsRef<Path>>(processor: Processor,
+        valid_path: P,
+        invalid_path: P,
+        whitelist_path: P,
+        config: <MetricType as ConfiguredReadMetric>::ConfigType) -> Result<Self, Error> {
+        
+        let sorter = BarcodeSorter::new(valid_path, invalid_path)?;
+        let checker = BarcodeChecker::new(whitelist_path)?;
+        Ok(BarcodeSortWorkflow {
+            processor,
+            sorter,
+            checker,
+            metrics: Metric::new(),
+            config,
         })
     }
 
@@ -52,14 +84,18 @@ where
             let mut bc = read.barcode().clone();
             self.checker.check(&mut bc);
             read.set_barcode(bc);
+            self.metrics.update_with_config(&self.config, &read);
             self.sorter.process(read);
         }
         println!("Processed {} reads", nreads);
         self.sorter.finish()
     }
 
-    pub fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) {
-        self.sorter.write_barcode_counts(path);
+    pub fn write_results<P: AsRef<Path>>(&self,
+        barcode_counts_path: P,
+        metrics_path: P) {
+        self.sorter.write_barcode_counts(barcode_counts_path);
+        self.metrics.to_file(metrics_path, SerdeFormat::Binary);
     }
 }
 
