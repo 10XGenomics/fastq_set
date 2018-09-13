@@ -193,6 +193,8 @@ pub trait FastqProcessor {
     fn iter(&self) -> Result<FastqProcessorIter<Self>, Error> where Self: Sized {
         FastqProcessorIter::new(self)
     }
+
+    fn gem_group(&self) -> u16;
 }
 
 

@@ -88,6 +88,10 @@ impl FastqProcessor for DnaProcessor {
     fn read_subsample_rate(&self) -> f64 {
         self.chunk.subsample_rate
     }
+
+    fn gem_group(&self) -> u16 {
+        self.chunk.gem_group
+    }
 }
 
 /// Represents a GEM-barcoded DNA read, with a barcode at the start of R1 or in an index read,
