@@ -11,6 +11,7 @@ use std::path::Path;
 use fxhash::{FxHashMap, FxHashSet};
 use std::hash::Hash;
 use std::io::BufRead;
+use metric::SimpleHistogram;
 
 use utils;
 use {Barcode, SSeq};
@@ -101,7 +102,7 @@ type Of64 = NotNaN<f64>;
 /// of each whitelist barcode, prior to correction (`bc_counts`).
 pub struct BarcodeCorrector {
     whitelist: FxHashSet<SSeq>,
-    bc_counts: FxHashMap<Barcode, u32>,
+    bc_counts: SimpleHistogram<Barcode>,
     max_expected_barcode_errors: f64,
     bc_confidence_threshold: f64,
 }
@@ -119,7 +120,7 @@ impl BarcodeCorrector {
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
         whitelist: impl AsRef<Path>,
-        bc_counts: FxHashMap<Barcode, u32>,
+        bc_counts: SimpleHistogram<Barcode>,
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64,
     ) -> Result<BarcodeCorrector, Error> {
@@ -165,7 +166,7 @@ impl BarcodeCorrector {
                 };
 
                 if self.whitelist.contains(&a) {
-                    let bc_count = self.bc_counts.get(&trial_bc).cloned().unwrap_or(0);
+                    let bc_count = self.bc_counts.get(&trial_bc);
                     let prob_edit = max(Of64::from(0.0005), Of64::from(probability(qv)));
                     let likelihood = prob_edit * max(Of64::from(bc_count as f64), Of64::from(0.5));
                     candidates.push((likelihood, trial_bc));
@@ -219,7 +220,7 @@ mod test {
         wl.insert(b3.sequence);
         wl.insert(b4.sequence);
 
-        let mut counts = FxHashMap::default();
+        let mut counts = SimpleHistogram::new();
         counts.insert(b1, 100);
         counts.insert(b2, 11);
         counts.insert(b3, 2);
