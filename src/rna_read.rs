@@ -24,7 +24,7 @@ use fastq::{Record, OwnedRecord};
 /// This translates to a `read_type` "R1", `read_offset` 0
 /// and `read_length` 16. Valid options for `read_type` are
 /// "R1", "R2", "I1", "I2"
-/// ```
+/// ``` text
 /// {
 ///     "barcode_read_length": 16,
 ///     "barcode_read_offset": 0,
@@ -32,17 +32,17 @@ use fastq::{Record, OwnedRecord};
 ///     "barcode_whitelist": "737K-august-2016",
 /// ```
 /// - Description and name for the chemistry
-/// ```
+/// ``` text
 ///     "description": "Single Cell V(D)J",
 ///     "name": "SCVDJ",
 /// ```
 /// - Specify the `endedness` of the product. This would be `three_prime` for Single Cell
 /// 3' Gene expression and `five_prime` for VDJ and 5' Gene expression
-/// ```
+/// ``` text
 ///     "endedness": "five_prime",
 /// ```
 /// - Filename conventions used by `bcl2fastq` and `bcl_processor`
-/// ```
+/// ``` text
 ///     "read_type_to_bcl2fastq_filename": {
 ///         "I1": "I1",
 ///         "I2": null,
@@ -64,29 +64,29 @@ use fastq::{Record, OwnedRecord};
 /// bases in read2. It is not necessary that `rna_read` correspond to
 /// read1. For example, in Single Cell 5' R2-only mode, `rna_read` 
 /// would be all of read2 and `rna_read2` would be empty. 
-/// ```
+/// ``` text
 ///     "rna_read_length": null,
 ///     "rna_read_offset": 41,
 ///     "rna_read_type": "R1",
 /// ```
 /// - Optionally specify `rna_read2`
-/// ```
+/// ``` text
 ///     "rna_read2_length": null,
 ///     "rna_read2_offset": 0,
 ///     "rna_read2_type": "R2",
 /// ```
 /// - Sample Index read definition
-/// ```
+/// ``` text
 ///     "si_read_length": null,
 ///     "si_read_offset": 0,
 ///     "si_read_type": "I1",
 /// ```
 /// - [TODO] What strandedness does this refer to?
-/// ```
+/// ``` text
 ///     "strandedness": "+",
 /// ```
 /// - UMI is present in the bases 16-25 of read1
-/// ```
+/// ``` text
 ///     "umi_read_length": 10,
 ///     "umi_read_offset": 16,
 ///     "umi_read_type": "R1"

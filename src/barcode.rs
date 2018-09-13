@@ -205,6 +205,7 @@ pub fn probability(qual: u8) -> f64 {
 #[cfg(test)]
 mod test {
     use super::*;
+    use metric::{Metric, SimpleHistogram};
 
     #[test]
     pub fn test_barcode_correction() {
