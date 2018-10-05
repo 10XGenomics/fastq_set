@@ -6,7 +6,6 @@
 use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
 use std::collections::HashMap;
 use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
-use fastq::{Record, OwnedRecord};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.

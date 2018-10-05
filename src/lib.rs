@@ -15,9 +15,6 @@ extern crate bincode;
 extern crate serde;
 extern crate serde_bytes;
 
-#[macro_use]
-extern crate log;
-
 extern crate fxhash;
 extern crate rand;
 extern crate rayon;
@@ -49,7 +46,7 @@ pub use fastq::Record;
 use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
 use failure::Error;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::{SeedableRng, XorShiftRng};
 use rand::distributions::{Distribution, Range};
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
