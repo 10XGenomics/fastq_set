@@ -117,13 +117,21 @@ pub struct ChemistryDef {
     umi_read_type: WhichRead,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RnaChunk {
     chemistry: ChemistryDef,
     gem_group: u16,
     read_chunks: HashMap<WhichRead, Option<String>>,
     read_group: String,
     reads_interleaved: bool,
+    subsample_rate: Option<f64>,
+}
+
+impl RnaChunk {
+    pub fn subsample_rate(&mut self, value: f64) -> &mut Self {
+        self.subsample_rate = Some(value);
+        self
+    }
 }
 
 impl FastqProcessor for RnaChunk {
@@ -198,10 +206,10 @@ impl FastqProcessor for RnaChunk {
         }
     }
     fn bc_subsample_rate(&self) -> f64 {
-        0.0
+        1.0
     }
     fn read_subsample_rate(&self) -> f64 {
-        0.0
+        self.subsample_rate.unwrap_or(1.0)
     }
 
     fn gem_group(&self) -> u16 {

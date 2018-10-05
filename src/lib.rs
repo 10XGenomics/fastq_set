@@ -49,6 +49,8 @@ pub use fastq::Record;
 use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
 use failure::Error;
+use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::distributions::{Distribution, Range};
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
 /// FIXME : Should we use the `valid` field for `PartialEq`, `Eq`, `Hash`?
@@ -194,6 +196,10 @@ pub trait FastqProcessor {
         FastqProcessorIter::new(self)
     }
 
+    fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<Self>, Error> where Self: Sized {
+        FastqProcessorIter::with_seed(self, seed)
+    }
+
     fn gem_group(&self) -> u16;
 }
 
@@ -204,6 +210,8 @@ where
 {
     read_pair_iter: ReadPairIter,
     processor: &'a Processor,
+    rand: XorShiftRng,
+    range: Range<f64>,
 }
 
 impl<'a, Processor> FastqProcessorIter<'a, Processor> 
@@ -215,6 +223,18 @@ where
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor: processor,
+            rand: XorShiftRng::from_seed([42; 16]),
+            range: Range::new(0.0, 1.0),
+        })
+    }
+
+    pub fn with_seed(processor: &'a Processor, seed: [u8; 16]) -> Result<Self, Error> {
+        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?;
+        Ok(FastqProcessorIter {
+            read_pair_iter,
+            processor: processor,
+            rand: XorShiftRng::from_seed(seed),
+            range: Range::new(0.0, 1.0),
         })
     }
 }
@@ -227,12 +247,20 @@ where
 
     /// Iterate over ReadType objects
     fn next(&mut self) -> Option<Self::Item> {
-        match self.read_pair_iter.next() {
-            Some(Ok(rp)) => {
-                Some(Ok(self.processor.process_read(rp)?))
-            },
-            Some(Err(v)) => Some(Err(v)),
-            None => None,
+        loop {
+            match self.read_pair_iter.next() {
+                Some(read_result) => {
+                    if self.range.sample(&mut self.rand) < self.processor.read_subsample_rate() {
+                        return match read_result {
+                            Ok(read) => Some(Ok(self.processor.process_read(read)?)),
+                            Err(e) => Some(Err(e)),
+                        };
+                    }
+                },
+                None => {
+                    return None;
+                }
+            }
         }
     }
 }
