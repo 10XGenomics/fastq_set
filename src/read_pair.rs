@@ -17,6 +17,16 @@ struct ReadOffset {
     qual: u16,
 }
 
+impl ReadOffset {
+    fn seq_len(&self) -> usize {
+        if self.exists {
+            (self.seq - self.head) as usize
+        } else {
+            0usize
+        }
+    }
+}
+
 /// The possible reads from a Illumina cluster. R1 and R2 are the two
 /// 'primary' reads, I1 and I2 are the two 'index' samples. I1 is
 /// often referred to as the 'sample index read', or I7.  I2 contains
@@ -44,7 +54,14 @@ pub enum ReadPart {
 
 /// Compact representation of selected ReadPart and a interval in that read.
 /// Supports offsets and lengths up to 32K.
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, Debug)]
+/// Internally it is stored as a `u32` with the following bit layout
+/// 
+/// +-----------+--------------+-----------+
+/// | WhichRead | Start Offset | Length    |
+/// | (2 bits)  | (15 bits)    | (15 bits) |
+/// +-----------+--------------+-----------+
+
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
 pub struct RpRange {
     val: u32,
 }
@@ -97,6 +114,39 @@ impl RpRange {
         match self.len() {
             Some(l) => &input[self.offset()..self.offset() + l],
             None => &input[self.offset()..],
+        }
+    }
+
+    pub fn set_len(&mut self, len: usize) {
+        assert!(len < (1 << 15));
+        self.val = (self.val & (!0x7FFFu32)) | len as u32;
+    }
+
+    fn set_offset(&mut self, offset: usize) {
+        assert!(offset < (1 << 15));
+        self.val = (self.val & (!(0x7FFFu32 << 15))) | (offset as u32) << 15;
+    }
+
+    pub fn trim(&mut self, trim_def: TrimDef) {
+        assert!(trim_def.read==self.read());
+
+        if trim_def.amount > 0 {
+            match trim_def.end {
+                WhichEnd::ThreePrime => {
+                    if let Some(l) = self.len() {
+                        self.set_len(l.saturating_sub(trim_def.amount));
+                    } else {
+                        panic!("Cannot apply trim to the 3' end without knowing the length");
+                    }
+                },
+                WhichEnd::FivePrime => {
+                    let offset = self.offset();
+                    self.set_offset(offset + trim_def.amount);
+                    if let Some(l) = self.len() {
+                        self.set_len(l.saturating_sub(trim_def.amount));
+                    }
+                }
+            }
         }
     }
 }
@@ -203,5 +253,115 @@ impl ReadPair {
             }
         }
         result
+    }
+}
+
+
+pub enum WhichEnd {
+    ThreePrime,
+    FivePrime,
+}
+pub struct TrimDef {
+    read: WhichRead,
+    end: WhichEnd,
+    amount: usize,
+}
+
+impl TrimDef {
+    fn new(read: WhichRead, end: WhichEnd, amount: usize) -> Self {
+        TrimDef {
+            read,
+            end,
+            amount,
+        }
+    }
+}
+
+/// A `ReadPair` that supports trimming. All the data corresponding to the 
+/// original `ReadPair` is retained and the trimming only shifts the
+/// offsets for indexing various data parts.
+///
+/// TODO: Is it better to add trim support to `ReadPair`?
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub struct TrimmedReadPair {
+    trimmed_ranges: [Option<RpRange>; 4],
+    readpair: ReadPair,
+}
+
+impl From<ReadPair> for TrimmedReadPair {
+    fn from(readpair: ReadPair) -> Self {
+        let mut trimmed_ranges = [None; 4];
+        for &which in WhichRead::read_types().iter() {
+            if readpair.offsets[which as usize].exists {
+                trimmed_ranges[which as usize] = Some(RpRange::new(which, 0usize, Some(readpair.offsets[which as usize].seq_len())));
+            }
+        }
+        TrimmedReadPair {
+            trimmed_ranges,
+            readpair,
+        }
+    }
+}
+
+impl TrimmedReadPair {
+
+    /// Trim the reads using the input `TrimDef` which specifies
+    /// the read to trim, and how many nucleotides to trim from
+    /// which end
+    pub fn trim(&mut self, trim_def: TrimDef) -> &mut Self {
+        if trim_def.amount == 0 {
+            return self;
+        }
+        assert!(self.trimmed_ranges[trim_def.read as usize].is_some(), "ERROR: Attempt to trim an empty sequence");
+        self.trimmed_ranges[trim_def.read as usize].map(|mut range| range.trim(trim_def));
+        self
+    }
+
+    fn is_trimmed(&self, read: WhichRead) -> bool {
+        if let Some(range) = self.trimmed_ranges[read as usize] {
+            range.len() == Some(self.readpair.offsets[read as usize].seq_len())
+        } else {
+            false
+        }
+    }
+
+    /// Set the length of Illumina read1 to the specified length
+    /// If the specified length is greater than the read1 length,
+    /// this function does nothing. This function should be called
+    /// before applying any other trimming to read1, otherwise, it
+    /// will panic.
+    pub fn r1_length(&mut self, len: usize) -> &mut Self {
+        assert!(self.is_trimmed(WhichRead::R1), "ERROR: Read1 is already trimmed prior to calling r1_length()");
+        let ind = WhichRead::R1 as usize;
+        let trim_amount = self.readpair.offsets[ind].seq_len().saturating_sub(len);
+        let trim_def = TrimDef::new(WhichRead::R1, WhichEnd::ThreePrime, trim_amount);
+        self.trim(trim_def)
+    }
+
+    /// Set the length of Illumina read2 to the specified length
+    /// If the specified length is greater than the read2 length,
+    /// this function does nothing. This function should be called
+    /// before applying any other trimming to read2, otherwise, it
+    /// will panic.
+    pub fn r2_length(&mut self, len: usize) -> &mut Self {
+        assert!(self.is_trimmed(WhichRead::R2), "ERROR: Read2 is already trimmed prior to calling r2_length()");
+        let ind = WhichRead::R2 as usize;
+        let trim_amount = self.readpair.offsets[ind].seq_len().saturating_sub(len);
+        let trim_def = TrimDef::new(WhichRead::R2, WhichEnd::ThreePrime, trim_amount);
+        self.trim(trim_def)
+    }
+
+    #[inline]
+    /// Get a ReadPart `part` from a read `which`
+    pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
+        let untrimmed = self.readpair.get(which, part);
+        untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r))
+    }
+
+    #[inline]
+    /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
+    pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
+        let read = self.get(rp_range.read(), part);
+        read.map(|r| rp_range.slice(r))
     }
 }
