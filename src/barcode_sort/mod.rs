@@ -11,6 +11,7 @@ use serde::Serialize;
 use barcode::BarcodeChecker;
 use FastqProcessor;
 use std::borrow::Cow;
+use std;
 
 // TODO: Set the parameters optimally?
 pub const SEND_BUFFER_SZ: usize = 256;
@@ -83,9 +84,9 @@ where
         })
     }
 
-    pub fn execute_workflow(&mut self) -> Result<(), Error> {
+    pub fn execute_workflow(&mut self, max_iters: Option<usize>) -> Result<(), Error> {
         let mut nreads = 0;
-        for read_result in self.processor.iter()? {
+        for read_result in self.processor.iter()?.take(max_iters.unwrap_or(std::usize::MAX)) {
             nreads += 1;
             let mut read = read_result?;
             let mut bc = read.barcode().clone();
