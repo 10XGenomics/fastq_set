@@ -261,3 +261,11 @@ where
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WhichEnd {
+    #[serde(rename = "three_prime")]
+    ThreePrime,
+    #[serde(rename = "five_prime")]
+    FivePrime,
+}

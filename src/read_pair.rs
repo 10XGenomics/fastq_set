@@ -6,6 +6,7 @@
 use fastq::{Record, OwnedRecord};
 use std::collections::HashMap;
 use std::fmt;
+use WhichEnd;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
 /// header exists at buf[start .. head], seq exists at buf[head .. seq], etc.
@@ -268,11 +269,6 @@ impl ReadPair {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum WhichEnd {
-    ThreePrime,
-    FivePrime,
-}
 #[derive(Debug, Copy, Clone)]
 pub struct TrimDef {
     read: WhichRead,

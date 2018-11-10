@@ -6,6 +6,7 @@
 use read_pair::{TrimmedReadPair, ReadPair, ReadPart, RpRange, WhichRead};
 use std::collections::HashMap;
 use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
+use WhichEnd;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
@@ -98,7 +99,7 @@ pub struct ChemistryDef {
     barcode_read_type: WhichRead,
     barcode_whitelist: String,
     description: String,
-    endedness: Option<String>,
+    endedness: Option<WhichEnd>,
     name: String,
     read_type_to_bcl2fastq_filename: HashMap<WhichRead, Option<String>>,
     read_type_to_bcl_processor_filename: HashMap<WhichRead, Option<String>>,
