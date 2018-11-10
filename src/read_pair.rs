@@ -5,6 +5,7 @@
 
 use fastq::{Record, OwnedRecord};
 use std::collections::HashMap;
+use std::fmt;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
 /// header exists at buf[start .. head], seq exists at buf[head .. seq], etc.
@@ -18,11 +19,11 @@ struct ReadOffset {
 }
 
 impl ReadOffset {
-    fn seq_len(&self) -> usize {
+    fn seq_len(&self) -> Option<usize> {
         if self.exists {
-            (self.seq - self.head) as usize
+            Some((self.seq - self.head) as usize)
         } else {
-            0usize
+            None
         }
     }
 }
@@ -46,6 +47,7 @@ impl WhichRead {
 }
 
 /// Components of a FASTQ record.
+#[derive(Debug, Copy, Clone)]
 pub enum ReadPart {
     Header,
     Seq,
@@ -61,9 +63,15 @@ pub enum ReadPart {
 /// | (2 bits)  | (15 bits)    | (15 bits) |
 /// +-----------+--------------+-----------+
 
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct RpRange {
     val: u32,
+}
+
+impl fmt::Debug for RpRange {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "RpRange {{ read: {:?}, offset: {}, len: {:?}, val: {:#b} }}", self.read(), self.offset(), self.len(), self.val)
+    }
 }
 
 impl RpRange {
@@ -254,13 +262,18 @@ impl ReadPair {
         }
         result
     }
+
+    pub fn len(&self, which: WhichRead) -> Option<usize> {
+        self.offsets[which as usize].seq_len()
+    }
 }
 
-
+#[derive(Debug, Copy, Clone)]
 pub enum WhichEnd {
     ThreePrime,
     FivePrime,
 }
+#[derive(Debug, Copy, Clone)]
 pub struct TrimDef {
     read: WhichRead,
     end: WhichEnd,
@@ -284,7 +297,7 @@ impl TrimDef {
 /// TODO: Is it better to add trim support to `ReadPair`?
 #[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct TrimmedReadPair {
-    trimmed_ranges: [Option<RpRange>; 4],
+    pub trimmed_ranges: [Option<RpRange>; 4],
     readpair: ReadPair,
 }
 
@@ -293,7 +306,7 @@ impl From<ReadPair> for TrimmedReadPair {
         let mut trimmed_ranges = [None; 4];
         for &which in WhichRead::read_types().iter() {
             if readpair.offsets[which as usize].exists {
-                trimmed_ranges[which as usize] = Some(RpRange::new(which, 0usize, Some(readpair.offsets[which as usize].seq_len())));
+                trimmed_ranges[which as usize] = Some(RpRange::new(which, 0usize, readpair.offsets[which as usize].seq_len()));
             }
         }
         TrimmedReadPair {
@@ -313,13 +326,13 @@ impl TrimmedReadPair {
             return self;
         }
         assert!(self.trimmed_ranges[trim_def.read as usize].is_some(), "ERROR: Attempt to trim an empty sequence");
-        self.trimmed_ranges[trim_def.read as usize].map(|mut range| range.trim(trim_def));
+        self.trimmed_ranges[trim_def.read as usize].as_mut().unwrap().trim(trim_def);
         self
     }
 
     fn is_trimmed(&self, read: WhichRead) -> bool {
         if let Some(range) = self.trimmed_ranges[read as usize] {
-            range.len() == Some(self.readpair.offsets[read as usize].seq_len())
+            range.len() == self.readpair.offsets[read as usize].seq_len()
         } else {
             false
         }
@@ -332,8 +345,9 @@ impl TrimmedReadPair {
     /// will panic.
     pub fn r1_length(&mut self, len: usize) -> &mut Self {
         assert!(self.is_trimmed(WhichRead::R1), "ERROR: Read1 is already trimmed prior to calling r1_length()");
+        assert!(self.readpair.offsets[WhichRead::R1 as usize].exists);
         let ind = WhichRead::R1 as usize;
-        let trim_amount = self.readpair.offsets[ind].seq_len().saturating_sub(len);
+        let trim_amount = self.readpair.offsets[ind].seq_len().unwrap().saturating_sub(len);
         let trim_def = TrimDef::new(WhichRead::R1, WhichEnd::ThreePrime, trim_amount);
         self.trim(trim_def)
     }
@@ -345,8 +359,9 @@ impl TrimmedReadPair {
     /// will panic.
     pub fn r2_length(&mut self, len: usize) -> &mut Self {
         assert!(self.is_trimmed(WhichRead::R2), "ERROR: Read2 is already trimmed prior to calling r2_length()");
+        assert!(self.readpair.offsets[WhichRead::R2 as usize].exists);
         let ind = WhichRead::R2 as usize;
-        let trim_amount = self.readpair.offsets[ind].seq_len().saturating_sub(len);
+        let trim_amount = self.readpair.offsets[ind].seq_len().unwrap().saturating_sub(len);
         let trim_def = TrimDef::new(WhichRead::R2, WhichEnd::ThreePrime, trim_amount);
         self.trim(trim_def)
     }
@@ -355,7 +370,10 @@ impl TrimmedReadPair {
     /// Get a ReadPart `part` from a read `which`
     pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
         let untrimmed = self.readpair.get(which, part);
-        untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r))
+        match part {
+            ReadPart::Qual | ReadPart::Seq => untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r)),
+            _ => untrimmed
+        }
     }
 
     #[inline]
@@ -363,5 +381,9 @@ impl TrimmedReadPair {
     pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
         let read = self.get(rp_range.read(), part);
         read.map(|r| rp_range.slice(r))
+    }
+
+    pub fn len(&self, which: WhichRead) -> Option<usize> {
+        self.trimmed_ranges[which as usize].and_then(|r| r.len())
     }
 }
