@@ -40,6 +40,7 @@ pub mod metric_utils;
 
 pub mod dna_read;
 pub mod rna_read;
+pub mod adapter_trimmer;
 
 pub use fastq::Record;
 

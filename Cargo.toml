@@ -19,7 +19,7 @@ rand = "*"
 itertools = ">=0.6"
 failure = "*"
 lz4 = "*"
-bio = "*"
+bio = { git = "https://github.com/sreenathkrishnan/rust-bio" }
 
 # Note you may need to use a local checkout rust-htslib to get around
 # dependecy issues in the C htslib build. (bzip2 and lzma).
