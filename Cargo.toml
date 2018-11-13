@@ -15,7 +15,7 @@ rayon = "*"
 log = "*"
 bincode = "1.0.1"
 fxhash = "0.2.1"
-rand = "*"
+rand = ">=0.4"
 itertools = ">=0.6"
 failure = "*"
 lz4 = "*"
@@ -33,3 +33,6 @@ shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
 fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}
 
 metric = { path = "../metric" }
+
+[dev-dependencies]
+time = "*"
