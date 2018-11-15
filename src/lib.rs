@@ -1,13 +1,13 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Process 10x FASTQs
+//! Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and 
+//! UMI sequences.
 //!
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
 extern crate itertools;
 extern crate ordered_float;
-// extern crate rust_htslib;
 
 #[macro_use]
 extern crate serde_derive;
@@ -22,7 +22,6 @@ extern crate serde_json;
 extern crate shardio;
 extern crate tempfile;
 
-// extern crate bwa;
 extern crate lz4;
 extern crate metric;
 extern crate bio;
@@ -32,7 +31,6 @@ pub mod read_pair_iter;
 pub mod sample_def;
 
 pub mod barcode;
-// pub mod bc_sort;
 pub mod sseq;
 pub mod utils;
 pub mod barcode_sort;

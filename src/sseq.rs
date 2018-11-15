@@ -1,3 +1,8 @@
+// Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
+
+//! Sized, stack-allocated container for a short DNA sequence.
+
+
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
