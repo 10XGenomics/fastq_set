@@ -8,6 +8,11 @@
 //! adapter trimming
 //! * Linked adapters are not supported as of now
 //! * Allowed error rate for the adapter is 10%
+//!
+//! # Algorithm
+//! P.S: A 5' adapter can be treated as a 3' adapter with
+//! the read reversed. Perhaps it makes sense to use
+//! this symmetry in the algorithm?
 use bio::alignment::pairwise::{self, MatchParams, Scoring};
 use bio::alignment::sparse;
 use bio::alignment::sparse::HashMapFx;
@@ -206,11 +211,18 @@ pub struct AdapterTrimmer<'a> {
     kmer_hash: HashMapFx<&'a [u8], Vec<u32>>,
     aligner: Aligner,
     cut_scores: CutScores,
+    homopolymer: bool,
 }
 
 impl<'a> AdapterTrimmer<'a> {
     /// Create a new `AdapterTrimmer` from an `Adapter`.
     pub fn new(adapter: &'a Adapter) -> Self {
+        assert!(
+            adapter.seq.len() >= KMER_LEN,
+            "Adapter sequence cannot be shorter than {}",
+            KMER_LEN
+        );
+
         let cut_scores = CutScores::new(adapter.end, adapter.location);
         let scoring = Scoring::from_scores(0, EDIT_SCORE, MATCH_SCORE, EDIT_SCORE)
             .xclip_prefix(cut_scores.read_prefix)
@@ -225,12 +237,15 @@ impl<'a> AdapterTrimmer<'a> {
             KMER_LEN,
             WINDOW_LEN,
         );
+        let seq = adapter.seq.as_bytes();
+        let homopolymer = seq.iter().all(|&x| x == seq[0]);
         AdapterTrimmer {
             adapter,
-            seq: adapter.seq.as_bytes(),
+            seq,
             kmer_hash: sparse::hash_kmers(adapter.seq.as_bytes(), KMER_LEN),
             aligner,
             cut_scores,
+            homopolymer,
         }
     }
 
@@ -244,6 +259,10 @@ impl<'a> AdapterTrimmer<'a> {
     /// otherwise `Some(TrimResult)` (See [`TrimResult`](struct.TrimResult.html))
     pub fn find(&mut self, read: &[u8]) -> Option<TrimResult> {
         use bio::alignment::AlignmentOperation::{Del, Ins, Match, Subst};
+
+        if self.homopolymer {
+            return self.find_homopolymer(read);
+        }
 
         let matches = sparse::find_kmer_matches_seq2_hashed(read, &self.kmer_hash, KMER_LEN);
         let matches = sparse::expand_kmer_matches(read, self.seq, KMER_LEN, &matches, 1);
@@ -330,6 +349,97 @@ impl<'a> AdapterTrimmer<'a> {
                 }
             }
             None => None,
+        }
+    }
+
+    fn find_homopolymer(&mut self, read: &[u8]) -> Option<TrimResult> {
+        assert!(self.homopolymer);
+        let base = self.seq[0];
+        let cumulative_matches: Vec<_> = vec![0]
+            .into_iter()
+            .chain(read.iter().map(|&x| (x == base) as usize))
+            .scan(0, |state, x| {
+                *state = *state + x;
+                Some(*state)
+            }).collect();
+
+        let get_counts_if_valid = |i: usize, j: usize| {
+            let num_bases = j.saturating_sub(i);
+            if num_bases < KMER_LEN {
+                return None;
+            }
+            let num_matches = cumulative_matches[j] - cumulative_matches[i];
+            let num_errs = num_bases - num_matches;
+            let err_rate = (num_errs as f64) / (num_bases as f64);
+            if err_rate <= ALLOWED_ERROR_RATE {
+                Some((num_matches, num_errs))
+            } else {
+                None
+            }
+        };
+        let mut best_num_matches = 0;
+        let mut best_err = self.seq.len();
+        let mut best_pos = None;
+        match self.adapter.end {
+            WhichEnd::ThreePrime => {
+                let i_range = match self.adapter.location {
+                    AdapterLoc::Anywhere => 0..read.len(),
+                    AdapterLoc::NonInternal => {
+                        read.len().saturating_sub(self.seq.len())..read.len()
+                    }
+                    AdapterLoc::Anchored => {
+                        read.len().saturating_sub(self.seq.len())
+                            ..read.len().saturating_sub(self.seq.len() - 1)
+                    }
+                };
+                for i in i_range {
+                    let j = min(read.len(), i + self.seq.len());
+                    if let Some((num_matches, num_errs)) = get_counts_if_valid(i, j) {
+                        if (num_matches > best_num_matches)
+                            || (num_matches == best_num_matches && num_errs < best_err)
+                        {
+                            best_num_matches = num_matches;
+                            best_err = num_errs;
+                            best_pos = Some(i);
+                        }
+                    }
+                }
+                match best_pos {
+                    Some(p) => Some(TrimResult {
+                        adapter_range: p..min(p + self.seq.len(), read.len()),
+                        trim_range: p..read.len(),
+                        retain_range: 0..p,
+                    }),
+                    None => None,
+                }
+            }
+            WhichEnd::FivePrime => {
+                let j_range = match self.adapter.location {
+                    AdapterLoc::Anywhere => 0..read.len(),
+                    AdapterLoc::NonInternal => 0..self.seq.len() + 1,
+                    AdapterLoc::Anchored => self.seq.len()..self.seq.len() + 1,
+                };
+                for j in j_range {
+                    let i = j.saturating_sub(self.seq.len());
+                    if let Some((num_matches, num_errs)) = get_counts_if_valid(i, j) {
+                        if (num_matches > best_num_matches)
+                            || (num_matches == best_num_matches && num_errs < best_err)
+                        {
+                            best_num_matches = num_matches;
+                            best_err = num_errs;
+                            best_pos = Some(j);
+                        }
+                    }
+                }
+                match best_pos {
+                    Some(p) => Some(TrimResult {
+                        adapter_range: p.saturating_sub(self.seq.len())..p,
+                        trim_range: 0..p,
+                        retain_range: p..read.len(),
+                    }),
+                    None => None,
+                }
+            }
         }
     }
 }
@@ -489,7 +599,7 @@ fn compute_path(
     {
         let mut max_l_score = pairwise::MIN_SCORE;
         let mut max_r_score = pairwise::MIN_SCORE;
-        for (i, &this_match) in matches.iter().enumerate() {
+        for &this_match in matches.iter() {
             max_l_score = max(max_l_score, l_score(this_match));
             max_r_score = max(max_r_score, r_score(this_match));
         }
@@ -569,68 +679,153 @@ fn compute_path(
 mod tests {
     use super::*;
     use std::path::Path;
+
     #[test]
     fn test_anywhere_3p() {
         test_helper(
+            "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
             WhichEnd::ThreePrime,
             AdapterLoc::Anywhere,
+            "tests/input.fa",
             "tests/cutadapt_v1_18_anywhere_3p.fa",
+        );
+    }
+
+    #[test]
+    fn test_anywhere_3p_poly_a() {
+        test_helper(
+            "AAAAAAAAAAAAAAAAAAAA",
+            WhichEnd::ThreePrime,
+            AdapterLoc::Anywhere,
+            "tests/input_polyA.fa",
+            "tests/cutadapt_v1_18_anywhere_3p_polyA.fa",
         );
     }
 
     #[test]
     fn test_anywhere_5p() {
         test_helper(
+            "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
             WhichEnd::FivePrime,
             AdapterLoc::Anywhere,
+            "tests/input.fa",
             "tests/cutadapt_v1_18_anywhere_5p.fa",
+        );
+    }
+
+    #[test]
+    fn test_anywhere_5p_poly_a() {
+        test_helper(
+            "AAAAAAAAAAAAAAAAAAAA",
+            WhichEnd::FivePrime,
+            AdapterLoc::Anywhere,
+            "tests/input_polyA.fa",
+            "tests/cutadapt_v1_18_anywhere_5p_polyA.fa",
         );
     }
 
     #[test]
     fn test_anchored_3p() {
         test_helper(
+            "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
             WhichEnd::ThreePrime,
             AdapterLoc::Anchored,
+            "tests/input.fa",
             "tests/cutadapt_v1_18_anchored_3p.fa",
+        );
+    }
+
+    #[test]
+    fn test_anchored_3p_poly_a() {
+        test_helper(
+            "AAAAAAAAAAAAAAAAAAAA",
+            WhichEnd::ThreePrime,
+            AdapterLoc::Anchored,
+            "tests/input_polyA.fa",
+            "tests/cutadapt_v1_18_anchored_3p_polyA.fa",
         );
     }
 
     #[test]
     fn test_anchored_5p() {
         test_helper(
+            "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
             WhichEnd::FivePrime,
             AdapterLoc::Anchored,
+            "tests/input.fa",
             "tests/cutadapt_v1_18_anchored_5p.fa",
+        );
+    }
+
+    #[test]
+    fn test_anchored_5p_poly_a() {
+        test_helper(
+            "AAAAAAAAAAAAAAAAAAAA",
+            WhichEnd::FivePrime,
+            AdapterLoc::Anchored,
+            "tests/input_polyA.fa",
+            "tests/cutadapt_v1_18_anchored_5p_polyA.fa",
         );
     }
 
     #[test]
     fn test_non_internal_3p() {
         test_helper(
+            "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
             WhichEnd::ThreePrime,
             AdapterLoc::NonInternal,
+            "tests/input.fa",
             "tests/cutadapt_v1_18_non_internal_3p.fa",
+        );
+    }
+
+    #[test]
+    fn test_non_internal_3p_poly_a() {
+        test_helper(
+            "AAAAAAAAAAAAAAAAAAAA",
+            WhichEnd::ThreePrime,
+            AdapterLoc::NonInternal,
+            "tests/input_polyA.fa",
+            "tests/cutadapt_v1_18_non_internal_3p_polyA.fa",
         );
     }
 
     #[test]
     fn test_non_internal_5p() {
         test_helper(
+            "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC",
             WhichEnd::FivePrime,
             AdapterLoc::NonInternal,
+            "tests/input.fa",
             "tests/cutadapt_v1_18_non_internal_5p.fa",
         );
     }
 
-    fn test_helper(end: WhichEnd, loc: AdapterLoc, ref_path: impl AsRef<Path>) {
+    #[test]
+    fn test_non_internal_5p_poly_a() {
+        test_helper(
+            "AAAAAAAAAAAAAAAAAAAA",
+            WhichEnd::FivePrime,
+            AdapterLoc::NonInternal,
+            "tests/input_polyA.fa",
+            "tests/cutadapt_v1_18_non_internal_5p_polyA.fa",
+        );
+    }
+
+    fn test_helper(
+        adapter_seq: impl ToString,
+        end: WhichEnd,
+        loc: AdapterLoc,
+        input_path: impl AsRef<Path>,
+        cutadapt_output_path: impl AsRef<Path>,
+    ) {
         use bio::io::fasta::Reader;
 
-        let adapter = Adapter::new("primer", end, loc, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC");
+        let adapter = Adapter::new("primer", end, loc, adapter_seq);
         let mut trimmer = AdapterTrimmer::new(&adapter);
 
-        let input = Reader::from_file("tests/input.fa").unwrap();
-        let output = Reader::from_file(ref_path).unwrap();
+        let input = Reader::from_file(input_path).unwrap();
+        let cutadapt_output = Reader::from_file(cutadapt_output_path).unwrap();
 
         let mut total = 0;
         let mut correct_untrimmed = 0;
@@ -639,7 +834,7 @@ mod tests {
         let mut correct_trimmed = 0;
         let mut inconsistent_trimmed = 0;
 
-        for (r_i, r_o) in input.records().zip(output.records()) {
+        for (r_i, r_o) in input.records().zip(cutadapt_output.records()) {
             let r_i = r_i.unwrap();
             let r_o = r_o.unwrap();
 
@@ -742,5 +937,40 @@ mod tests {
         assert_eq!(result.retain_range, 0..67);
         assert_eq!(result.adapter_range, 67..78);
         assert_eq!(result.trim_range, 67..78);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_empty_adapter_seq() {
+        let adapter = Adapter::new("p", WhichEnd::ThreePrime, AdapterLoc::NonInternal, "");
+        let trimmer = AdapterTrimmer::new(&adapter);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_too_short_adapter_seq() {
+        let adapter = Adapter::new("p", WhichEnd::ThreePrime, AdapterLoc::NonInternal, "ACG");
+        let trimmer = AdapterTrimmer::new(&adapter);
+    }
+
+    #[test]
+    fn test_homopolymer() {
+        let adapter = Adapter::new(
+            "p",
+            WhichEnd::ThreePrime,
+            AdapterLoc::NonInternal,
+            "AAAAAAAA",
+        );
+        let trimmer = AdapterTrimmer::new(&adapter);
+        assert!(trimmer.homopolymer);
+
+        let adapter = Adapter::new(
+            "p",
+            WhichEnd::ThreePrime,
+            AdapterLoc::NonInternal,
+            "GCATCCAATC",
+        );
+        let trimmer = AdapterTrimmer::new(&adapter);
+        assert!(!trimmer.homopolymer);
     }
 }
