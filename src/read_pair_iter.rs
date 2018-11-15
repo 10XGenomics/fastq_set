@@ -13,6 +13,8 @@ use std::io::BufRead;
 use utils;
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
+/// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field, 
+/// and set `r1_interleaved = true`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InputFastqs {
     pub r1: String,
@@ -22,9 +24,12 @@ pub struct InputFastqs {
     pub r1_interleaved: bool,
 }
 
-/// Read from a parallel set of FASTQ files.
-/// Supports any combination of R1/R2/I1/I2 read files,
-/// as well as a interleaved R1/R2 file.
+/// Read sequencing data from a parallel set of FASTQ files.
+/// Illumina sequencers typically emit a parallel set of FASTQ files, with one file
+/// for each read component taken by the sequencer. Up to 4 reads are possible (R1, R2, I1, and I2).
+/// The reader supports any combination of R1/R2/I1/I2 read files, 
+/// as well as an interleaved R1/R2 file. Supports plain or gzipped FASTQ files, which
+/// will be detected based on the filename extension.
 pub struct ReadPairIter {
     iters: [Option<RecordRefIter<Box<BufRead>>>; 4],
     paths: [Option<PathBuf>; 4],
@@ -45,7 +50,10 @@ impl ReadPairIter {
         )
     }
 
-    fn new<P: AsRef<Path>>(
+    /// Open a `ReadPairIter` given of FASTQ files.
+    /// For interleaved R1/R2 files, set `r2 = None`, and set 
+    /// `r1_interleaved = true`.
+    pub fn new<P: AsRef<Path>>(
         r1: Option<P>,
         r2: Option<P>,
         i1: Option<P>,
@@ -106,7 +114,7 @@ impl ReadPairIter {
                         if record.is_none() {
                             // We should only hit this if the FASTQ has an odd
                             // number of records. Throw an error
-                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records.", self.paths.get(idx).unwrap());
+                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
                             return Err(msg)
                         }
                         let which = WhichRead::read_types()[idx + 1];
@@ -176,6 +184,7 @@ mod test_read_pair_iter {
 
         let res : Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_ok());
+        assert_eq!(res.unwrap().len(), 8);
     }
 
     #[test]
@@ -189,7 +198,6 @@ mod test_read_pair_iter {
         ).unwrap();
 
         let res : Result<Vec<ReadPair>, Error> = it.collect();
-        println!("{:?}", res);
         assert!(res.is_err());
     }
 
@@ -204,11 +212,8 @@ mod test_read_pair_iter {
         ).unwrap();
 
         let res : Result<Vec<ReadPair>, Error> = it.collect();
-        println!("{:?}", res);
         assert!(res.is_err());
     }
-
-
 
     #[test]
     fn test_short_i1() {
