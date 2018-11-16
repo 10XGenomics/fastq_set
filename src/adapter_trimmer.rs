@@ -943,14 +943,14 @@ mod tests {
     #[should_panic]
     fn test_empty_adapter_seq() {
         let adapter = Adapter::new("p", WhichEnd::ThreePrime, AdapterLoc::NonInternal, "");
-        let trimmer = AdapterTrimmer::new(&adapter);
+        let _ = AdapterTrimmer::new(&adapter);
     }
 
     #[test]
     #[should_panic]
     fn test_too_short_adapter_seq() {
         let adapter = Adapter::new("p", WhichEnd::ThreePrime, AdapterLoc::NonInternal, "ACG");
-        let trimmer = AdapterTrimmer::new(&adapter);
+        let _ = AdapterTrimmer::new(&adapter);
     }
 
     #[test]

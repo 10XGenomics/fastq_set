@@ -15,7 +15,7 @@ rayon = "*"
 log = "*"
 bincode = "1.0.1"
 fxhash = "0.2.1"
-rand = ">=0.4"
+rand = "0.5.0"
 itertools = ">=0.6"
 failure = "*"
 lz4 = "*"
@@ -36,3 +36,4 @@ metric = { path = "../metric" }
 
 [dev-dependencies]
 time = "*"
+proptest = "0.6.0"

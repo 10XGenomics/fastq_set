@@ -45,17 +45,6 @@ pub(crate) fn reduce_counts<K: Hash + Eq>(
     v1
 }
 
-pub(crate) fn reduce_counts_err<K: Hash + Eq>(
-    v1: Result<FxHashMap<K, u32>, Error>,
-    v2: Result<FxHashMap<K, u32>, Error>,
-) -> Result<FxHashMap<K, u32>, Error> {
-    match (v1, v2) {
-        (Ok(m1), Ok(m2)) => Ok(reduce_counts(m1, m2)),
-        (Err(e1), _) => Err(e1),
-        (_, Err(e2)) => Err(e2),
-    }
-}
-
 /// Check an observed barcode sequence against a whitelist of barcodes
 pub struct BarcodeChecker {
     whitelist: FxHashSet<SSeq>,

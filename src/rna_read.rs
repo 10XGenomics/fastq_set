@@ -7,6 +7,8 @@ use read_pair::{TrimmedReadPair, ReadPair, ReadPart, RpRange, WhichRead};
 use std::collections::HashMap;
 use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
 use WhichEnd;
+use adapter_trimmer::{AdapterTrimmer, TrimResult};
+use std::ops;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
@@ -119,7 +121,7 @@ pub struct ChemistryDef {
 }
 
 impl ChemistryDef {
-    fn is_paired_end(&self) -> bool {
+    pub fn is_paired_end(&self) -> bool {
         self.rna_read2_type.is_some()
     }
 }
@@ -369,6 +371,40 @@ impl RnaRead {
             self.read.get_range(&range, ReadPart::Qual)
         } else {
             None
+        }
+    }
+
+    pub fn trim_adapter<'a>(&mut self, trimmers: &mut HashMap<WhichRead, Vec<AdapterTrimmer<'a>>>) {
+        use std::cmp::{min, max};
+
+        let intersect_retain_ranges = | results: &[Option<TrimResult>], seq_len: usize | -> ops::Range<usize> {
+            let mut last_start = 0;
+            let mut first_end = seq_len;
+            for result in results.iter() {
+                if let Some(r) = result {
+                    last_start = max(last_start, r.retain_range.start);
+                    first_end = min(first_end, r.retain_range.end);
+                }
+            }
+            last_start..first_end
+        };
+
+        // Trim r1
+        if let Some(ad_trimmers) = trimmers.get_mut(&self.r1_range.read()) {
+            let r1 = self.read.get_range(&self.r1_range, ReadPart::Seq).unwrap();
+            let trim_results: Vec<_> = ad_trimmers.iter_mut().map(|t| t.find(r1)).collect();
+            let shrink_range = intersect_retain_ranges(&trim_results, r1.len());
+            self.r1_range.shrink(&shrink_range);
+        }
+
+        // Trim r2
+        if let Some(mut r2_range) = self.r2_range {
+            if let Some(ad_trimmers) = trimmers.get_mut(&r2_range.read()) {
+                let r2 = self.read.get_range(&r2_range, ReadPart::Seq).unwrap();
+                let trim_results: Vec<_> = ad_trimmers.iter_mut().map(|t| t.find(r2)).collect();
+                let shrink_range = intersect_retain_ranges(&trim_results, r2.len());
+                r2_range.shrink(&shrink_range);
+            }
         }
     }
 

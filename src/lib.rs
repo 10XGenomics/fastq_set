@@ -2,6 +2,11 @@
 
 //! Process 10x FASTQs
 //!
+
+#[cfg(test)]
+#[macro_use]
+extern crate proptest;
+
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
@@ -43,6 +48,7 @@ pub mod rna_read;
 pub mod adapter_trimmer;
 
 pub use fastq::Record;
+pub use fastq::OwnedRecord;
 
 use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
