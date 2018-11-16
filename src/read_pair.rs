@@ -214,7 +214,7 @@ use serde_bytes::ByteBuf;
 pub struct ReadPair {
     offsets: [ReadOffset; 4],
 
-    // Single vector with all the raw FASTQ data
+    // Single vector with all the raw FASTQ data. 
     // Use with = "serde_bytes" to get much faster perf
     data: ByteBuf,
 }
