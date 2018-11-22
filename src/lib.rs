@@ -143,20 +143,20 @@ impl std::fmt::Display for Barcode {
     }
 }
 
-/// A trait for reads that have access to raw 10x-barcode and sample-index sequence and qualities
-pub trait TenXReadPair {
-    fn si_seq(&self) -> Option<&[u8]>;
-    fn si_qual(&self) -> Option<&[u8]>;
-    fn raw_bc_seq(&self) -> &[u8];
-    fn raw_bc_qual(&self) -> &[u8];
-}
-
 /// A trait for objects that carry a 10x barcode, allowing for querying the barcode,
 /// and correcting the barcode.
 pub trait HasBarcode {
     fn barcode(&self) -> &Barcode;
     fn barcode_qual(&self) -> &[u8];
     fn set_barcode(&mut self, barcode: Barcode);
+    fn raw_bc_seq(&self) -> &[u8];
+    fn raw_bc_qual(&self) -> &[u8];
+}
+
+/// A trait for reads that may have a sample index.
+pub trait HasSampleIndex {
+    fn si_seq(&self) -> Option<&[u8]>;
+    fn si_qual(&self) -> Option<&[u8]>;
 }
 
 /// A container for a read UMI sequence.

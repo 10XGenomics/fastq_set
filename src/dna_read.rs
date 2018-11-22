@@ -9,7 +9,7 @@ use std::ops::Range;
 use fxhash::FxHashMap;
 
 use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
-use {AlignableReadPair, Barcode, FastqProcessor, HasBamTags, TenXReadPair, HasBarcode, InputFastqs, SSeq};
+use {AlignableReadPair, Barcode, FastqProcessor, HasBamTags, HasBarcode, HasSampleIndex, InputFastqs, SSeq};
 
 /// Specification of a single set of FASTQs and how to interpret the read components.
 /// This structure is produced by the SETUP_CHUNKS stage of DNA pipelines
@@ -128,28 +128,6 @@ pub struct DnaRead {
     chunk_id: u16,
 }
 
-impl TenXReadPair for DnaRead {
-    /// Sample index (I1) sequence
-    fn si_seq(&self) -> Option<&[u8]> {
-        self.data.get(WhichRead::I1, ReadPart::Seq)
-    }
-
-    /// Sample index (I1) QVs
-    fn si_qual(&self) -> Option<&[u8]> {
-        self.data.get(WhichRead::I1, ReadPart::Qual)
-    }
-
-    /// Raw, uncorrected barcode sequence
-    fn raw_bc_seq(&self) -> &[u8] {
-        self.data.get_range(&self.bc_range, ReadPart::Seq).unwrap()
-    }
-
-    /// Raw barcode QVs
-    fn raw_bc_qual(&self) -> &[u8] {
-        self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
-    }
-}
-
 impl HasBarcode for DnaRead {
     fn barcode(&self) -> &Barcode {
         &self.barcode
@@ -161,6 +139,24 @@ impl HasBarcode for DnaRead {
 
     fn barcode_qual(&self) -> &[u8] {
         self.raw_bc_seq()
+    }
+
+    fn raw_bc_seq(&self) -> &[u8] {
+        self.data.get_range(&self.bc_range, ReadPart::Seq).unwrap()
+    }
+
+    fn raw_bc_qual(&self) -> &[u8] {
+        self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+    }
+}
+
+impl HasSampleIndex for DnaRead {
+    fn si_seq(&self) -> Option<&[u8]> {
+        self.data.get(WhichRead::I1, ReadPart::Seq)
+    }
+
+    fn si_qual(&self) -> Option<&[u8]> {
+        self.data.get(WhichRead::I1, ReadPart::Qual)
     }
 }
 
