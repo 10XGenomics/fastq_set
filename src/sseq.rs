@@ -2,11 +2,13 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
+use std::borrow::Borrow;
+use std::hash::{Hash, Hasher};
 use std::str;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct SSeq {
     pub(crate) length: u8,
     pub(crate) sequence: [u8; 23],
@@ -46,6 +48,18 @@ impl AsRef<[u8]> for SSeq {
 impl Into<String> for SSeq {
     fn into(self) -> String {
         String::from(str::from_utf8(self.seq()).unwrap())
+    }
+}
+
+impl Borrow<[u8]> for SSeq {
+    fn borrow(&self) -> &[u8] {
+        self.seq()
+    }
+}
+
+impl Hash for SSeq {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.seq().hash(state);
     }
 }
 

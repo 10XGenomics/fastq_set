@@ -6,12 +6,9 @@
 
 use std::ops::Range;
 
-use failure::Error;
-use fxhash::FxHashSet;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use fxhash::FxHashMap;
 
 use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
-use read_pair_iter::ReadPairIter;
 use {AlignableReadPair, Barcode, FastqProcessor, HasBamTags, TenXReadPair, HasBarcode, InputFastqs, SSeq};
 
 /// Specification of a single set of FASTQs and how to interpret the read components.
@@ -39,11 +36,11 @@ pub struct DnaProcessor {
     chunk_id: u16,
     trim_r1: u8,
     trim_r2: u8,
-    whitelist: FxHashSet<SSeq>,
+    whitelist: FxHashMap<SSeq, u32>,
 }
 
 impl DnaProcessor {
-    pub fn new(chunk: DnaChunk, chunk_id: u16, whitelist: FxHashSet<SSeq>) -> Self {
+    pub fn new(chunk: DnaChunk, chunk_id: u16, whitelist: FxHashMap<SSeq, u32>) -> Self {
         DnaProcessor {
             chunk,
             chunk_id,
@@ -80,9 +77,11 @@ impl FastqProcessor for DnaProcessor {
         };
 
         // Snip out barcode
-        let bc_seq = SSeq::new(read.get_range(&bc_range, ReadPart::Seq).unwrap());
-        let is_valid = self.whitelist.contains(&bc_seq);
-        let barcode = Barcode::new(self.chunk.gem_group, bc_seq.seq(), is_valid);
+        let barcode = {
+            let bc_seq = read.get_range(&bc_range, ReadPart::Seq).unwrap();
+            let is_valid = self.whitelist.contains_key(bc_seq);
+            Barcode::new(self.chunk.gem_group, bc_seq, is_valid)
+        };
 
         Some(DnaRead {
             data: read,

@@ -36,7 +36,6 @@ extern crate serde_json;
 extern crate shardio;
 extern crate tempfile;
 
-#[macro_use]
 extern crate log;
 extern crate lz4;
 extern crate metric;

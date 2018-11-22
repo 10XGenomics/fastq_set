@@ -17,9 +17,6 @@ use serde::Serialize;
 use failure::Error;
 use flate2::read::MultiGzDecoder;
 use lz4;
-use fxhash::FxHashSet;
-
-use SSeq;
 
 const GZ_BUF_SIZE: usize = 1 << 22;
 
@@ -41,15 +38,6 @@ pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
         let buf_reader = BufReader::with_capacity(32 * 1024, r);
         Ok(Box::new(buf_reader))
     }
-}
-
-pub fn load_barcode_whitelist(path: impl AsRef<Path>) -> Result<FxHashSet<SSeq>, Error> {
-    let reader = open_with_gz(path)?;
-    let mut wl = FxHashSet::default();
-    for l in reader.lines() {
-        wl.insert(SSeq::new(&l?.into_bytes()));
-    }
-    Ok(wl)
 }
 
 /// Serialize object `obj` of type `T` to the file `filename`
