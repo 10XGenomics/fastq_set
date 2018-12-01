@@ -42,6 +42,7 @@ pub mod sample_def;
 pub mod barcode;
 pub mod sseq;
 pub mod utils;
+pub mod bc_sort;
 pub mod barcode_sort;
 pub mod metric_utils;
 
