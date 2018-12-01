@@ -19,6 +19,7 @@ extern crate serde_derive;
 extern crate bincode;
 extern crate serde;
 extern crate serde_bytes;
+extern crate bytes;
 
 extern crate fxhash;
 extern crate rand;

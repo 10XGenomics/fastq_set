@@ -270,8 +270,8 @@ mod test_dna_cfg {
             procs.push(prc);
         }
 
-        // let bc_sort_results =
-            // ::bc_sort::barcode_sort_workflow(procs, "test", "test/10K-agora-dev.txt").unwrap();
+        //let bc_sort_results =
+        //    crate::bc_sort::barcode_sort_workflow(procs, "tests", "tests/10K-agora-dev.txt").unwrap();
     }
 
     const CRG_CFG: &str = r#"
@@ -554,25 +554,25 @@ mod test_dna_cfg {
     const ATAC_CFG_TEST: &str = r#"
     [
         {
-            "barcode": "test/bcl_processor/atac/read-I2_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
+            "barcode": "tests/bcl_processor/atac/read-I2_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
             "barcode_reverse_complement": false,
             "gem_group": 1,
-            "read1": "test/bcl_processor/atac/read-RA_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
+            "read1": "tests/bcl_processor/atac/read-RA_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
             "read2": null,
             "read_group": "66333:66333:1:HC7WVDMXX:1",
             "reads_interleaved": true,
-            "sample_index": "test/bcl_processor/atac/read-I1_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
+            "sample_index": "tests/bcl_processor/atac/read-I1_si-CGGAGCAC_lane-001-chunk-001.fastq.gz",
             "subsample_rate": 1.0
         },
         {
-            "barcode": "test/bcl_processor/atac/read-I2_si-GACCTATT_lane-001-chunk-001.fastq.gz",
+            "barcode": "tests/bcl_processor/atac/read-I2_si-GACCTATT_lane-001-chunk-001.fastq.gz",
             "barcode_reverse_complement": false,
             "gem_group": 1,
-            "read1": "test/bcl_processor/atac/read-RA_si-GACCTATT_lane-001-chunk-001.fastq.gz",
+            "read1": "tests/bcl_processor/atac/read-RA_si-GACCTATT_lane-001-chunk-001.fastq.gz",
             "read2": null,
             "read_group": "66333:66333:1:HC7WVDMXX:1",
             "reads_interleaved": true,
-            "sample_index": "test/bcl_processor/atac/read-I1_si-GACCTATT_lane-001-chunk-001.fastq.gz",
+            "sample_index": "tests/bcl_processor/atac/read-I1_si-GACCTATT_lane-001-chunk-001.fastq.gz",
             "subsample_rate": 1.0
         }
     ]

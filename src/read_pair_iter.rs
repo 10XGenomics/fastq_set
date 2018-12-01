@@ -6,8 +6,9 @@ use failure::Error;
 use std::path::{Path, PathBuf};
 
 use fastq::{self, RecordRefIter};
-use read_pair::{ReadPair, WhichRead};
+use read_pair::{MutReadPair, ReadPair, WhichRead};
 
+use bytes::{BytesMut, BufMut};
 use failure::format_err;
 use std::io::BufRead;
 use utils;
@@ -24,6 +25,8 @@ pub struct InputFastqs {
     pub r1_interleaved: bool,
 }
 
+const BUF_SIZE: usize = 4096 * 4;
+
 /// Read sequencing data from a parallel set of FASTQ files.
 /// Illumina sequencers typically emit a parallel set of FASTQ files, with one file
 /// for each read component taken by the sequencer. Up to 4 reads are possible (R1, R2, I1, and I2).
@@ -35,6 +38,8 @@ pub struct ReadPairIter {
     paths: [Option<PathBuf>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,
+    buffer: BytesMut,
+
 }
 
 impl ReadPairIter {
@@ -75,16 +80,24 @@ impl ReadPairIter {
             }
         }
 
+        let buffer = BytesMut::with_capacity(BUF_SIZE);
+
         Ok(ReadPairIter {
             paths,
             iters,
             r1_interleaved,
+            buffer,
         })
     }
 
     fn get_next(&mut self) -> Result<Option<ReadPair>, Error> {
 
-        let mut rp = ReadPair::empty();
+        // Recycle the buffer if it's almost full.
+        if self.buffer.remaining_mut() < 512 {
+            self.buffer = BytesMut::with_capacity(BUF_SIZE)
+        }
+
+        let mut rp = MutReadPair::empty(&mut self.buffer);
 
         // Track which reader was the first to finish.
         let mut iter_ended = [false; 4];
@@ -149,7 +162,7 @@ impl ReadPairIter {
             }
         }
 
-        Ok(Some(rp))
+        Ok(Some(rp.freeze()))
     }
 }
 
