@@ -3,6 +3,8 @@
 //! Container for the FASTQ data from a single sequencing 'cluster',
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
+use std::io::Write;
+use failure::Error;
 use bytes::{Bytes, BytesMut};
 use fastq::{Record, OwnedRecord};
 use std::collections::HashMap;
@@ -323,8 +325,29 @@ impl ReadPair {
         result
     }
 
+    /// Read length of the selected read.
     pub fn len(&self, which: WhichRead) -> Option<usize> {
         self.offsets[which as usize].seq_len()
+    }
+
+    /// Write read selected by `which` in FASTQ format to `writer`. 
+    /// This method will silently do nothing if the selected read doesn't exist.
+    pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<(), Error> {
+        if self.offsets[which as usize].exists {
+            let head = self.get(which, ReadPart::Header).unwrap();
+            writer.write_all(head)?;
+            writer.write_all(b"\n")?;
+
+            let seq = self.get(which, ReadPart::Seq).unwrap();
+            writer.write_all(seq)?;
+            writer.write_all(b"\n>\n")?;
+
+            let qual = self.get(which, ReadPart::Qual).unwrap();
+            writer.write_all(qual)?;
+            writer.write_all(b"\n")?;
+        }
+
+        Ok(())
     }
 }
 

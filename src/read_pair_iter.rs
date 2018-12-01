@@ -184,6 +184,38 @@ impl Iterator for ReadPairIter {
 #[cfg(test)]
 mod test_read_pair_iter {
     use super::*;
+    use file_diff::{diff_files};
+    use std::fs::{File};
+    use std::io::Write;
+
+    // Verify that we can parse and write to the identical FASTQ.
+    #[test]
+    fn test_round_trip() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-RA.fastq"),
+            None,
+            Some("tests/read_pair_iter/good-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true
+        ).unwrap();
+
+        let _res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res = _res.unwrap();
+
+        {    
+            let mut output = File::create("tests/fastq_round_trip.fastq").unwrap();
+            for rec in res {
+                rec.write_fastq(WhichRead::R1, &mut output).unwrap();
+                rec.write_fastq(WhichRead::R2, &mut output).unwrap();
+            }
+            output.flush().unwrap();
+
+            let mut input = File::open("tests/read_pair_iter/good-RA.fastq").unwrap();
+            diff_files(&mut input, &mut output);
+        }
+
+        std::fs::remove_file("tests/fastq_round_trip.fastq").unwrap();
+    }
 
     #[test]
     fn test_correct() {

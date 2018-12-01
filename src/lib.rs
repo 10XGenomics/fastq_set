@@ -8,6 +8,9 @@
 #[macro_use]
 extern crate proptest;
 
+#[cfg(test)]
+extern crate file_diff;
+
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
