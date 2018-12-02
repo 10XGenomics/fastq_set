@@ -11,7 +11,6 @@ extern crate proptest;
 #[cfg(test)]
 extern crate file_diff;
 
-#[macro_use]
 extern crate failure;
 extern crate fastq;
 extern crate flate2;

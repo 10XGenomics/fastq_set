@@ -260,7 +260,7 @@ impl AlignableReadPair for DnaRead {
 mod test_dna_cfg {
     use super::*;
     use serde_json;
-    use utils::load_barcode_whitelist;
+    use barcode::load_barcode_whitelist;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()
@@ -290,14 +290,9 @@ mod test_dna_cfg {
         println!("{:?}", chunks);
 
         let mut procs = Vec::new();
-        let whitelist = load_barcode_whitelist("test/10K-agora-dev.txt").unwrap();
+        let whitelist = load_barcode_whitelist("tests/10K-agora-dev.txt").unwrap();
         for (idx, chunk) in chunks.into_iter().enumerate() {
-            let prc = DnaProcessor {
-                chunk: chunk,
-                chunk_id: idx as u16,
-                whitelist,
-            };
-
+            let prc = DnaProcessor::new(chunk, idx as u16, whitelist.clone());
             procs.push(prc);
         }
 
