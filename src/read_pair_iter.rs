@@ -203,13 +203,16 @@ mod test_read_pair_iter {
         let res = _res.unwrap();
 
         {    
-            let mut output = File::create("tests/fastq_round_trip.fastq").unwrap();
-            for rec in res {
-                rec.write_fastq(WhichRead::R1, &mut output).unwrap();
-                rec.write_fastq(WhichRead::R2, &mut output).unwrap();
+            {
+                let mut output = File::create("tests/fastq_round_trip.fastq").unwrap();
+                for rec in res {
+                    rec.write_fastq(WhichRead::R1, &mut output).unwrap();
+                    rec.write_fastq(WhichRead::R2, &mut output).unwrap();
+                }
+                output.flush().unwrap();
             }
-            output.flush().unwrap();
 
+            let mut output = File::open("tests/fastq_round_trip.fastq").unwrap();
             let mut input = File::open("tests/read_pair_iter/good-RA.fastq").unwrap();
             assert!(diff_files(&mut input, &mut output));
         }
