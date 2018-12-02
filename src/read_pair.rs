@@ -340,7 +340,7 @@ impl ReadPair {
 
             let seq = self.get(which, ReadPart::Seq).unwrap();
             writer.write_all(seq)?;
-            writer.write_all(b"\n>\n")?;
+            writer.write_all(b"\n+\n")?;
 
             let qual = self.get(which, ReadPart::Qual).unwrap();
             writer.write_all(qual)?;
