@@ -9,7 +9,10 @@ use std::ops::Range;
 use fxhash::FxHashMap;
 
 use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
-use {AlignableReadPair, Barcode, FastqProcessor, HasBamTags, HasBarcode, HasSampleIndex, InputFastqs, SSeq};
+use {
+    AlignableReadPair, Barcode, FastqProcessor, HasBamTags, HasBarcode, HasSampleIndex,
+    InputFastqs, SSeq,
+};
 
 /// Specification of a single set of FASTQs and how to interpret the read components.
 /// This structure is produced by the SETUP_CHUNKS stage of DNA pipelines
@@ -22,7 +25,7 @@ pub struct DnaChunk {
     gem_group: u16,
     read1: String,
     read2: Option<String>,
-    read_group: String,
+    pub read_group: String,
     reads_interleaved: bool,
     sample_index: Option<String>,
     subsample_rate: f64,
@@ -125,7 +128,7 @@ pub struct DnaRead {
     bc_range: RpRange,
     trim_r1: u8,
     trim_r2: u8,
-    chunk_id: u16,
+    pub chunk_id: u16,
 }
 
 impl HasBarcode for DnaRead {
@@ -174,7 +177,12 @@ impl HasBamTags for DnaRead {
 impl DnaRead {
     /// FASTQ read header
     pub fn header(&self) -> &[u8] {
-        self.data.get(WhichRead::R1, ReadPart::Header).unwrap()
+        self.data
+            .get(WhichRead::R1, ReadPart::Header)
+            .unwrap()
+            .split(u8::is_ascii_whitespace)
+            .next()
+            .unwrap()
     }
 
     /// Full raw R1 sequence
