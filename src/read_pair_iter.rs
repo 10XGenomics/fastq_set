@@ -211,7 +211,7 @@ mod test_read_pair_iter {
             output.flush().unwrap();
 
             let mut input = File::open("tests/read_pair_iter/good-RA.fastq").unwrap();
-            diff_files(&mut input, &mut output);
+            assert!(diff_files(&mut input, &mut output));
         }
 
         std::fs::remove_file("tests/fastq_round_trip.fastq").unwrap();
