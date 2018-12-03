@@ -24,9 +24,7 @@ rand = "0.5.0"
 itertools = ">=0.6"
 lz4 = "*"
 fastq = "^0.6"
-bwa = { git = "https://github.com/10XGenomics/rust-bwa.git", branch = "lh/slfe" }
 bio = { git = "https://github.com/sreenathkrishnan/rust-bio" }
-rust-htslib = { git = "https://github.com/10XGenomics/rust-htslib.git", branch = "lh/fix-serde-l_extranull", default-features = false, features = ["serde"] }
 shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
 
 metric = { path = "../metric" }

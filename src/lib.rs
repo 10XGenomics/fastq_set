@@ -17,7 +17,6 @@ extern crate flate2;
 extern crate itertools;
 extern crate ordered_float;
 
-extern crate rust_htslib;
 extern crate regex;
 extern crate glob;
 
