@@ -335,6 +335,7 @@ impl ReadPair {
     pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<(), Error> {
         if self.offsets[which as usize].exists {
             let head = self.get(which, ReadPart::Header).unwrap();
+            writer.write_all(b"@")?;
             writer.write_all(head)?;
             writer.write_all(b"\n")?;
 
