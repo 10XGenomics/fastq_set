@@ -1,4 +1,3 @@
-
 extern crate fastq_10x;
 use fastq_10x::adapter_trimmer::{Adapter, AdapterTrimmer};
 
@@ -30,7 +29,7 @@ fn main() -> Result<(), Error> {
     let start = PreciseTime::now();
     // Accepts a json which can populate the Input struct above
     let args: Vec<String> = env::args().collect();
-    assert!(args.len()==2);
+    assert!(args.len() == 2);
 
     let input: Input = serde_json::from_reader(File::open(&args[1])?)?;
 
@@ -50,7 +49,7 @@ fn main() -> Result<(), Error> {
             Some(result) => {
                 ntrimmed += 1;
                 trimmed_seq = &seq[result.retain_range];
-            },
+            }
             None => {
                 trimmed_seq = seq;
             }
@@ -62,7 +61,10 @@ fn main() -> Result<(), Error> {
     println!("Trimmed {}/{} reads", ntrimmed, total_reads);
 
     let end = PreciseTime::now();
-    println!("Elapsed time {} seconds for rust adapter trimmer.", start.to(end));
+    println!(
+        "Elapsed time {} seconds for rust adapter trimmer.",
+        start.to(end)
+    );
 
     Ok(())
 }

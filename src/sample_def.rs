@@ -1,12 +1,12 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
 //! Find FASTQs from SampleDefs which get passed to the input of 10x pipelines.
-use std::path::PathBuf;
-use InputFastqs;
 use fxhash::FxHashMap;
-use regex::Regex;
-use tenkit::constants::SAMPLE_INDEX_MAP;
 use glob::glob;
+use regex::Regex;
+use std::path::PathBuf;
+use tenkit::constants::SAMPLE_INDEX_MAP;
+use InputFastqs;
 
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
@@ -83,32 +83,50 @@ fn find_fastqs_10x(
         for entry in glob(pattern.as_str()).expect("invalid pattern!") {
             match entry {
                 Ok(file) => {
-                    let f = file.to_str().expect("non-unicode characters in FASTQ path!");
+                    let f = file
+                        .to_str()
+                        .expect("non-unicode characters in FASTQ path!");
                     let m = si_regex.captures(f).expect("cannot find sample index!");
-                    if m.get(1).unwrap().as_str().chars().filter(|c| *c == 'N').count() <= MAX_NS {
+                    if m.get(1)
+                        .unwrap()
+                        .as_str()
+                        .chars()
+                        .filter(|c| *c == 'N')
+                        .count()
+                        <= MAX_NS
+                    {
                         files.push(file.clone());
                     }
-                },
+                }
                 Err(e) => panic!("unreadable: {:?}", e),
             }
         }
         files.sort_unstable();
-        files 
+        files
     };
-    let si_glob = sample_index.chars().map(|c| format!("[{}N]", c)).collect::<Vec<String>>().join("");
+    let si_glob = sample_index
+        .chars()
+        .map(|c| format!("[{}N]", c))
+        .collect::<Vec<String>>()
+        .join("");
     let prefix = path.join("read-");
-    let prefix = prefix.to_str().expect("non-unicode characters in FASTQ path!");
+    let prefix = prefix
+        .to_str()
+        .expect("non-unicode characters in FASTQ path!");
     match lanes {
         Some(lanes_) => {
             for lane in lanes_ {
                 let mut t2f = FxHashMap::default();
                 for read_type in read_types {
-                    let pattern = format!("{}{}_si-{}_lane-{:03}[_\\-]*.fastq*", prefix, read_type, si_glob, lane);
+                    let pattern = format!(
+                        "{}{}_si-{}_lane-{:03}[_\\-]*.fastq*",
+                        prefix, read_type, si_glob, lane
+                    );
                     let files = fetch(&pattern);
                     t2f.insert(read_type, files);
                 }
             }
-        },
+        }
         None => {
             let mut t2f = FxHashMap::default();
             for read_type in read_types {

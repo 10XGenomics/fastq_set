@@ -3,14 +3,14 @@
 //! Container for the FASTQ data from a single sequencing 'cluster',
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
-use std::io::Write;
-use failure::Error;
 use bytes::{Bytes, BytesMut};
-use fastq::{Record, OwnedRecord};
+use failure::Error;
+use fastq::{OwnedRecord, Record};
 use std::collections::HashMap;
 use std::fmt;
-use WhichEnd;
+use std::io::Write;
 use std::ops;
+use WhichEnd;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
 /// header exists at buf[start .. head], seq exists at buf[head .. seq], etc.
@@ -46,7 +46,7 @@ pub enum WhichRead {
 }
 
 macro_rules! whichread_from {
-    ($type:ident) => (
+    ($type:ident) => {
         impl From<$type> for WhichRead {
             fn from(i: $type) -> Self {
                 match i {
@@ -54,11 +54,14 @@ macro_rules! whichread_from {
                     1 => WhichRead::R2,
                     2 => WhichRead::I1,
                     3 => WhichRead::I2,
-                    _ => panic!("Values other than 0,1,2,3 cannot be converted to WhichRead. Got {}", i),
+                    _ => panic!(
+                        "Values other than 0,1,2,3 cannot be converted to WhichRead. Got {}",
+                        i
+                    ),
                 }
             }
         }
-    )
+    };
 }
 whichread_from!(usize);
 whichread_from!(u32);
@@ -80,7 +83,7 @@ pub enum ReadPart {
 /// Compact representation of selected ReadPart and a interval in that read.
 /// Supports offsets and lengths up to 32K.
 /// Internally it is stored as a `u32` with the following bit layout
-/// 
+///
 /// +-----------+--------------+-----------+
 /// | WhichRead | Start Offset | Length    |
 /// | (2 bits)  | (15 bits)    | (15 bits) |
@@ -93,22 +96,29 @@ pub struct RpRange {
 
 impl fmt::Debug for RpRange {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RpRange {{ read: {:?}, offset: {}, len: {:?}, val: {:#b} }}", self.read(), self.offset(), self.len(), self.val)
+        write!(
+            f,
+            "RpRange {{ read: {:?}, offset: {}, len: {:?}, val: {:#b} }}",
+            self.read(),
+            self.offset(),
+            self.len(),
+            self.val
+        )
     }
 }
 
 impl RpRange {
     /// Create a `RpRange` that represent the interval [`offset`, `offset + len`) in
     /// the `read` component of a ReadPair.
-    /// 
+    ///
     /// # Args
     /// * `read` - Specify `WhichRead`
     /// * `offset` - Start of the interval. Must be less than 2^15 (=32,768)
-    /// * `len` - Optional length that determines the end of the interval. A 
+    /// * `len` - Optional length that determines the end of the interval. A
     /// value `None` indicates everything from `offset` until the end of the
     /// `read`. It is recommended that you specify the length as it is necessary
     /// to perform trim and shrink operations on `RpRange`
-    /// 
+    ///
     /// # Panics
     /// * If `offset` or `len` is >= `2^15`
     pub fn new(read: WhichRead, offset: usize, len: Option<usize>) -> RpRange {
@@ -171,7 +181,10 @@ impl RpRange {
     }
 
     pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
-        assert!(self.len().is_some(), "Shrink is only supported for RpRange with known length!");
+        assert!(
+            self.len().is_some(),
+            "Shrink is only supported for RpRange with known length!"
+        );
 
         let trim_5p = TrimDef {
             read: self.read(),
@@ -183,21 +196,27 @@ impl RpRange {
             end: WhichEnd::ThreePrime,
             amount: self.len().unwrap().saturating_sub(shrink_range.end),
         };
-        
+
         self.trim(trim_5p);
         self.trim(trim_3p);
     }
 
     pub fn trim(&mut self, trim_def: TrimDef) {
-        assert!(trim_def.read==self.read());
-        assert!(self.len().is_some(), "Trim is only supported for RpRange with known length!");
+        assert!(trim_def.read == self.read());
+        assert!(
+            self.len().is_some(),
+            "Trim is only supported for RpRange with known length!"
+        );
         let l = self.len().unwrap();
-        assert!(trim_def.amount <= l, "Attempt to trim more than the length of RpRange");
+        assert!(
+            trim_def.amount <= l,
+            "Attempt to trim more than the length of RpRange"
+        );
         if trim_def.amount > 0 {
             match trim_def.end {
                 WhichEnd::ThreePrime => {
                     self.set_len(l.saturating_sub(trim_def.amount));
-                },
+                }
                 WhichEnd::FivePrime => {
                     let offset = self.offset();
                     self.set_offset(offset + trim_def.amount);
@@ -208,7 +227,7 @@ impl RpRange {
     }
 }
 
-/// Helper struct used during construction of a ReadPair. The data for the ReadPair is 
+/// Helper struct used during construction of a ReadPair. The data for the ReadPair is
 /// accumulated in the buffer bytes::BytesMut. When all the data has been added, call
 /// `freeze()` to convert this into an immutable `ReadPair` object. Multiple `ReadPair` objects
 /// will be backed slices into the same buffer, which reduces allocation overhead.
@@ -218,12 +237,11 @@ pub(crate) struct MutReadPair<'a> {
 }
 
 impl<'a> MutReadPair<'a> {
-
     pub(super) fn empty(buffer: &mut BytesMut) -> MutReadPair {
         let offsets = [ReadOffset::default(); 4];
         MutReadPair {
             offsets,
-            data: buffer
+            data: buffer,
         }
     }
 
@@ -279,13 +297,12 @@ impl<'a> MutReadPair<'a> {
 pub struct ReadPair {
     offsets: [ReadOffset; 4],
 
-    // Single vector with all the raw FASTQ data. 
+    // Single vector with all the raw FASTQ data.
     // Use with = "serde_bytes" to get much faster perf
     data: Bytes,
 }
 
 impl ReadPair {
-
     #[inline]
     /// Get a ReadPart `part` from a read `which` in this cluster
     pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
@@ -330,7 +347,7 @@ impl ReadPair {
         self.offsets[which as usize].seq_len()
     }
 
-    /// Write read selected by `which` in FASTQ format to `writer`. 
+    /// Write read selected by `which` in FASTQ format to `writer`.
     /// This method will silently do nothing if the selected read doesn't exist.
     pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<(), Error> {
         if self.offsets[which as usize].exists {
@@ -361,15 +378,11 @@ pub struct TrimDef {
 
 impl TrimDef {
     fn new(read: WhichRead, end: WhichEnd, amount: usize) -> Self {
-        TrimDef {
-            read,
-            end,
-            amount,
-        }
+        TrimDef { read, end, amount }
     }
 }
 
-/// A `ReadPair` that supports trimming. All the data corresponding to the 
+/// A `ReadPair` that supports trimming. All the data corresponding to the
 /// original `ReadPair` is retained and the trimming only shifts the
 /// offsets for indexing various data parts.
 ///
@@ -385,7 +398,11 @@ impl From<ReadPair> for TrimmedReadPair {
         let mut trimmed_ranges = [None; 4];
         for &which in WhichRead::read_types().iter() {
             if readpair.offsets[which as usize].exists {
-                trimmed_ranges[which as usize] = Some(RpRange::new(which, 0usize, readpair.offsets[which as usize].seq_len()));
+                trimmed_ranges[which as usize] = Some(RpRange::new(
+                    which,
+                    0usize,
+                    readpair.offsets[which as usize].seq_len(),
+                ));
             }
         }
         TrimmedReadPair {
@@ -396,7 +413,6 @@ impl From<ReadPair> for TrimmedReadPair {
 }
 
 impl TrimmedReadPair {
-
     /// Trim the reads using the input `TrimDef` which specifies
     /// the read to trim, and how many nucleotides to trim from
     /// which end
@@ -404,8 +420,14 @@ impl TrimmedReadPair {
         if trim_def.amount == 0 {
             return self;
         }
-        assert!(self.trimmed_ranges[trim_def.read as usize].is_some(), "ERROR: Attempt to trim an empty sequence");
-        self.trimmed_ranges[trim_def.read as usize].as_mut().unwrap().trim(trim_def);
+        assert!(
+            self.trimmed_ranges[trim_def.read as usize].is_some(),
+            "ERROR: Attempt to trim an empty sequence"
+        );
+        self.trimmed_ranges[trim_def.read as usize]
+            .as_mut()
+            .unwrap()
+            .trim(trim_def);
         self
     }
 
@@ -423,10 +445,16 @@ impl TrimmedReadPair {
     /// before applying any other trimming to read1, otherwise, it
     /// will panic.
     pub fn r1_length(&mut self, len: usize) -> &mut Self {
-        assert!(self.is_trimmed(WhichRead::R1), "ERROR: Read1 is already trimmed prior to calling r1_length()");
+        assert!(
+            self.is_trimmed(WhichRead::R1),
+            "ERROR: Read1 is already trimmed prior to calling r1_length()"
+        );
         assert!(self.readpair.offsets[WhichRead::R1 as usize].exists);
         let ind = WhichRead::R1 as usize;
-        let trim_amount = self.readpair.offsets[ind].seq_len().unwrap().saturating_sub(len);
+        let trim_amount = self.readpair.offsets[ind]
+            .seq_len()
+            .unwrap()
+            .saturating_sub(len);
         let trim_def = TrimDef::new(WhichRead::R1, WhichEnd::ThreePrime, trim_amount);
         self.trim(trim_def)
     }
@@ -437,10 +465,16 @@ impl TrimmedReadPair {
     /// before applying any other trimming to read2, otherwise, it
     /// will panic.
     pub fn r2_length(&mut self, len: usize) -> &mut Self {
-        assert!(self.is_trimmed(WhichRead::R2), "ERROR: Read2 is already trimmed prior to calling r2_length()");
+        assert!(
+            self.is_trimmed(WhichRead::R2),
+            "ERROR: Read2 is already trimmed prior to calling r2_length()"
+        );
         assert!(self.readpair.offsets[WhichRead::R2 as usize].exists);
         let ind = WhichRead::R2 as usize;
-        let trim_amount = self.readpair.offsets[ind].seq_len().unwrap().saturating_sub(len);
+        let trim_amount = self.readpair.offsets[ind]
+            .seq_len()
+            .unwrap()
+            .saturating_sub(len);
         let trim_def = TrimDef::new(WhichRead::R2, WhichEnd::ThreePrime, trim_amount);
         self.trim(trim_def)
     }
@@ -450,8 +484,10 @@ impl TrimmedReadPair {
     pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
         let untrimmed = self.readpair.get(which, part);
         match part {
-            ReadPart::Qual | ReadPart::Seq => untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r)),
-            _ => untrimmed
+            ReadPart::Qual | ReadPart::Seq => {
+                untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r))
+            }
+            _ => untrimmed,
         }
     }
 
@@ -472,9 +508,9 @@ mod tests {
     use super::*;
     use proptest::arbitrary::any;
     use proptest::strategy::Strategy;
-    use std::cmp::{min, max};
+    use std::cmp::{max, min};
 
-    const MAX_RPRANGE_ENTRY: usize = 1usize<<15;
+    const MAX_RPRANGE_ENTRY: usize = 1usize << 15;
     #[test]
     #[should_panic]
     fn test_rprange_invalid_offset() {
@@ -529,7 +565,7 @@ mod tests {
     proptest! {
         #[test]
         fn prop_test_rprange_representation(
-            read in (0..4usize).prop_map(|r| WhichRead::from(r)), 
+            read in (0..4usize).prop_map(|r| WhichRead::from(r)),
             offset in 0..MAX_RPRANGE_ENTRY,
             len in any::<usize>()
         ) {
@@ -600,7 +636,7 @@ mod tests {
                     }
                 }
             }
-            
+
         }
     }
 
@@ -631,9 +667,9 @@ mod tests {
                     assert_eq!(rprange.offset(), expected_offset);
                     assert_eq!(rprange.len(), expected_len);
                 }
-                
+
             }
-            
+
         }
     }
 }

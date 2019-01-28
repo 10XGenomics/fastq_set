@@ -3,18 +3,18 @@
 //! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries.
 //! Provides access to the barcode and allows for dynamic trimming.
 
-use read_pair::{TrimmedReadPair, ReadPair, ReadPart, RpRange, WhichRead};
-use std::collections::HashMap;
-use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
-use WhichEnd;
 use adapter_trimmer::{AdapterTrimmer, TrimResult};
+use read_pair::{ReadPair, ReadPart, RpRange, TrimmedReadPair, WhichRead};
+use std::collections::HashMap;
 use std::ops;
+use WhichEnd;
+use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
 ///
 /// A chemistry tells you where & how to look for various read components
-/// (cell barcode, cDNA sequence, UMI, sample index) from the FASTQ 
+/// (cell barcode, cDNA sequence, UMI, sample index) from the FASTQ
 /// cluster data. It is convenient to specify the chemistry as a JSON
 /// file and let `ChemistryDef` deserialize it.
 ///
@@ -22,7 +22,7 @@ use std::ops;
 /// ![Plot](../../../../doc-media/fastq/scvdj_chem.png)
 /// The corresponding chemistry definition would be:
 ///
-/// - Barcode is present in the first 16 bases of Read 1. 
+/// - Barcode is present in the first 16 bases of Read 1.
 /// This translates to a `read_type` "R1", `read_offset` 0
 /// and `read_length` 16. Valid options for `read_type` are
 /// "R1", "R2", "I1", "I2"
@@ -59,13 +59,13 @@ use std::ops;
 ///     },
 /// ```
 /// - Every RNA product will have cDNA sequences in
-/// one or both of read1 and read2. Hence an `rna_read` 
+/// one or both of read1 and read2. Hence an `rna_read`
 /// definition is necessary for each chemistry. `rna_read2`
 /// is optional. For V(D)J, `rna_read` would be the bases in read1
-/// beyond the spacer sequence and `rna_read2` would be all the 
+/// beyond the spacer sequence and `rna_read2` would be all the
 /// bases in read2. It is not necessary that `rna_read` correspond to
-/// read1. For example, in Single Cell 5' R2-only mode, `rna_read` 
-/// would be all of read2 and `rna_read2` would be empty. 
+/// read1. For example, in Single Cell 5' R2-only mode, `rna_read`
+/// would be all of read2 and `rna_read2` would be empty.
 /// ``` text
 ///     "rna_read_length": null,
 ///     "rna_read_offset": 41,
@@ -83,7 +83,7 @@ use std::ops;
 ///     "si_read_offset": 0,
 ///     "si_read_type": "I1",
 /// ```
-/// - Strandedness is `+` when the rna_read and the transcript are 
+/// - Strandedness is `+` when the rna_read and the transcript are
 /// expected to be in the same orientation and `-` otherwise.
 /// ``` text
 ///     "strandedness": "+",
@@ -182,14 +182,22 @@ impl FastqProcessor for RnaChunk {
         let r1 = RpRange::new(
             chem.rna_read_type,
             chem.rna_read_offset,
-            chem.rna_read_length.or(trimmed_read.len(chem.rna_read_type).map(|mut l| { l-=chem.rna_read_offset; l})),
+            chem.rna_read_length
+                .or(trimmed_read.len(chem.rna_read_type).map(|mut l| {
+                    l -= chem.rna_read_offset;
+                    l
+                })),
         );
 
         let r2 = match chem.rna_read2_type {
             Some(read_type) => Some(RpRange::new(
                 read_type,
                 chem.rna_read2_offset.unwrap(),
-                chem.rna_read2_length.or(trimmed_read.len(read_type).map(|mut l| { l-=chem.rna_read2_offset.unwrap(); l})),
+                chem.rna_read2_length
+                    .or(trimmed_read.len(read_type).map(|mut l| {
+                        l -= chem.rna_read2_offset.unwrap();
+                        l
+                    })),
             )),
             None => None,
         };
@@ -213,7 +221,8 @@ impl FastqProcessor for RnaChunk {
     }
 
     fn fastq_files(&self) -> InputFastqs {
-        let r1 = self.read_chunks
+        let r1 = self
+            .read_chunks
             .get(&WhichRead::R1)
             .unwrap()
             .clone()
@@ -221,15 +230,18 @@ impl FastqProcessor for RnaChunk {
             .clone();
         InputFastqs {
             r1: r1,
-            r2: self.read_chunks
+            r2: self
+                .read_chunks
                 .get(&WhichRead::R2)
                 .unwrap_or(&None)
                 .clone(),
-            i1: self.read_chunks
+            i1: self
+                .read_chunks
                 .get(&WhichRead::I1)
                 .unwrap_or(&None)
                 .clone(),
-            i2: self.read_chunks
+            i2: self
+                .read_chunks
                 .get(&WhichRead::I2)
                 .unwrap_or(&None)
                 .clone(),
@@ -292,7 +304,6 @@ impl HasSampleIndex for RnaRead {
 }
 
 impl RnaRead {
-
     pub fn bc_range(&self) -> &RpRange {
         &self.bc_range
     }
@@ -393,19 +404,20 @@ impl RnaRead {
     }
 
     pub fn trim_adapter<'a>(&mut self, trimmers: &mut HashMap<WhichRead, Vec<AdapterTrimmer<'a>>>) {
-        use std::cmp::{min, max};
+        use std::cmp::{max, min};
 
-        let intersect_retain_ranges = | results: &[Option<TrimResult>], seq_len: usize | -> ops::Range<usize> {
-            let mut last_start = 0;
-            let mut first_end = seq_len;
-            for result in results.iter() {
-                if let Some(r) = result {
-                    last_start = max(last_start, r.retain_range.start);
-                    first_end = min(first_end, r.retain_range.end);
+        let intersect_retain_ranges =
+            |results: &[Option<TrimResult>], seq_len: usize| -> ops::Range<usize> {
+                let mut last_start = 0;
+                let mut first_end = seq_len;
+                for result in results.iter() {
+                    if let Some(r) = result {
+                        last_start = max(last_start, r.retain_range.start);
+                        first_end = min(first_end, r.retain_range.end);
+                    }
                 }
-            }
-            last_start..first_end
-        };
+                last_start..first_end
+            };
 
         // Trim r1
         if let Some(ad_trimmers) = trimmers.get_mut(&self.r1_range.read()) {
@@ -425,7 +437,6 @@ impl RnaRead {
             }
         }
     }
-
 }
 
 #[cfg(test)]

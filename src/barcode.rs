@@ -9,9 +9,9 @@ use std::cmp::max;
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
+use metric::SimpleHistogram;
 use std::hash::Hash;
 use std::io::BufRead;
-use metric::SimpleHistogram;
 
 use utils;
 use {Barcode, SSeq};
