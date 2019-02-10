@@ -5,7 +5,7 @@
 
 use read_pair::{TrimmedReadPair, ReadPair, ReadPart, RpRange, WhichRead};
 use std::collections::HashMap;
-use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
+use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
 use WhichEnd;
 use adapter_trimmer::{AdapterTrimmer, TrimResult};
 use std::ops;
@@ -270,6 +270,24 @@ impl HasBarcode for RnaRead {
 
     fn barcode_qual(&self) -> &[u8] {
         self.raw_bc_qual()
+    }
+
+    fn raw_bc_seq(&self) -> &[u8] {
+        self.read.get_range(&self.bc_range, ReadPart::Seq).unwrap()
+    }
+
+    fn raw_bc_qual(&self) -> &[u8] {
+        self.read.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+    }
+}
+
+impl HasSampleIndex for RnaRead {
+    fn si_seq(&self) -> Option<&[u8]> {
+        self.read.get(WhichRead::I1, ReadPart::Seq)
+    }
+
+    fn si_qual(&self) -> Option<&[u8]> {
+        self.read.get(WhichRead::I1, ReadPart::Qual)
     }
 }
 

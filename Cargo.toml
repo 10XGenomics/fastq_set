@@ -11,20 +11,24 @@ serde_json = "*"
 serde = "*"
 serde_bytes = "*"
 bytes = { version = "0.4", features = ["serde"] }
+failure = "*"
 tempfile = "3"
+glob = "0.2"
+regex = "1"
+
 rayon = "*"
 log = "*"
 bincode = "1.0.1"
 fxhash = "0.2.1"
 rand = "0.5.0"
 itertools = ">=0.6"
-failure = "*"
 lz4 = "*"
 fastq = "^0.6"
 bio = { git = "https://github.com/sreenathkrishnan/rust-bio" }
 shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
 
 metric = { path = "../metric" }
+tenkit = { path = "../tenkit" }
 
 [dev-dependencies]
 time = "*"
