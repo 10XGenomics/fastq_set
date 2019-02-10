@@ -49,6 +49,9 @@ pub mod sample_def;
 pub mod barcode;
 pub mod sseq;
 pub mod utils;
+// bc_sort is an older bc sorting workflow -- it's used in perf tests.
+// needs to be reconciled with mod barcode_sort.
+pub mod bc_sort;
 pub mod barcode_sort;
 pub mod metric_utils;
 
