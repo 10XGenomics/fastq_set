@@ -10,26 +10,27 @@ serde_derive = "*"
 serde_json = "*"
 serde = "*"
 serde_bytes = "*"
+bytes = { version = "0.4", features = ["serde"] }
+failure = "*"
 tempfile = "3"
+glob = "0.2"
+regex = "1"
+
 rayon = "*"
 log = "*"
 bincode = "1.0.1"
 fxhash = "0.2.1"
-rand = "0.5.1"
+rand = "0.5.0"
 itertools = ">=0.6"
-failure = "*"
 lz4 = "*"
-bio = "*"
-
-# Note you may need to use a local checkout rust-htslib to get around
-# dependecy issues in the C htslib build. (bzip2 and lzma).
-# rust-htslib = "0.19"
-# rust-htslib = { path = "../rust-htslib" }
-
+fastq = "^0.6"
+bio = { git = "https://github.com/sreenathkrishnan/rust-bio" }
 shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
-# bwa = { git = "https://github.com/10XGenomics/rust-bwa.git" }
-
-# Switch back to crates.io once our PR is released
-fastq = { git = "https://github.com/aseyboldt/fastq-rs.git"}
 
 metric = { path = "../metric" }
+tenkit = { path = "../tenkit" }
+
+[dev-dependencies]
+time = "*"
+proptest = "0.6.0"
+file_diff = "1.0"

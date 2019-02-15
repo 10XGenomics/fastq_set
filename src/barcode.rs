@@ -19,7 +19,7 @@ use {Barcode, SSeq};
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
 /// Barcodes are numbers starting at 1.
-fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
+pub fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
     let reader = utils::open_with_gz(filename)?;
     let mut bc_map = FxHashMap::default();
 
@@ -43,17 +43,6 @@ pub(crate) fn reduce_counts<K: Hash + Eq>(
     }
 
     v1
-}
-
-pub(crate) fn reduce_counts_err<K: Hash + Eq>(
-    v1: Result<FxHashMap<K, u32>, Error>,
-    v2: Result<FxHashMap<K, u32>, Error>,
-) -> Result<FxHashMap<K, u32>, Error> {
-    match (v1, v2) {
-        (Ok(m1), Ok(m2)) => Ok(reduce_counts(m1, m2)),
-        (Err(e1), _) => Err(e1),
-        (_, Err(e2)) => Err(e2),
-    }
 }
 
 /// Check an observed barcode sequence against a whitelist of barcodes

@@ -3,9 +3,12 @@
 //! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries.
 //! Provides access to the barcode and allows for dynamic trimming.
 
-use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
+use read_pair::{TrimmedReadPair, ReadPair, ReadPart, RpRange, WhichRead};
 use std::collections::HashMap;
-use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
+use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
+use WhichEnd;
+use adapter_trimmer::{AdapterTrimmer, TrimResult};
+use std::ops;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
@@ -80,7 +83,8 @@ use {Barcode, FastqProcessor, HasBarcode, InputFastqs, Umi};
 ///     "si_read_offset": 0,
 ///     "si_read_type": "I1",
 /// ```
-/// - [TODO] What strandedness does this refer to?
+/// - Strandedness is `+` when the rna_read and the transcript are 
+/// expected to be in the same orientation and `-` otherwise.
 /// ``` text
 ///     "strandedness": "+",
 /// ```
@@ -97,7 +101,7 @@ pub struct ChemistryDef {
     barcode_read_type: WhichRead,
     barcode_whitelist: String,
     description: String,
-    endedness: Option<String>,
+    endedness: Option<WhichEnd>,
     name: String,
     read_type_to_bcl2fastq_filename: HashMap<WhichRead, Option<String>>,
     read_type_to_bcl_processor_filename: HashMap<WhichRead, Option<String>>,
@@ -116,6 +120,12 @@ pub struct ChemistryDef {
     umi_read_type: WhichRead,
 }
 
+impl ChemistryDef {
+    pub fn is_paired_end(&self) -> bool {
+        self.rna_read2_type.is_some()
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RnaChunk {
     chemistry: ChemistryDef,
@@ -124,11 +134,21 @@ pub struct RnaChunk {
     read_group: String,
     reads_interleaved: bool,
     subsample_rate: Option<f64>,
+    r1_length: Option<usize>,
+    r2_length: Option<usize>,
 }
 
 impl RnaChunk {
     pub fn subsample_rate(&mut self, value: f64) -> &mut Self {
         self.subsample_rate = Some(value);
+        self
+    }
+    pub fn r1_length(&mut self, value: usize) -> &mut Self {
+        self.r1_length = Some(value);
+        self
+    }
+    pub fn r2_length(&mut self, value: usize) -> &mut Self {
+        self.r2_length = Some(value);
         self
     }
 }
@@ -137,6 +157,18 @@ impl FastqProcessor for RnaChunk {
     type ReadType = RnaRead;
     fn process_read(&self, read: ReadPair) -> Option<RnaRead> {
         let chem = &self.chemistry;
+
+        let trimmed_read = {
+            let mut trimmed = TrimmedReadPair::from(read);
+            if let Some(len) = self.r1_length {
+                trimmed.r1_length(len);
+            }
+            if let Some(len) = self.r2_length {
+                trimmed.r2_length(len);
+            }
+            trimmed
+        };
+
         let bc_range = RpRange::new(
             chem.barcode_read_type,
             chem.barcode_read_offset,
@@ -150,27 +182,27 @@ impl FastqProcessor for RnaChunk {
         let r1 = RpRange::new(
             chem.rna_read_type,
             chem.rna_read_offset,
-            chem.rna_read_length,
+            chem.rna_read_length.or(trimmed_read.len(chem.rna_read_type).map(|mut l| { l-=chem.rna_read_offset; l})),
         );
 
         let r2 = match chem.rna_read2_type {
-            Some(read) => Some(RpRange::new(
-                read,
+            Some(read_type) => Some(RpRange::new(
+                read_type,
                 chem.rna_read2_offset.unwrap(),
-                chem.rna_read2_length,
+                chem.rna_read2_length.or(trimmed_read.len(read_type).map(|mut l| { l-=chem.rna_read2_offset.unwrap(); l})),
             )),
             None => None,
         };
 
         let barcode = Barcode::new(
             self.gem_group,
-            read.get_range(&bc_range, ReadPart::Seq).unwrap(),
+            trimmed_read.get_range(&bc_range, ReadPart::Seq).unwrap(),
             true,
         );
-        let umi = Umi::new(read.get_range(&umi_range, ReadPart::Seq).unwrap());
+        let umi = Umi::new(trimmed_read.get_range(&umi_range, ReadPart::Seq).unwrap());
 
         Some(RnaRead {
-            read,
+            read: trimmed_read,
             barcode,
             umi,
             bc_range,
@@ -218,7 +250,7 @@ impl FastqProcessor for RnaChunk {
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct RnaRead {
-    read: ReadPair,
+    read: TrimmedReadPair,
     barcode: Barcode,
     umi: Umi,
     bc_range: RpRange,
@@ -239,6 +271,24 @@ impl HasBarcode for RnaRead {
     fn barcode_qual(&self) -> &[u8] {
         self.raw_bc_qual()
     }
+
+    fn raw_bc_seq(&self) -> &[u8] {
+        self.read.get_range(&self.bc_range, ReadPart::Seq).unwrap()
+    }
+
+    fn raw_bc_qual(&self) -> &[u8] {
+        self.read.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+    }
+}
+
+impl HasSampleIndex for RnaRead {
+    fn si_seq(&self) -> Option<&[u8]> {
+        self.read.get(WhichRead::I1, ReadPart::Seq)
+    }
+
+    fn si_qual(&self) -> Option<&[u8]> {
+        self.read.get(WhichRead::I1, ReadPart::Qual)
+    }
 }
 
 impl RnaRead {
@@ -249,7 +299,7 @@ impl RnaRead {
     pub fn umi_range(&self) -> &RpRange {
         &self.umi_range
     }
-    pub fn readpair(&self) -> &ReadPair {
+    pub fn readpair(&self) -> &TrimmedReadPair {
         &self.read
     }
 
@@ -339,6 +389,40 @@ impl RnaRead {
             self.read.get_range(&range, ReadPart::Qual)
         } else {
             None
+        }
+    }
+
+    pub fn trim_adapter<'a>(&mut self, trimmers: &mut HashMap<WhichRead, Vec<AdapterTrimmer<'a>>>) {
+        use std::cmp::{min, max};
+
+        let intersect_retain_ranges = | results: &[Option<TrimResult>], seq_len: usize | -> ops::Range<usize> {
+            let mut last_start = 0;
+            let mut first_end = seq_len;
+            for result in results.iter() {
+                if let Some(r) = result {
+                    last_start = max(last_start, r.retain_range.start);
+                    first_end = min(first_end, r.retain_range.end);
+                }
+            }
+            last_start..first_end
+        };
+
+        // Trim r1
+        if let Some(ad_trimmers) = trimmers.get_mut(&self.r1_range.read()) {
+            let r1 = self.read.get_range(&self.r1_range, ReadPart::Seq).unwrap();
+            let trim_results: Vec<_> = ad_trimmers.iter_mut().map(|t| t.find(r1)).collect();
+            let shrink_range = intersect_retain_ranges(&trim_results, r1.len());
+            self.r1_range.shrink(&shrink_range);
+        }
+
+        // Trim r2
+        if let Some(mut r2_range) = self.r2_range {
+            if let Some(ad_trimmers) = trimmers.get_mut(&r2_range.read()) {
+                let r2 = self.read.get_range(&r2_range, ReadPart::Seq).unwrap();
+                let trim_results: Vec<_> = ad_trimmers.iter_mut().map(|t| t.find(r2)).collect();
+                let shrink_range = intersect_retain_ranges(&trim_results, r2.len());
+                r2_range.shrink(&shrink_range);
+            }
         }
     }
 

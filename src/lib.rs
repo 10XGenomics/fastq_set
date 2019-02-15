@@ -1,19 +1,31 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Process 10x FASTQs
+//! Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and 
+//! UMI sequences.
 //!
+
+#[cfg(test)]
+#[macro_use]
+extern crate proptest;
+
+#[cfg(test)]
+extern crate file_diff;
+
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
 extern crate itertools;
 extern crate ordered_float;
-// extern crate rust_htslib;
+
+extern crate regex;
+extern crate glob;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
 extern crate serde;
 extern crate serde_bytes;
+extern crate bytes;
 
 extern crate fxhash;
 extern crate rand;
@@ -22,17 +34,18 @@ extern crate serde_json;
 extern crate shardio;
 extern crate tempfile;
 
-// extern crate bwa;
+extern crate log;
 extern crate lz4;
 extern crate metric;
 extern crate bio;
+
+extern crate tenkit;
 
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod sample_def;
 
 pub mod barcode;
-// pub mod bc_sort;
 pub mod sseq;
 pub mod utils;
 pub mod barcode_sort;
@@ -40,14 +53,14 @@ pub mod metric_utils;
 
 pub mod dna_read;
 pub mod rna_read;
+pub mod adapter_trimmer;
 
 pub use fastq::Record;
+pub use fastq::OwnedRecord;
 
 use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
 use failure::Error;
-use rand::{SeedableRng, XorShiftRng};
-use rand::distributions::{Distribution, Range};
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
 /// FIXME : Should we use the `valid` field for `PartialEq`, `Eq`, `Hash`?
@@ -114,6 +127,10 @@ impl Barcode {
         v.extend(format!("{}", self.gem_group).as_bytes());
         v
     }
+
+    pub fn gem_group(&self) -> u16 {
+        self.gem_group
+    }
 }
 
 impl std::fmt::Display for Barcode {
@@ -128,6 +145,14 @@ pub trait HasBarcode {
     fn barcode(&self) -> &Barcode;
     fn barcode_qual(&self) -> &[u8];
     fn set_barcode(&mut self, barcode: Barcode);
+    fn raw_bc_seq(&self) -> &[u8];
+    fn raw_bc_qual(&self) -> &[u8];
+}
+
+/// A trait for reads that may have a sample index.
+pub trait HasSampleIndex {
+    fn si_seq(&self) -> Option<&[u8]>;
+    fn si_qual(&self) -> Option<&[u8]>;
 }
 
 /// A container for a read UMI sequence.
@@ -207,8 +232,6 @@ where
 {
     read_pair_iter: ReadPairIter,
     processor: &'a Processor,
-    rand: XorShiftRng,
-    range: Range<f64>,
 }
 
 impl<'a, Processor> FastqProcessorIter<'a, Processor> 
@@ -216,22 +239,21 @@ where
     Processor: FastqProcessor
 {
     pub fn new(processor: &'a Processor) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?;
+        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+            .with_subsample_rate(processor.read_subsample_rate());
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor: processor,
-            rand: XorShiftRng::from_seed([42; 16]),
-            range: Range::new(0.0, 1.0),
         })
     }
 
     pub fn with_seed(processor: &'a Processor, seed: [u8; 16]) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?;
+        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+            .with_subsample_rate(processor.read_subsample_rate())
+            .with_seed(seed);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor: processor,
-            rand: XorShiftRng::from_seed(seed),
-            range: Range::new(0.0, 1.0),
         })
     }
 }
@@ -244,20 +266,20 @@ where
 
     /// Iterate over ReadType objects
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.read_pair_iter.next() {
-                Some(read_result) => {
-                    if self.range.sample(&mut self.rand) < self.processor.read_subsample_rate() {
-                        return match read_result {
-                            Ok(read) => Some(Ok(self.processor.process_read(read)?)),
-                            Err(e) => Some(Err(e)),
-                        };
-                    }
-                },
-                None => {
-                    return None;
-                }
-            }
+        match self.read_pair_iter.next() {
+            Some(read_result) => match read_result {
+                Ok(read) => Some(Ok(self.processor.process_read(read)?)),
+                Err(e) => Some(Err(e)),
+            },
+            None => None,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum WhichEnd {
+    #[serde(rename = "three_prime")]
+    ThreePrime,
+    #[serde(rename = "five_prime")]
+    FivePrime,
 }
