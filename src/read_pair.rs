@@ -227,7 +227,6 @@ impl<'a> MutReadPair<'a> {
         }
     }
 
-    /*
     pub fn new<R: Record>(buffer: &mut BytesMut, rr: [Option<R>; 4]) -> MutReadPair {
 
         let mut rp = MutReadPair::empty(buffer);
@@ -241,7 +240,6 @@ impl<'a> MutReadPair<'a> {
 
         rp
     }
-    */
 
     // FIXME: Should we check that the length of seq and qual agree?
     // If we add that check, modify `prop_test_readpair_get()` test
@@ -648,6 +646,7 @@ mod tests {
             ref qual in proptest::collection::vec(any::<u8>(), 0usize..1000usize),
             pos in 0..4usize
         ) {
+            let mut buffer = BytesMut::with_capacity(4096);
             let owned = OwnedRecord {
                 head: head.clone(),
                 seq: seq.clone(),
@@ -656,7 +655,7 @@ mod tests {
             };
             let mut input = [None, None, None, None];
             input[pos] = Some(owned);
-            let read_pair = ReadPair::new(input);
+            let read_pair = MutReadPair::new(&mut buffer, input).freeze();
             let read = WhichRead::from(pos);
             assert_eq!(read_pair.get(read, ReadPart::Header), Some(head.as_slice()));
             assert_eq!(read_pair.get(read, ReadPart::Qual), Some(qual.as_slice()));
