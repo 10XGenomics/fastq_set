@@ -250,6 +250,8 @@ impl ReadPair {
         rp
     }
 
+    // FIXME: Should we check that the length of seq and qual agree?
+    // If we add that check, modify `prop_test_readpair_get()` test
     pub(super) fn push_read<R: Record>(&mut self, rec: &R, which: WhichRead) {
         assert!(!self.offsets[which as usize].exists);
         let buf: &mut Vec<u8> = self.data.as_mut();
@@ -433,6 +435,7 @@ impl TrimmedReadPair {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest;
     use proptest::arbitrary::any;
     use proptest::strategy::Strategy;
     use std::cmp::{min, max};
@@ -597,6 +600,30 @@ mod tests {
                 
             }
             
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn prop_test_readpair_get(
+            ref head in proptest::collection::vec(any::<u8>(), 0usize..500usize),
+            ref seq in proptest::collection::vec(any::<u8>(), 0usize..1000usize),
+            ref qual in proptest::collection::vec(any::<u8>(), 0usize..1000usize),
+            pos in 0..4usize
+        ) {
+            let owned = OwnedRecord {
+                head: head.clone(),
+                seq: seq.clone(),
+                qual: qual.clone(),
+                sep: None,
+            };
+            let mut input = [None, None, None, None];
+            input[pos] = Some(owned);
+            let read_pair = ReadPair::new(input);
+            let read = WhichRead::from(pos);
+            assert_eq!(read_pair.get(read, ReadPart::Header), Some(head.as_slice()));
+            assert_eq!(read_pair.get(read, ReadPart::Qual), Some(qual.as_slice()));
+            assert_eq!(read_pair.get(read, ReadPart::Seq), Some(seq.as_slice()));
         }
     }
 }
