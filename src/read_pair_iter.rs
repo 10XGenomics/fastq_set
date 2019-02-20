@@ -6,10 +6,13 @@ use failure::Error;
 use std::path::{Path, PathBuf};
 
 use fastq::{self, RecordRefIter};
-use read_pair::{ReadPair, WhichRead};
+use read_pair::{MutReadPair, ReadPair, WhichRead};
 
+use bytes::{BytesMut, BufMut};
 use failure::format_err;
 use std::io::BufRead;
+use rand::distributions::{Distribution, Range};
+use rand::{SeedableRng, XorShiftRng};
 use utils;
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
@@ -24,6 +27,8 @@ pub struct InputFastqs {
     pub r1_interleaved: bool,
 }
 
+const BUF_SIZE: usize = 4096 * 4;
+
 /// Read sequencing data from a parallel set of FASTQ files.
 /// Illumina sequencers typically emit a parallel set of FASTQ files, with one file
 /// for each read component taken by the sequencer. Up to 4 reads are possible (R1, R2, I1, and I2).
@@ -35,6 +40,10 @@ pub struct ReadPairIter {
     paths: [Option<PathBuf>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,
+    buffer: BytesMut,
+    rand: XorShiftRng,
+    range: Range<f64>,
+    subsample_rate: f64,
 }
 
 impl ReadPairIter {
@@ -75,81 +84,109 @@ impl ReadPairIter {
             }
         }
 
+        let buffer = BytesMut::with_capacity(BUF_SIZE);
+
         Ok(ReadPairIter {
             paths,
             iters,
             r1_interleaved,
+            buffer,
+            rand: XorShiftRng::from_seed([42; 16]),
+            range: Range::new(0.0, 1.0),
+            subsample_rate: 1.0,
         })
+    }
+
+    pub fn with_seed(mut self, seed: [u8; 16]) -> Self {
+        self.rand = XorShiftRng::from_seed(seed);
+        self
+    }
+
+    pub fn with_subsample_rate(mut self, subsample_rate: f64) -> Self {
+        self.subsample_rate = subsample_rate;
+        self
     }
 
     fn get_next(&mut self) -> Result<Option<ReadPair>, Error> {
 
-        let mut rp = ReadPair::empty();
+        // Recycle the buffer if it's almost full.
+        if self.buffer.remaining_mut() < 512 {
+            self.buffer = BytesMut::with_capacity(BUF_SIZE)
+        }
 
-        // Track which reader was the first to finish.
-        let mut iter_ended = [false; 4];
+        let mut rp = MutReadPair::empty(&mut self.buffer);
 
+        loop {
+            let sample = self.range.sample(&mut self.rand) < self.subsample_rate;
 
-        for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
-            match iter_opt {
-                &mut Some(ref mut iter) => {
-                    iter.advance()?;
-                    {
-                        let record = iter.get();
+            // Track which reader was the first to finish.
+            let mut iter_ended = [false; 4];
 
-                        // track which reader finished
-                        if record.is_none() {
-                            iter_ended[idx] = true;
-                        }
-
-                        let which = WhichRead::read_types()[idx];
-                        record.map(|r| rp.push_read(&r, which));
-                    }
-
-                    // If R1 is interleaved, read another entry
-                    // and store it as R2
-                    if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
+            for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
+                match iter_opt {
+                    &mut Some(ref mut iter) => {
                         iter.advance()?;
-                        let record = iter.get();
-                        if record.is_none() {
-                            // We should only hit this if the FASTQ has an odd
-                            // number of records. Throw an error
-                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
-                            return Err(msg)
+                        {
+                            let record = iter.get();
+                            // track which reader finished
+                            if record.is_none() {
+                                iter_ended[idx] = true;
+                            }
+                            if sample {
+                                let which = WhichRead::read_types()[idx];
+                                record.map(|r| rp.push_read(&r, which));
+                            }
                         }
-                        let which = WhichRead::read_types()[idx + 1];
-                        record.map(|r| rp.push_read(&r, which));
+
+                        // If R1 is interleaved, read another entry
+                        // and store it as R2
+                        if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
+                            iter.advance()?;
+                            let record = iter.get();
+                            if record.is_none() {
+                                // We should only hit this if the FASTQ has an odd
+                                // number of records. Throw an error
+                                let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
+                                return Err(msg)
+                            }
+                            if sample {
+                                let which = WhichRead::read_types()[idx + 1];
+                                record.map(|r| rp.push_read(&r, which));
+                            }
+                        }
                     }
+                    &mut None => (),
                 }
-                &mut None => (),
+            }
+
+            // At least one of the readers got to the end -- make sure they all did.
+            if iter_ended.iter().any(|x| *x) {
+
+                // Are there any incomplete iterators?
+                let any_not_complete =
+                    iter_ended.iter()
+                    .zip(self.paths.iter())
+                    .any(|(ended, path)| path.is_some() && !ended);
+
+                if any_not_complete {
+                    // Index of a finished iterator
+                    let ended_index =
+                        iter_ended
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, v)| **v).next().unwrap().0;
+
+                    let msg = format_err!("Input FASTQ file {:?} ended prematurely", self.paths.get(ended_index).unwrap());
+                    return Err(msg);
+                } else {
+                    return Ok(None);
+                }
+            }
+
+            if sample {
+                return Ok(Some(rp.freeze()));
             }
         }
-
-        // At least one of the readers got to the end -- make sure they all did.
-        if iter_ended.iter().any(|x| *x) {
-
-            // Are there any incomplete iterators?
-            let any_not_complete = 
-                iter_ended.iter()
-                .zip(self.paths.iter())
-                .any(|(ended, path)| path.is_some() && !ended);
-
-            if any_not_complete {
-                // Index of a finished iterator
-                let ended_index = 
-                    iter_ended
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, v)| **v).next().unwrap().0;
-
-                let msg = format_err!("Input FASTQ file {:?} ended prematurely", self.paths.get(ended_index).unwrap());
-                return Err(msg);
-            } else {
-                return Ok(None);
-            }
-        }
-
-        Ok(Some(rp))
     }
 }
 
@@ -171,6 +208,41 @@ impl Iterator for ReadPairIter {
 #[cfg(test)]
 mod test_read_pair_iter {
     use super::*;
+    use file_diff::{diff_files};
+    use std::fs::{File};
+    use std::io::Write;
+
+    // Verify that we can parse and write to the identical FASTQ.
+    #[test]
+    fn test_round_trip() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-RA.fastq"),
+            None,
+            Some("tests/read_pair_iter/good-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true
+        ).unwrap();
+
+        let _res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res = _res.unwrap();
+
+        {    
+            {
+                let mut output = File::create("tests/fastq_round_trip.fastq").unwrap();
+                for rec in res {
+                    rec.write_fastq(WhichRead::R1, &mut output).unwrap();
+                    rec.write_fastq(WhichRead::R2, &mut output).unwrap();
+                }
+                output.flush().unwrap();
+            }
+
+            let mut output = File::open("tests/fastq_round_trip.fastq").unwrap();
+            let mut input = File::open("tests/read_pair_iter/good-RA.fastq").unwrap();
+            assert!(diff_files(&mut input, &mut output));
+        }
+
+        std::fs::remove_file("tests/fastq_round_trip.fastq").unwrap();
+    }
 
     #[test]
     fn test_correct() {

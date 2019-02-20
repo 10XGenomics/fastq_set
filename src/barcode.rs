@@ -19,7 +19,7 @@ use {Barcode, SSeq};
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
 /// Barcodes are numbers starting at 1.
-fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
+pub fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
     let reader = utils::open_with_gz(filename)?;
     let mut bc_map = FxHashMap::default();
 

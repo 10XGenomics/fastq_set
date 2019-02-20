@@ -3,6 +3,9 @@
 //! Container for the FASTQ data from a single sequencing 'cluster',
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
+use std::io::Write;
+use failure::Error;
+use bytes::{Bytes, BytesMut};
 use fastq::{Record, OwnedRecord};
 use std::collections::HashMap;
 use std::fmt;
@@ -205,40 +208,29 @@ impl RpRange {
     }
 }
 
-use serde_bytes::ByteBuf;
-
-/// Container for all read data from a single Illumina cluster. Faithfully represents
-/// the FASTQ data from all available reads, if available.
-/// Generally should be created by a `ReadPairIter`.
-#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub struct ReadPair {
+/// Helper struct used during construction of a ReadPair. The data for the ReadPair is 
+/// accumulated in the buffer bytes::BytesMut. When all the data has been added, call
+/// `freeze()` to convert this into an immutable `ReadPair` object. Multiple `ReadPair` objects
+/// will be backed slices into the same buffer, which reduces allocation overhead.
+pub(crate) struct MutReadPair<'a> {
     offsets: [ReadOffset; 4],
-
-    // Single vector with all the raw FASTQ data. 
-    // Use with = "serde_bytes" to get much faster perf
-    data: ByteBuf,
+    data: &'a mut BytesMut,
 }
 
-impl ReadPair {
-    // Make space for the full read pair in one allocation
-    const RP_CAPACITY: usize = 1024;
+impl<'a> MutReadPair<'a> {
 
-    pub(super) fn empty() -> ReadPair {
+    pub(super) fn empty(buffer: &mut BytesMut) -> MutReadPair {
         let offsets = [ReadOffset::default(); 4];
-        let data = Vec::with_capacity(Self::RP_CAPACITY);
-        ReadPair {
+        MutReadPair {
             offsets,
-            data: ByteBuf::from(data),
+            data: buffer
         }
     }
 
-    pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
-        let offsets = [ReadOffset::default(); 4];
-        let data = Vec::with_capacity(Self::RP_CAPACITY);
-        let mut rp = ReadPair {
-            offsets,
-            data: ByteBuf::from(data),
-        };
+    /*
+    pub fn new<R: Record>(buffer: &mut BytesMut, rr: [Option<R>; 4]) -> MutReadPair {
+
+        let mut rp = MutReadPair::empty(buffer);
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
             match _rec {
@@ -249,20 +241,21 @@ impl ReadPair {
 
         rp
     }
+    */
 
     // FIXME: Should we check that the length of seq and qual agree?
     // If we add that check, modify `prop_test_readpair_get()` test
     pub(super) fn push_read<R: Record>(&mut self, rec: &R, which: WhichRead) {
         assert!(!self.offsets[which as usize].exists);
-        let buf: &mut Vec<u8> = self.data.as_mut();
+        //let buf = self.data;
 
-        let start = buf.len() as u16;
-        buf.extend(rec.head());
-        let head = buf.len() as u16;
-        buf.extend(rec.seq());
-        let seq = buf.len() as u16;
-        buf.extend(rec.qual());
-        let qual = buf.len() as u16;
+        let start = self.data.len() as u16;
+        self.data.extend_from_slice(rec.head());
+        let head = self.data.len() as u16;
+        self.data.extend_from_slice(rec.seq());
+        let seq = self.data.len() as u16;
+        self.data.extend_from_slice(rec.qual());
+        let qual = self.data.len() as u16;
         let read_offset = ReadOffset {
             exists: true,
             start,
@@ -272,6 +265,28 @@ impl ReadPair {
         };
         self.offsets[which as usize] = read_offset;
     }
+
+    pub fn freeze(self) -> ReadPair {
+        ReadPair {
+            offsets: self.offsets,
+            data: self.data.take().freeze(),
+        }
+    }
+}
+
+/// Container for all read data from a single Illumina cluster. Faithfully represents
+/// the FASTQ data from all available reads, if available.
+/// Generally should be created by a `ReadPairIter`.
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub struct ReadPair {
+    offsets: [ReadOffset; 4],
+
+    // Single vector with all the raw FASTQ data. 
+    // Use with = "serde_bytes" to get much faster perf
+    data: Bytes,
+}
+
+impl ReadPair {
 
     #[inline]
     /// Get a ReadPart `part` from a read `which` in this cluster
@@ -312,8 +327,30 @@ impl ReadPair {
         result
     }
 
+    /// Read length of the selected read.
     pub fn len(&self, which: WhichRead) -> Option<usize> {
         self.offsets[which as usize].seq_len()
+    }
+
+    /// Write read selected by `which` in FASTQ format to `writer`. 
+    /// This method will silently do nothing if the selected read doesn't exist.
+    pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<(), Error> {
+        if self.offsets[which as usize].exists {
+            let head = self.get(which, ReadPart::Header).unwrap();
+            writer.write_all(b"@")?;
+            writer.write_all(head)?;
+            writer.write_all(b"\n")?;
+
+            let seq = self.get(which, ReadPart::Seq).unwrap();
+            writer.write_all(seq)?;
+            writer.write_all(b"\n+\n")?;
+
+            let qual = self.get(which, ReadPart::Qual).unwrap();
+            writer.write_all(qual)?;
+            writer.write_all(b"\n")?;
+        }
+
+        Ok(())
     }
 }
 
