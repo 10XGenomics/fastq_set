@@ -8,15 +8,15 @@ use std::path::{Path, PathBuf};
 use fastq::{self, RecordRefIter};
 use read_pair::{MutReadPair, ReadPair, WhichRead};
 
-use bytes::{BytesMut, BufMut};
+use bytes::{BufMut, BytesMut};
 use failure::format_err;
-use std::io::BufRead;
 use rand::distributions::{Distribution, Range};
 use rand::{SeedableRng, XorShiftRng};
+use std::io::BufRead;
 use utils;
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
-/// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field, 
+/// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field,
 /// and set `r1_interleaved = true`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InputFastqs {
@@ -32,7 +32,7 @@ const BUF_SIZE: usize = 4096 * 4;
 /// Read sequencing data from a parallel set of FASTQ files.
 /// Illumina sequencers typically emit a parallel set of FASTQ files, with one file
 /// for each read component taken by the sequencer. Up to 4 reads are possible (R1, R2, I1, and I2).
-/// The reader supports any combination of R1/R2/I1/I2 read files, 
+/// The reader supports any combination of R1/R2/I1/I2 read files,
 /// as well as an interleaved R1/R2 file. Supports plain or gzipped FASTQ files, which
 /// will be detected based on the filename extension.
 pub struct ReadPairIter {
@@ -60,7 +60,7 @@ impl ReadPairIter {
     }
 
     /// Open a `ReadPairIter` given of FASTQ files.
-    /// For interleaved R1/R2 files, set `r2 = None`, and set 
+    /// For interleaved R1/R2 files, set `r2 = None`, and set
     /// `r1_interleaved = true`.
     pub fn new<P: AsRef<Path>>(
         r1: Option<P>,
@@ -108,7 +108,6 @@ impl ReadPairIter {
     }
 
     fn get_next(&mut self) -> Result<Option<ReadPair>, Error> {
-
         // Recycle the buffer if it's almost full.
         if self.buffer.remaining_mut() < 512 {
             self.buffer = BytesMut::with_capacity(BUF_SIZE)
@@ -147,7 +146,7 @@ impl ReadPairIter {
                                 // We should only hit this if the FASTQ has an odd
                                 // number of records. Throw an error
                                 let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
-                                return Err(msg)
+                                return Err(msg);
                             }
                             if sample {
                                 let which = WhichRead::read_types()[idx + 1];
@@ -161,22 +160,26 @@ impl ReadPairIter {
 
             // At least one of the readers got to the end -- make sure they all did.
             if iter_ended.iter().any(|x| *x) {
-
                 // Are there any incomplete iterators?
-                let any_not_complete =
-                    iter_ended.iter()
+                let any_not_complete = iter_ended
+                    .iter()
                     .zip(self.paths.iter())
                     .any(|(ended, path)| path.is_some() && !ended);
 
                 if any_not_complete {
                     // Index of a finished iterator
-                    let ended_index =
-                        iter_ended
+                    let ended_index = iter_ended
                         .iter()
                         .enumerate()
-                        .filter(|(_, v)| **v).next().unwrap().0;
+                        .filter(|(_, v)| **v)
+                        .next()
+                        .unwrap()
+                        .0;
 
-                    let msg = format_err!("Input FASTQ file {:?} ended prematurely", self.paths.get(ended_index).unwrap());
+                    let msg = format_err!(
+                        "Input FASTQ file {:?} ended prematurely",
+                        self.paths.get(ended_index).unwrap()
+                    );
                     return Err(msg);
                 } else {
                     return Ok(None);
@@ -204,12 +207,11 @@ impl Iterator for ReadPairIter {
     }
 }
 
-
 #[cfg(test)]
 mod test_read_pair_iter {
     use super::*;
-    use file_diff::{diff_files};
-    use std::fs::{File};
+    use file_diff::diff_files;
+    use std::fs::File;
     use std::io::Write;
 
     // Verify that we can parse and write to the identical FASTQ.
@@ -220,13 +222,14 @@ mod test_read_pair_iter {
             None,
             Some("tests/read_pair_iter/good-I1.fastq"),
             Some("tests/read_pair_iter/good-I2.fastq"),
-            true
-        ).unwrap();
+            true,
+        )
+        .unwrap();
 
-        let _res : Result<Vec<ReadPair>, Error> = it.collect();
+        let _res: Result<Vec<ReadPair>, Error> = it.collect();
         let res = _res.unwrap();
 
-        {    
+        {
             {
                 let mut output = File::create("tests/fastq_round_trip.fastq").unwrap();
                 for rec in res {
@@ -251,10 +254,11 @@ mod test_read_pair_iter {
             None,
             Some("tests/read_pair_iter/good-I1.fastq"),
             Some("tests/read_pair_iter/good-I2.fastq"),
-            true
-        ).unwrap();
+            true,
+        )
+        .unwrap();
 
-        let res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 8);
     }
@@ -266,10 +270,11 @@ mod test_read_pair_iter {
             None,
             Some("tests/read_pair_iter/good-I1.fastq"),
             Some("tests/read_pair_iter/good-I2.fastq"),
-            true
-        ).unwrap();
+            true,
+        )
+        .unwrap();
 
-        let res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_err());
     }
 
@@ -280,10 +285,11 @@ mod test_read_pair_iter {
             None,
             Some("tests/read_pair_iter/good-I1.fastq"),
             Some("tests/read_pair_iter/good-I2.fastq"),
-            true
-        ).unwrap();
+            true,
+        )
+        .unwrap();
 
-        let res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_err());
     }
 
@@ -294,10 +300,11 @@ mod test_read_pair_iter {
             None,
             Some("tests/read_pair_iter/short-I1.fastq"),
             Some("tests/read_pair_iter/good-I2.fastq"),
-            true
-        ).unwrap();
+            true,
+        )
+        .unwrap();
 
-        let res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_err());
     }
 
@@ -308,10 +315,11 @@ mod test_read_pair_iter {
             None,
             Some("tests/read_pair_iter/good-I1.fastq"),
             Some("tests/read_pair_iter/short-I2.fastq"),
-            true
-        ).unwrap();
+            true,
+        )
+        .unwrap();
 
-        let res : Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_err());
     }
 }

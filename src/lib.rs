@@ -1,6 +1,6 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and 
+//! Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and
 //! UMI sequences.
 //!
 
@@ -17,15 +17,15 @@ extern crate flate2;
 extern crate itertools;
 extern crate ordered_float;
 
-extern crate regex;
 extern crate glob;
+extern crate regex;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
+extern crate bytes;
 extern crate serde;
 extern crate serde_bytes;
-extern crate bytes;
 
 extern crate fxhash;
 extern crate rand;
@@ -34,10 +34,10 @@ extern crate serde_json;
 extern crate shardio;
 extern crate tempfile;
 
+extern crate bio;
 extern crate log;
 extern crate lz4;
 extern crate metric;
-extern crate bio;
 
 extern crate tenkit;
 
@@ -46,21 +46,21 @@ pub mod read_pair_iter;
 pub mod sample_def;
 
 pub mod barcode;
-pub mod sseq;
-pub mod utils;
 pub mod barcode_sort;
 pub mod metric_utils;
+pub mod sseq;
+pub mod utils;
 
+pub mod adapter_trimmer;
 pub mod dna_read;
 pub mod rna_read;
-pub mod adapter_trimmer;
 
-pub use fastq::Record;
 pub use fastq::OwnedRecord;
+pub use fastq::Record;
 
+use failure::Error;
 use read_pair_iter::{InputFastqs, ReadPairIter};
 use sseq::SSeq;
-use failure::Error;
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
 /// FIXME : Should we use the `valid` field for `PartialEq`, `Eq`, `Hash`?
@@ -135,7 +135,11 @@ impl Barcode {
 
 impl std::fmt::Display for Barcode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", String::from_utf8(self.to_corrected_bytes()).unwrap())
+        write!(
+            f,
+            "{}",
+            String::from_utf8(self.to_corrected_bytes()).unwrap()
+        )
     }
 }
 
@@ -214,29 +218,34 @@ pub trait FastqProcessor {
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
 
-    fn iter(&self) -> Result<FastqProcessorIter<Self>, Error> where Self: Sized {
+    fn iter(&self) -> Result<FastqProcessorIter<Self>, Error>
+    where
+        Self: Sized,
+    {
         FastqProcessorIter::new(self)
     }
 
-    fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<Self>, Error> where Self: Sized {
+    fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<Self>, Error>
+    where
+        Self: Sized,
+    {
         FastqProcessorIter::with_seed(self, seed)
     }
 
     fn gem_group(&self) -> u16;
 }
 
-
 pub struct FastqProcessorIter<'a, Processor>
 where
-    Processor: 'a + FastqProcessor
+    Processor: 'a + FastqProcessor,
 {
     read_pair_iter: ReadPairIter,
     processor: &'a Processor,
 }
 
-impl<'a, Processor> FastqProcessorIter<'a, Processor> 
+impl<'a, Processor> FastqProcessorIter<'a, Processor>
 where
-    Processor: FastqProcessor
+    Processor: FastqProcessor,
 {
     pub fn new(processor: &'a Processor) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
@@ -258,9 +267,9 @@ where
     }
 }
 
-impl<'a, Processor> Iterator for FastqProcessorIter<'a, Processor> 
+impl<'a, Processor> Iterator for FastqProcessorIter<'a, Processor>
 where
-    Processor: FastqProcessor
+    Processor: FastqProcessor,
 {
     type Item = Result<<Processor as FastqProcessor>::ReadType, Error>;
 
