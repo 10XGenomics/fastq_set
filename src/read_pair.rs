@@ -246,7 +246,6 @@ impl<'a> MutReadPair<'a> {
     }
 
     pub fn new<R: Record>(buffer: &mut BytesMut, rr: [Option<R>; 4]) -> MutReadPair {
-
         let mut rp = MutReadPair::empty(buffer);
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {

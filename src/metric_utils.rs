@@ -1,5 +1,5 @@
 use bio::pattern_matching;
-use metric::{Metric, PercentMetric};
+use metric::PercentMetric;
 
 pub const ILLUMINA_QUAL_OFFSET: u8 = 33;
 
@@ -44,40 +44,5 @@ impl PatternCheck {
     }
     pub fn exists(&self, read: &[u8]) -> bool {
         self.pattern.find_all(read).next().is_some()
-    }
-}
-
-pub trait ReadMetric: Sized + Metric {
-    type ReadType;
-
-    fn from_read(read: &Self::ReadType) -> Self;
-
-    fn update(&mut self, read: &Self::ReadType) {
-        self.merge(Self::from_read(read));
-    }
-}
-
-pub trait ConfiguredReadMetric: Sized + Metric {
-    type ReadType;
-    type ConfigType;
-
-    fn with_config(config: &Self::ConfigType, read: &Self::ReadType) -> Self;
-
-    fn update_with_config(&mut self, config: &Self::ConfigType, read: &Self::ReadType) {
-        self.merge(Self::with_config(config, read));
-    }
-}
-
-pub struct DefaultConfig;
-
-impl<T> ConfiguredReadMetric for T
-where
-    T: ReadMetric,
-{
-    type ReadType = <T as ReadMetric>::ReadType;
-    type ConfigType = DefaultConfig;
-
-    fn with_config(_: &Self::ConfigType, read: &Self::ReadType) -> Self {
-        Self::from_read(read)
     }
 }
