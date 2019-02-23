@@ -259,8 +259,8 @@ impl AlignableReadPair for DnaRead {
 #[cfg(test)]
 mod test_dna_cfg {
     use super::*;
-    use serde_json;
     use barcode::load_barcode_whitelist;
+    use serde_json;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
         serde_json::from_str(chunk_json).unwrap()

@@ -361,7 +361,8 @@ impl<'a> AdapterTrimmer<'a> {
             .scan(0, |state, x| {
                 *state = *state + x;
                 Some(*state)
-            }).collect();
+            })
+            .collect();
 
         let get_counts_if_valid = |i: usize, j: usize| {
             let num_bases = j.saturating_sub(i);
