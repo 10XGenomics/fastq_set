@@ -128,14 +128,14 @@ impl ChemistryDef {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RnaChunk {
-    chemistry: ChemistryDef,
-    gem_group: u16,
-    read_chunks: HashMap<WhichRead, Option<String>>,
-    read_group: String,
-    reads_interleaved: bool,
-    subsample_rate: Option<f64>,
-    r1_length: Option<usize>,
-    r2_length: Option<usize>,
+    pub chemistry: ChemistryDef,
+    pub gem_group: u16,
+    pub read_chunks: HashMap<WhichRead, Option<String>>,
+    pub read_group: String,
+    pub reads_interleaved: bool,
+    pub subsample_rate: Option<f64>,
+    pub r1_length: Option<usize>,
+    pub r2_length: Option<usize>,
 }
 
 impl RnaChunk {
