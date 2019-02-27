@@ -3,10 +3,10 @@
 //! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries.
 //! Provides access to the barcode and allows for dynamic trimming.
 
-use adapter_trimmer::{AdapterTrimmer, TrimResult};
+use adapter_trimmer::{intersect_ranges, ReadAdapterCatalog, AdapterTrimmer};
 use read_pair::{ReadPair, ReadPart, RpRange, TrimmedReadPair, WhichRead};
-use std::collections::HashMap;
-use std::ops;
+use fxhash::FxHashMap;
+use std::ops::Range;
 use WhichEnd;
 use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
 
@@ -103,8 +103,8 @@ pub struct ChemistryDef {
     description: String,
     endedness: Option<WhichEnd>,
     name: String,
-    read_type_to_bcl2fastq_filename: HashMap<WhichRead, Option<String>>,
-    read_type_to_bcl_processor_filename: HashMap<WhichRead, Option<String>>,
+    read_type_to_bcl2fastq_filename: FxHashMap<WhichRead, Option<String>>,
+    read_type_to_bcl_processor_filename: FxHashMap<WhichRead, Option<String>>,
     rna_read_length: Option<usize>,
     rna_read_offset: usize,
     rna_read_type: WhichRead,
@@ -130,7 +130,7 @@ impl ChemistryDef {
 pub struct RnaChunk {
     chemistry: ChemistryDef,
     gem_group: u16,
-    read_chunks: HashMap<WhichRead, Option<String>>,
+    read_chunks: FxHashMap<WhichRead, Option<String>>,
     read_group: String,
     reads_interleaved: bool,
     subsample_rate: Option<f64>,
@@ -403,39 +403,56 @@ impl RnaRead {
         }
     }
 
-    pub fn trim_adapter<'a>(&mut self, trimmers: &mut HashMap<WhichRead, Vec<AdapterTrimmer<'a>>>) {
-        use std::cmp::{max, min};
+    fn trim_adapters_helper<'a>(
+        &mut self,
+        read_range: RpRange,
+        trimmers: &mut Vec<AdapterTrimmer<'a>>,
+    ) -> (Range<usize>, FxHashMap<String, RpRange>) {
+        let seq = self.read.get_range(&read_range, ReadPart::Seq).unwrap();
+        let trim_results: Vec<_> = trimmers
+            .iter_mut()
+            .filter_map(|t| {
+                t.find(seq)
+                    .map(|trim_result| (t.adapter.name.clone(), trim_result))
+            })
+            .collect();
+        let shrink_range = trim_results.iter().fold(0..seq.len(), |acc, (_, x)| {
+            intersect_ranges(&acc, &x.retain_range)
+        });
+        let adapter_pos = trim_results.into_iter().fold(FxHashMap::default(), |mut acc, (name, trim_result)| {
+            let mut this_range = read_range.clone();
+            this_range.shrink(&trim_result.adapter_range);
+            acc.insert(name, this_range);
+            acc
+        });
+        (shrink_range, adapter_pos)
+    }
 
-        let intersect_retain_ranges =
-            |results: &[Option<TrimResult>], seq_len: usize| -> ops::Range<usize> {
-                let mut last_start = 0;
-                let mut first_end = seq_len;
-                for result in results.iter() {
-                    if let Some(r) = result {
-                        last_start = max(last_start, r.retain_range.start);
-                        first_end = min(first_end, r.retain_range.end);
-                    }
-                }
-                last_start..first_end
-            };
+    pub fn trim_adapters<'a>(
+        &mut self,
+        adapter_catalog: &'a mut ReadAdapterCatalog<'a>,
+    ) -> FxHashMap<String, RpRange> {
 
+        let mut result = FxHashMap::default();
         // Trim r1
-        if let Some(ad_trimmers) = trimmers.get_mut(&self.r1_range.read()) {
-            let r1 = self.read.get_range(&self.r1_range, ReadPart::Seq).unwrap();
-            let trim_results: Vec<_> = ad_trimmers.iter_mut().map(|t| t.find(r1)).collect();
-            let shrink_range = intersect_retain_ranges(&trim_results, r1.len());
+        {
+            let ad_trimmers = adapter_catalog.get_mut_trimmers(self.r1_range.read());
+            let range = self.r1_range; // Creates a copy
+            let (shrink_range, adapter_pos) = self.trim_adapters_helper(range, ad_trimmers);
+            result.extend(adapter_pos);
             self.r1_range.shrink(&shrink_range);
         }
 
         // Trim r2
-        if let Some(mut r2_range) = self.r2_range {
-            if let Some(ad_trimmers) = trimmers.get_mut(&r2_range.read()) {
-                let r2 = self.read.get_range(&r2_range, ReadPart::Seq).unwrap();
-                let trim_results: Vec<_> = ad_trimmers.iter_mut().map(|t| t.find(r2)).collect();
-                let shrink_range = intersect_retain_ranges(&trim_results, r2.len());
-                r2_range.shrink(&shrink_range);
+        {
+            if let Some(range) = self.r2_range {
+                let ad_trimmers = adapter_catalog.get_mut_trimmers(range.read());
+                let (shrink_range, adapter_pos) = self.trim_adapters_helper(range, ad_trimmers);
+                result.extend(adapter_pos);
+                self.r2_range.as_mut().map(|x| x.shrink(&shrink_range));
             }
         }
+        result
     }
 }
 
