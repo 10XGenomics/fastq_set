@@ -80,7 +80,7 @@ pub enum ReadPart {
     Qual,
 }
 
-/// Compact representation of selected ReadPart and a interval in that read.
+/// Compact representation of selected read and an` interval in that read.
 /// Supports offsets and lengths up to 32K.
 /// Internally it is stored as a `u32` with the following bit layout
 ///
@@ -107,9 +107,10 @@ pub enum ReadPart {
 /// let input = [Some(read1), None, None, None];
 /// 
 /// // WARNING: DO NOT USE THIS FUNCTION IF YOU ARE STREAMING FASTQ DATA
+/// // AND WANT TO CREATE ReadPair STRUCTS.
 /// // USE `fastq_10x::read_pair_iter::ReadPairIter` INSTEAD.
 /// let read_pair = ReadPair::new(input);
-/// // Let's say this read1 is of the form BC(16)-UMI(10)-Insert. This example will
+/// // Let's say the read1 is of the form BC(16)-UMI(10)-Insert. This example will
 /// // setup different RpRanges to represent these ranges.
 /// 
 /// let barcode_range = RpRange::new(WhichRead::R1, 0, Some(16));
@@ -124,6 +125,15 @@ pub enum ReadPart {
 /// // Let's say you want to trim first 5 bases in r1
 /// r1_range.trim(WhichEnd::FivePrime, 5);
 /// assert_eq!(r1_range.offset(), 31);
+/// assert_eq!(r1_range.len(), None);
+/// 
+/// // Let's say you only want to consider first 50 bases of the read1.seq
+/// // and update the r1_range accordingly
+/// let useful_range = RpRange::new(WhichRead::R1, 0, Some(50));
+/// r1_range.intersect(useful_range);
+/// assert_eq!(r1_range.offset(), 31);
+/// assert_eq!(r1_range.len(), Some(19));
+///
 /// ```
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct RpRange {
@@ -237,7 +247,67 @@ impl RpRange {
         self.val = (self.val & (!(0x7FFFu32 << 15))) | (offset as u32) << 15;
     }
 
-    /// Shrink an `RpRange` of known length.
+    /// Intersect the `RpRange` with another.
+    /// 
+    /// # Input
+    /// * `other` - Intersect `self` with this `RpRange`
+    /// 
+    /// # Panics
+    /// * If `self` and `other` does not point to the same read
+    /// 
+    /// # Example
+    /// ```rust
+    /// use fastq_10x::read_pair::{RpRange, WhichRead};
+    /// let read_seq = b"AAGCAGGGGCGGGCAAATCCAGCCGTTACCTTACACGCCCCACTGGGAAG";
+    /// let full_range = RpRange::new(WhichRead::R1, 0, Some(read_seq.len()));
+    /// let mut r1_range = RpRange::new(WhichRead::R1, 20, None);
+    /// r1_range.intersect(full_range);
+    /// assert_eq!(r1_range.read(), WhichRead::R1);
+    /// assert_eq!(r1_range.offset(), 20);
+    /// assert_eq!(r1_range.len(), Some(read_seq.len()-20));
+    /// ```
+    /// 
+    /// # Tests
+    /// * `test_rprange_intersect_panic()` - Make sure that this function panics
+    /// if the reads do not match
+    /// * `test_rprange_intersect_both_open()` - Test a case when both lengths are not set
+    /// * `test_rprange_intersect_self_open()` - Test a case when only self length is set
+    /// * `test_rprange_intersect_other_open()` - Test a case when only other length is set
+    /// * `test_rprange_intersect_both_closed()` - Test a case when both lengths are set
+    pub fn intersect(&mut self, other: RpRange) {
+        use std::cmp::{min, max};
+        assert!(
+            self.read() == other.read(),
+            "Self = {:?} and other = {:?} does not have the same read",
+            self, other
+        );
+
+        let self_offset = self.offset();
+        let other_offset = other.offset();
+        let new_end = match (self.len(), other.len()) {
+            (Some(self_len), Some(other_len)) => Some(min(self_offset + self_len, other_offset + other_len)),
+            (Some(self_len), None) => Some(self_offset + self_len),
+            (None, Some(other_len)) => Some(other_offset + other_len),
+            (None, None) => None,
+        };
+
+        let new_offset = max(self_offset, other_offset);
+        match new_end {
+            Some(end) => {
+                let final_offset = min(end, new_offset);
+                self.set_offset(final_offset);
+                self.set_len(end-final_offset);
+            }
+            None => {
+                self.set_offset(new_offset);
+            }
+        }
+    }
+
+    /// Shrink an `RpRange` using the specifed local range. This is useful
+    /// in adapter trimming, for example when you find a 5' adapter at some
+    /// position `x` from the start of this `RpRange` and want to only retain
+    /// the range `[0..x)` within this `RpRange`
     ///
     /// # Input
     /// * `shrink_range` - `Range<usize>` to shrink the `RpRange` to
@@ -249,8 +319,7 @@ impl RpRange {
     /// 
     /// # Example
     /// ```rust
-    /// use fastq_10x::read_pair::RpRange;
-    /// use fastq_10x::read_pair::WhichRead;
+    /// use fastq_10x::read_pair::{RpRange, WhichRead};
     /// // 100 bases in R1 starting from base 10
     /// let mut rp_range = RpRange::new(WhichRead::R1, 10, Some(100));
     /// let shrink_range = 20..60;
@@ -826,5 +895,48 @@ mod tests {
             assert_eq!(read_pair.get(read, ReadPart::Qual), Some(qual.as_slice()));
             assert_eq!(read_pair.get(read, ReadPart::Seq), Some(seq.as_slice()));
         }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_rprange_intersect_panic() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 0, None);
+        rp_range.intersect(RpRange::new(WhichRead::R2, 0, None));
+    }
+
+    #[test]
+    fn test_rprange_intersect_both_open() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 50, None);
+        rp_range.intersect(RpRange::new(WhichRead::R1, 10, None));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 50);
+        assert_eq!(rp_range.len(), None);
+    }
+
+    #[test]
+    fn test_rprange_intersect_self_open() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 30, None);
+        rp_range.intersect(RpRange::new(WhichRead::R1, 0, Some(100)));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 30);
+        assert_eq!(rp_range.len(), Some(70));
+    }
+
+    #[test]
+    fn test_rprange_intersect_other_open() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 30, Some(120));
+        rp_range.intersect(RpRange::new(WhichRead::R1, 65, None));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 65);
+        assert_eq!(rp_range.len(), Some(85));
+    }
+
+    #[test]
+    fn test_rprange_intersect_both_closed() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 40, Some(110));
+        rp_range.intersect(RpRange::new(WhichRead::R1, 30, Some(70)));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 40);
+        assert_eq!(rp_range.len(), Some(60));
     }
 }
