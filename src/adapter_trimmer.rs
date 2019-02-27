@@ -10,13 +10,19 @@
 //! * Allowed error rate for the adapter is 10%
 //!
 //! # Algorithm
-//! P.S: A 5' adapter can be treated as a 3' adapter with
+//!
+//! # Example
+//!
+//! # TODO
+//! A 5' adapter can be treated as a 3' adapter with
 //! the read reversed. Perhaps it makes sense to use
 //! this symmetry in the algorithm?
 use bio::alignment::pairwise::{self, MatchParams, Scoring};
 use bio::alignment::sparse;
 use bio::alignment::sparse::HashMapFx;
+use read_pair::WhichRead;
 use std::cmp::{max, min};
+use std::collections::HashSet;
 use std::i32;
 use std::ops::Range;
 use WhichEnd;
@@ -48,6 +54,8 @@ const MIN_PATH_SCORE: i32 = -5;
 /// An `enum` to specify the location of the adapter.
 ///
 /// # 3' adapter
+/// An adapter is considered a 3' adapter if you want to trim everything after the
+/// position of the adapter. (i.e <Useful sequence>ADAPTER<Useless sequence>)
 /// The following table summarizes the various read layouts for a 3' adapters
 /// and whether they are recognized by the different `AdapterLoc` variants.
 /// (Similar to [this table](https://cutadapt.readthedocs.io/en/stable/guide.html#id3)
@@ -60,6 +68,8 @@ const MIN_PATH_SCORE: i32 = -5;
 /// | Full adapter sequence at 3’ end            | acgtacgtacgtADAPTER | Yes                 | Yes                    | Yes                 |
 ///
 /// # 5' adapter
+/// An adapter is considered a 5' adapter if you want to trim everything before the
+/// position of the adapter. (i.e <Useless sequence>ADAPTER<Useful sequence>)
 /// The following table summarizes the various read layouts for a 5' adapters
 /// and whether they are recognized by the different `AdapterLoc` variants.
 /// (Similar to [this table](https://cutadapt.readthedocs.io/en/stable/guide.html#id4)
@@ -206,7 +216,7 @@ impl Adapter {
 /// # Algorithm
 /// [TODO]
 pub struct AdapterTrimmer<'a> {
-    adapter: &'a Adapter,
+    pub adapter: &'a Adapter,
     seq: &'a [u8],
     kmer_hash: HashMapFx<&'a [u8], Vec<u32>>,
     aligner: Aligner,
@@ -464,6 +474,22 @@ pub struct TrimResult {
     pub retain_range: Range<usize>,
 }
 
+/// A function to compute the intersection of two `Range<usize>`. I would
+/// have liked this to be part of the std library. Takes two ranges as input
+/// and computes the intersection. This is a useful function when you want to
+/// combine `TrimResult`s from multiple adapters to determine what range to
+/// actually keep. The `Range` returned is guaranteed to have start<=end even
+/// when the ranges do not overlap
+///
+/// # Test
+/// * test_intersect_ranges() - Tests this function for a small number of inputs
+pub fn intersect_ranges(a: &Range<usize>, b: &Range<usize>) -> Range<usize> {
+    use std::cmp::{max, min};
+    let end = min(a.end, b.end);
+    let start = min(max(a.start, b.start), end);
+    Range { start, end }
+}
+
 #[derive(Debug, Copy, Clone)]
 struct CutScores {
     match_score: i32,
@@ -674,6 +700,50 @@ fn compute_path(
         right_score: best_path_ending_here[best_ind].right_score,
         internal_score: best_path_ending_here[best_ind].internal_score,
     })
+}
+
+pub struct ReadAdapterCatalog<'a> {
+    adapter_names: HashSet<&'a str>,
+    read1_trimmers: Vec<AdapterTrimmer<'a>>,
+    read2_trimmers: Vec<AdapterTrimmer<'a>>,
+}
+
+impl<'a> ReadAdapterCatalog<'a> {
+    pub fn new() -> Self {
+        ReadAdapterCatalog {
+            adapter_names: HashSet::new(),
+            read1_trimmers: Vec::new(),
+            read2_trimmers: Vec::new(),
+        }
+    }
+
+    pub fn push_trimmer(&mut self, read: WhichRead, trimmer: AdapterTrimmer<'a>) {
+        assert!(
+            self.adapter_names.insert(&trimmer.adapter.name),
+            "Adapter names need to be unique in ReadAdapterCatalog. '{}' already exists",
+            trimmer.adapter.name
+        );
+
+        match read {
+            WhichRead::R1 => self.read1_trimmers.push(trimmer),
+            WhichRead::R2 => self.read2_trimmers.push(trimmer),
+            _ => panic!(
+                "ReadAdapterCatalog push() can only accept R1/R2. Found {:?}",
+                read
+            ),
+        }
+    }
+
+    pub fn get_mut_trimmers(&mut self, read: WhichRead) -> &mut Vec<AdapterTrimmer<'a>> {
+        match read {
+            WhichRead::R1 => &mut self.read1_trimmers,
+            WhichRead::R2 => &mut self.read2_trimmers,
+            _ => panic!(
+                "ReadAdapterCatalog get_mut_trimmer() can only accept R1/R2. Found {:?}",
+                read
+            ),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -973,5 +1043,33 @@ mod tests {
         );
         let trimmer = AdapterTrimmer::new(&adapter);
         assert!(!trimmer.homopolymer);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_read_adapter_catalog_repeat() {
+        let adapter_1 = Adapter::new(
+            "polya",
+            WhichEnd::FivePrime,
+            AdapterLoc::Anywhere,
+            "AAAAAAAAAA",
+        );
+        let adapter_2 = Adapter::new(
+            "polya",
+            WhichEnd::FivePrime,
+            AdapterLoc::Anywhere,
+            "AAAAAAAAAA",
+        );
+        let mut catalog = ReadAdapterCatalog::new();
+        catalog.push_trimmer(WhichRead::R1, AdapterTrimmer::new(&adapter_1));
+        catalog.push_trimmer(WhichRead::R2, AdapterTrimmer::new(&adapter_2));
+    }
+
+    #[test]
+    fn test_intersect_ranges() {
+        assert_eq!(intersect_ranges(&(0..10), &(5..15)), 5..10);
+        assert_eq!(intersect_ranges(&(5..15), &(0..10)), 5..10);
+        assert_eq!(intersect_ranges(&(0..15), &(5..10)), 5..10);
+        assert_eq!(intersect_ranges(&(0..20), &(50..100)), 20..20);
     }
 }
