@@ -180,10 +180,55 @@ impl RpRange {
         self.val = (self.val & (!(0x7FFFu32 << 15))) | (offset as u32) << 15;
     }
 
+    /// Shrink an `RpRange` of known length.
+    ///
+    /// # Input
+    /// * `shrink_range` - If `L` is the length of the `RpRange`, `shrink_range`
+    /// can be any `Range<usize>` within `0..L`. If it is `a..b`, then this function
+    /// will trim `a` amount from the 5' end of `RpRange` and `L-b` amount from the
+    /// 3' end of the `RpRange`
+    /// 
+    /// # Panics
+    /// * If the length of `RpRange` is not set
+    /// * If the `shrink_range` is not within `0..self.len().unwrap()`
+    /// 
+    /// # TODO
+    /// * Relax the length requirement? Actually we don't need length, we
+    /// can set it based on the input range
+    /// 
+    /// # Example
+    /// ```rust
+    /// use fastq_10x::read_pair::RpRange;
+    /// use fastq_10x::read_pair::WhichRead;
+    /// // 100 bases in R1 starting from base 10
+    /// let mut rp_range = RpRange::new(WhichRead::R1, 10, Some(100));
+    /// let shrink_range = 20..60;
+    /// rp_range.shrink(&shrink_range);
+    /// assert!(rp_range.read() == WhichRead::R1);
+    /// assert!(rp_range.offset() == 30); // 20 + 10
+    /// assert!(rp_range.len() == Some(40)); // 60-40
+    /// ```
+    /// 
+    /// # Tests
+    /// * `test_rprange_trivial_shrink()`: Test shrink to an empty range.
+    /// * `prop_test_rprange_shrink()`: Test shrink for arbitrary values of
+    /// `RpRange` and valid `shrink_range`
     pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
         assert!(
             self.len().is_some(),
             "Shrink is only supported for RpRange with known length!"
+        );
+
+        let len = self.len().unwrap();
+        assert!(
+            shrink_range.start <= len,
+            "Attempting to shrink more than the current length. shrink_range = {:?}, RpRange = {:?}",
+            shrink_range, self,
+        );
+        assert!(
+            shrink_range.end <= len,
+            "Attempting to shrink more than the current length. shrink_range = {:?}, RpRange = {:?}",
+            shrink_range, self,
         );
 
         let trim_5p = TrimDef {
@@ -194,7 +239,7 @@ impl RpRange {
         let trim_3p = TrimDef {
             read: self.read(),
             end: WhichEnd::ThreePrime,
-            amount: self.len().unwrap().saturating_sub(shrink_range.end),
+            amount: len - shrink_range.end, // Won't underflow because of the assert above
         };
 
         self.trim(trim_5p);
@@ -212,15 +257,16 @@ impl RpRange {
             trim_def.amount <= l,
             "Attempt to trim more than the length of RpRange"
         );
+
         if trim_def.amount > 0 {
             match trim_def.end {
                 WhichEnd::ThreePrime => {
-                    self.set_len(l.saturating_sub(trim_def.amount));
+                    self.set_len(l - trim_def.amount); // Won't underflow because of the assert above
                 }
                 WhichEnd::FivePrime => {
                     let offset = self.offset();
                     self.set_offset(offset + trim_def.amount);
-                    self.set_len(l.saturating_sub(trim_def.amount));
+                    self.set_len(l - trim_def.amount); // Won't underflow because of the assert above
                 }
             }
         }
