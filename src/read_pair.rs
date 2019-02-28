@@ -80,7 +80,7 @@ pub enum ReadPart {
     Qual,
 }
 
-/// Compact representation of selected read and an` interval in that read.
+/// Compact representation of selected read and an interval in that read.
 /// Supports offsets and lengths up to 32K.
 /// Internally it is stored as a `u32` with the following bit layout
 ///
@@ -305,7 +305,7 @@ impl RpRange {
     }
 
     /// Shrink an `RpRange` using the specifed local range. This is useful
-    /// in adapter trimming, for example when you find a 5' adapter at some
+    /// in adapter trimming, for example when you find a 3' adapter at some
     /// position `x` from the start of this `RpRange` and want to only retain
     /// the range `[0..x)` within this `RpRange`
     ///
@@ -569,140 +569,6 @@ impl ReadPair {
     pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
         let mut buffer = BytesMut::with_capacity(4096);
         MutReadPair::new(&mut buffer, rr).freeze()
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct TrimDef {
-    read: WhichRead,
-    end: WhichEnd,
-    amount: usize,
-}
-
-impl TrimDef {
-    fn new(read: WhichRead, end: WhichEnd, amount: usize) -> Self {
-        TrimDef { read, end, amount }
-    }
-}
-
-/// A `ReadPair` that supports trimming. All the data corresponding to the
-/// original `ReadPair` is retained and the trimming only shifts the
-/// offsets for indexing various data parts.
-///
-/// TODO: Is it better to add trim support to `ReadPair`?
-#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub struct TrimmedReadPair {
-    pub trimmed_ranges: [Option<RpRange>; 4],
-    readpair: ReadPair,
-}
-
-impl From<ReadPair> for TrimmedReadPair {
-    fn from(readpair: ReadPair) -> Self {
-        let mut trimmed_ranges = [None; 4];
-        for &which in WhichRead::read_types().iter() {
-            if readpair.offsets[which as usize].exists {
-                trimmed_ranges[which as usize] = Some(RpRange::new(
-                    which,
-                    0usize,
-                    readpair.offsets[which as usize].seq_len(),
-                ));
-            }
-        }
-        TrimmedReadPair {
-            trimmed_ranges,
-            readpair,
-        }
-    }
-}
-
-impl TrimmedReadPair {
-    /// Trim the reads using the input `TrimDef` which specifies
-    /// the read to trim, and how many nucleotides to trim from
-    /// which end
-    pub fn trim(&mut self, trim_def: TrimDef) -> &mut Self {
-        if trim_def.amount == 0 {
-            return self;
-        }
-        assert!(
-            self.trimmed_ranges[trim_def.read as usize].is_some(),
-            "ERROR: Attempt to trim an empty sequence"
-        );
-        self.trimmed_ranges[trim_def.read as usize]
-            .as_mut()
-            .unwrap()
-            .trim(trim_def.end, trim_def.amount);
-        self
-    }
-
-    fn is_trimmed(&self, read: WhichRead) -> bool {
-        if let Some(range) = self.trimmed_ranges[read as usize] {
-            range.len() == self.readpair.offsets[read as usize].seq_len()
-        } else {
-            false
-        }
-    }
-
-    /// Set the length of Illumina read1 to the specified length
-    /// If the specified length is greater than the read1 length,
-    /// this function does nothing. This function should be called
-    /// before applying any other trimming to read1, otherwise, it
-    /// will panic.
-    pub fn r1_length(&mut self, len: usize) -> &mut Self {
-        assert!(
-            self.is_trimmed(WhichRead::R1),
-            "ERROR: Read1 is already trimmed prior to calling r1_length()"
-        );
-        assert!(self.readpair.offsets[WhichRead::R1 as usize].exists);
-        let ind = WhichRead::R1 as usize;
-        let trim_amount = self.readpair.offsets[ind]
-            .seq_len()
-            .unwrap()
-            .saturating_sub(len);
-        let trim_def = TrimDef::new(WhichRead::R1, WhichEnd::ThreePrime, trim_amount);
-        self.trim(trim_def)
-    }
-
-    /// Set the length of Illumina read2 to the specified length
-    /// If the specified length is greater than the read2 length,
-    /// this function does nothing. This function should be called
-    /// before applying any other trimming to read2, otherwise, it
-    /// will panic.
-    pub fn r2_length(&mut self, len: usize) -> &mut Self {
-        assert!(
-            self.is_trimmed(WhichRead::R2),
-            "ERROR: Read2 is already trimmed prior to calling r2_length()"
-        );
-        assert!(self.readpair.offsets[WhichRead::R2 as usize].exists);
-        let ind = WhichRead::R2 as usize;
-        let trim_amount = self.readpair.offsets[ind]
-            .seq_len()
-            .unwrap()
-            .saturating_sub(len);
-        let trim_def = TrimDef::new(WhichRead::R2, WhichEnd::ThreePrime, trim_amount);
-        self.trim(trim_def)
-    }
-
-    #[inline]
-    /// Get a ReadPart `part` from a read `which`
-    pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
-        let untrimmed = self.readpair.get(which, part);
-        match part {
-            ReadPart::Qual | ReadPart::Seq => {
-                untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r))
-            }
-            _ => untrimmed,
-        }
-    }
-
-    #[inline]
-    /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
-    pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
-        let read = self.get(rp_range.read(), part);
-        read.map(|r| rp_range.slice(r))
-    }
-
-    pub fn len(&self, which: WhichRead) -> Option<usize> {
-        self.trimmed_ranges[which as usize].and_then(|r| r.len())
     }
 }
 

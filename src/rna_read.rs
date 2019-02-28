@@ -4,7 +4,7 @@
 //! Provides access to the barcode and allows for dynamic trimming.
 
 use adapter_trimmer::{intersect_ranges, ReadAdapterCatalog, AdapterTrimmer};
-use read_pair::{ReadPair, ReadPart, RpRange, TrimmedReadPair, WhichRead};
+use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
 use fxhash::FxHashMap;
 use std::ops::Range;
 use WhichEnd;
@@ -134,8 +134,8 @@ pub struct RnaChunk {
     read_group: String,
     reads_interleaved: bool,
     subsample_rate: Option<f64>,
-    r1_length: Option<usize>,
-    r2_length: Option<usize>,
+    #[serde(default = "FxHashMap::default")]
+    read_lengths: FxHashMap<WhichRead, usize>,
 }
 
 impl RnaChunk {
@@ -143,12 +143,12 @@ impl RnaChunk {
         self.subsample_rate = Some(value);
         self
     }
-    pub fn r1_length(&mut self, value: usize) -> &mut Self {
-        self.r1_length = Some(value);
+    pub fn illumina_r1_trim_length(&mut self, value: usize) -> &mut Self {
+        self.read_lengths.insert(WhichRead::R1, value);
         self
     }
-    pub fn r2_length(&mut self, value: usize) -> &mut Self {
-        self.r2_length = Some(value);
+    pub fn illumina_r2_trim_length(&mut self, value: usize) -> &mut Self {
+        self.read_lengths.insert(WhichRead::R2, value);
         self
     }
 }
@@ -157,17 +157,6 @@ impl FastqProcessor for RnaChunk {
     type ReadType = RnaRead;
     fn process_read(&self, read: ReadPair) -> Option<RnaRead> {
         let chem = &self.chemistry;
-
-        let trimmed_read = {
-            let mut trimmed = TrimmedReadPair::from(read);
-            if let Some(len) = self.r1_length {
-                trimmed.r1_length(len);
-            }
-            if let Some(len) = self.r2_length {
-                trimmed.r2_length(len);
-            }
-            trimmed
-        };
 
         let bc_range = RpRange::new(
             chem.barcode_read_type,
@@ -179,44 +168,49 @@ impl FastqProcessor for RnaChunk {
             chem.umi_read_offset,
             Some(chem.umi_read_length),
         );
-        let r1 = RpRange::new(
-            chem.rna_read_type,
-            chem.rna_read_offset,
-            chem.rna_read_length
-                .or(trimmed_read.len(chem.rna_read_type).map(|mut l| {
-                    l -= chem.rna_read_offset;
-                    l
-                })),
-        );
-
-        let r2 = match chem.rna_read2_type {
-            Some(read_type) => Some(RpRange::new(
+        let r1_range = {
+            let read_type = chem.rna_read_type;
+            let mut range = RpRange::new(
                 read_type,
-                chem.rna_read2_offset.unwrap(),
-                chem.rna_read2_length
-                    .or(trimmed_read.len(read_type).map(|mut l| {
-                        l -= chem.rna_read2_offset.unwrap();
-                        l
-                    })),
-            )),
+                chem.rna_read_offset,
+                chem.rna_read_length,
+            );
+            if let Some(len) = self.read_lengths.get(&read_type) {
+                range.intersect(RpRange::new(read_type, 0, Some(*len)))
+            }
+            range
+        };
+
+        let r2_range = match chem.rna_read2_type {
+            Some(read_type) => {
+                let mut range = RpRange::new(
+                    read_type,
+                    chem.rna_read2_offset.unwrap(),
+                    chem.rna_read2_length,
+                );
+                if let Some(len) = self.read_lengths.get(&read_type) {
+                    range.intersect(RpRange::new(read_type, 0, Some(*len)))
+                }
+                Some(range)
+            },
             None => None,
         };
 
         let barcode = Barcode::new(
             self.gem_group,
-            trimmed_read.get_range(&bc_range, ReadPart::Seq).unwrap(),
+            read.get_range(&bc_range, ReadPart::Seq).unwrap(),
             true,
         );
-        let umi = Umi::new(trimmed_read.get_range(&umi_range, ReadPart::Seq).unwrap());
+        let umi = Umi::new(read.get_range(&umi_range, ReadPart::Seq).unwrap());
 
         Some(RnaRead {
-            read: trimmed_read,
+            read,
             barcode,
             umi,
             bc_range,
             umi_range,
-            r1_range: r1,
-            r2_range: r2,
+            r1_range,
+            r2_range,
         })
     }
 
@@ -262,7 +256,7 @@ impl FastqProcessor for RnaChunk {
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct RnaRead {
-    read: TrimmedReadPair,
+    read: ReadPair,
     barcode: Barcode,
     umi: Umi,
     bc_range: RpRange,
@@ -310,7 +304,7 @@ impl RnaRead {
     pub fn umi_range(&self) -> &RpRange {
         &self.umi_range
     }
-    pub fn readpair(&self) -> &TrimmedReadPair {
+    pub fn readpair(&self) -> &ReadPair {
         &self.read
     }
 
