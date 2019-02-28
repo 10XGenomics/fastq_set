@@ -1,186 +1,385 @@
-[
-    {
-        "chemistry": {
-            "barcode_read_length": 16,
-            "barcode_read_offset": 0,
-            "barcode_read_type": "R1",
-            "barcode_whitelist": "737K-august-2016",
-            "description": "Single Cell V(D)J",
-            "endedness": "five_prime",
-            "name": "SCVDJ",
-            "read_type_to_bcl2fastq_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "R1",
-                "R2": "R2"
-            },
-            "read_type_to_bcl_processor_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "RA",
-                "R2": null
-            },
-            "rna_read2_length": null,
-            "rna_read2_offset": 0,
-            "rna_read2_type": "R2",
-            "rna_read_length": null,
-            "rna_read_offset": 41,
-            "rna_read_type": "R1",
-            "si_read_length": null,
-            "si_read_offset": 0,
-            "si_read_type": "I1",
-            "strandedness": "+",
-            "umi_read_length": 10,
-            "umi_read_offset": 16,
-            "umi_read_type": "R1"
-        },
-        "gem_group": 1,
-        "library_type": "Gene Expression",
-        "read_chunks": {
-            "I1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-I1_si-GGTTTACT_lane-001-chunk-000.fastq.gz",
-            "I2": null,
-            "R1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-RA_si-GGTTTACT_lane-001-chunk-000.fastq.gz",
-            "R2": null
-        },
-        "read_group": "62336:MissingLibrary:1:000000000-D3VJ6:1",
-        "reads_interleaved": true
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:1",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-CTGTAACT_lane-001-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-CTGTAACT_lane-001-chunk-001.fastq.gz",
+        "R2": null
     },
-    {
-        "chemistry": {
-            "barcode_read_length": 16,
-            "barcode_read_offset": 0,
-            "barcode_read_type": "R1",
-            "barcode_whitelist": "737K-august-2016",
-            "description": "Single Cell V(D)J",
-            "endedness": "five_prime",
-            "name": "SCVDJ",
-            "read_type_to_bcl2fastq_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "R1",
-                "R2": "R2"
-            },
-            "read_type_to_bcl_processor_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "RA",
-                "R2": null
-            },
-            "rna_read2_length": null,
-            "rna_read2_offset": 0,
-            "rna_read2_type": "R2",
-            "rna_read_length": null,
-            "rna_read_offset": 41,
-            "rna_read_type": "R1",
-            "si_read_length": null,
-            "si_read_offset": 0,
-            "si_read_type": "I1",
-            "strandedness": "+",
-            "umi_read_length": 10,
-            "umi_read_offset": 16,
-            "umi_read_type": "R1"
-        },
-        "gem_group": 1,
-        "library_type": "Gene Expression",
-        "read_chunks": {
-            "I1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-I1_si-CTAAACGG_lane-001-chunk-000.fastq.gz",
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
             "I2": null,
-            "R1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-RA_si-CTAAACGG_lane-001-chunk-000.fastq.gz",
-            "R2": null
+            "R1": "R1",
+            "R2": "R2"
         },
-        "read_group": "62336:MissingLibrary:1:000000000-D3VJ6:1",
-        "reads_interleaved": true
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
     },
-    {
-        "chemistry": {
-            "barcode_read_length": 16,
-            "barcode_read_offset": 0,
-            "barcode_read_type": "R1",
-            "barcode_whitelist": "737K-august-2016",
-            "description": "Single Cell V(D)J",
-            "endedness": "five_prime",
-            "name": "SCVDJ",
-            "read_type_to_bcl2fastq_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "R1",
-                "R2": "R2"
-            },
-            "read_type_to_bcl_processor_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "RA",
-                "R2": null
-            },
-            "rna_read2_length": null,
-            "rna_read2_offset": 0,
-            "rna_read2_type": "R2",
-            "rna_read_length": null,
-            "rna_read_offset": 41,
-            "rna_read_type": "R1",
-            "si_read_length": null,
-            "si_read_offset": 0,
-            "si_read_type": "I1",
-            "strandedness": "+",
-            "umi_read_length": 10,
-            "umi_read_offset": 16,
-            "umi_read_type": "R1"
-        },
-        "gem_group": 1,
-        "library_type": "Gene Expression",
-        "read_chunks": {
-            "I1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-I1_si-TCGGCGTC_lane-001-chunk-000.fastq.gz",
-            "I2": null,
-            "R1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-RA_si-TCGGCGTC_lane-001-chunk-000.fastq.gz",
-            "R2": null
-        },
-        "read_group": "62336:MissingLibrary:1:000000000-D3VJ6:1",
-        "reads_interleaved": true
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:2",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-CTGTAACT_lane-002-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-CTGTAACT_lane-002-chunk-001.fastq.gz",
+        "R2": null
     },
-    {
-        "chemistry": {
-            "barcode_read_length": 16,
-            "barcode_read_offset": 0,
-            "barcode_read_type": "R1",
-            "barcode_whitelist": "737K-august-2016",
-            "description": "Single Cell V(D)J",
-            "endedness": "five_prime",
-            "name": "SCVDJ",
-            "read_type_to_bcl2fastq_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "R1",
-                "R2": "R2"
-            },
-            "read_type_to_bcl_processor_filename": {
-                "I1": "I1",
-                "I2": null,
-                "R1": "RA",
-                "R2": null
-            },
-            "rna_read2_length": null,
-            "rna_read2_offset": 0,
-            "rna_read2_type": "R2",
-            "rna_read_length": null,
-            "rna_read_offset": 41,
-            "rna_read_type": "R1",
-            "si_read_length": null,
-            "si_read_offset": 0,
-            "si_read_type": "I1",
-            "strandedness": "+",
-            "umi_read_length": 10,
-            "umi_read_offset": 16,
-            "umi_read_type": "R1"
-        },
-        "gem_group": 1,
-        "library_type": "Gene Expression",
-        "read_chunks": {
-            "I1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-I1_si-AACCGTAA_lane-001-chunk-000.fastq.gz",
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
             "I2": null,
-            "R1": "/mnt/analysis/marsoc/pipestances/D3VJ6/BCL_PROCESSOR_PD/D3VJ6/1015.12.13-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u30b0b3b34c/files/demultiplexed_fastq_path/read-RA_si-AACCGTAA_lane-001-chunk-000.fastq.gz",
-            "R2": null
+            "R1": "R1",
+            "R2": "R2"
         },
-        "read_group": "62336:MissingLibrary:1:000000000-D3VJ6:1",
-        "reads_interleaved": true
-    }
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:1",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-TCTAGCGA_lane-001-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-TCTAGCGA_lane-001-chunk-001.fastq.gz",
+        "R2": null
+    },
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "R1",
+            "R2": "R2"
+        },
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:2",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-TCTAGCGA_lane-002-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-TCTAGCGA_lane-002-chunk-001.fastq.gz",
+        "R2": null
+    },
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "R1",
+            "R2": "R2"
+        },
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:1",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-AGAGTGTG_lane-001-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-AGAGTGTG_lane-001-chunk-001.fastq.gz",
+        "R2": null
+    },
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "R1",
+            "R2": "R2"
+        },
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:2",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-AGAGTGTG_lane-002-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-AGAGTGTG_lane-002-chunk-001.fastq.gz",
+        "R2": null
+    },
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "R1",
+            "R2": "R2"
+        },
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:1",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-GACCCTAC_lane-001-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-GACCCTAC_lane-001-chunk-001.fastq.gz",
+        "R2": null
+    },
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "R1",
+            "R2": "R2"
+        },
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+},
+{
+    "gem_group": 1,
+    "library_type": "VDJ",
+    "read_group": "99643:0:1:HHFTHDMXX:2",
+    "subsample_rate": 1.0,
+    "library_id": "0",
+    "read_chunks": {
+        "I1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-I1_si-GACCCTAC_lane-002-chunk-001.fastq.gz",
+        "I2": null,
+        "R1": "/mnt/analysis/marsoc/pipestances/HHFTHDMXX/BCL_PROCESSOR_PD/HHFTHDMXX/1015.12.15-0/BCL_PROCESSOR_PD/BCL_PROCESSOR/MERGE_FASTQS_FROM_TILES/fork0/join-u60663caf82/files/demultiplexed_fastq_path/read-RA_si-GACCCTAC_lane-002-chunk-001.fastq.gz",
+        "R2": null
+    },
+    "chemistry": {
+        "si_read_offset": 0,
+        "strandedness": "+",
+        "umi_read_offset": 16,
+        "barcode_read_type": "R1",
+        "umi_read_type": "R1",
+        "barcode_read_length": 16,
+        "rna_read_type": "R1",
+        "barcode_whitelist": "737K-august-2016",
+        "si_read_type": "I1",
+        "rna_read_length": null,
+        "description": "Single Cell V(D)J",
+        "rna_read_offset": 41,
+        "barcode_read_offset": 0,
+        "rna_read2_type": "R2",
+        "endedness": "five_prime",
+        "name": "SCVDJ",
+        "umi_read_length": 10,
+        "si_read_length": null,
+        "read_type_to_bcl2fastq_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "R1",
+            "R2": "R2"
+        },
+        "rna_read2_length": null,
+        "rna_read2_offset": 0,
+        "read_type_to_bcl_processor_filename": {
+            "I1": "I1",
+            "I2": null,
+            "R1": "RA",
+            "R2": null
+        }
+    },
+    "reads_interleaved": true
+}
 ]
