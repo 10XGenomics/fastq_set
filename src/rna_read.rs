@@ -127,14 +127,26 @@ impl ChemistryDef {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct ReadChunks {
+    #[serde(rename = "R1")]
+    r1: String,
+    #[serde(rename = "R2")]
+    r2: Option<String>,
+    #[serde(rename = "I1")]
+    i1: Option<String>,
+    #[serde(rename = "I2")]
+    i2: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RnaChunk {
     chemistry: ChemistryDef,
     gem_group: u16,
-    read_chunks: FxHashMap<WhichRead, Option<String>>,
+    read_chunks: ReadChunks,
     read_group: String,
     reads_interleaved: bool,
     subsample_rate: Option<f64>,
-    #[serde(default = "FxHashMap::default")]
+    #[serde(default)]
     read_lengths: FxHashMap<WhichRead, usize>,
 }
 
@@ -215,30 +227,19 @@ impl FastqProcessor for RnaChunk {
     }
 
     fn fastq_files(&self) -> InputFastqs {
-        let r1 = self
-            .read_chunks
-            .get(&WhichRead::R1)
-            .unwrap()
-            .clone()
-            .unwrap()
-            .clone();
+        // Make sure that either 
+        // - r2 is None and interleaved
+        // - r2 is Some and not interleaved
+        match self.read_chunks.r2 {
+            Some(_) => assert!(!self.reads_interleaved),
+            None => assert!(self.reads_interleaved),
+        }
+        
         InputFastqs {
-            r1: r1,
-            r2: self
-                .read_chunks
-                .get(&WhichRead::R2)
-                .unwrap_or(&None)
-                .clone(),
-            i1: self
-                .read_chunks
-                .get(&WhichRead::I1)
-                .unwrap_or(&None)
-                .clone(),
-            i2: self
-                .read_chunks
-                .get(&WhichRead::I2)
-                .unwrap_or(&None)
-                .clone(),
+            r1: self.read_chunks.r1.clone(),
+            r2: self.read_chunks.r2.clone(),
+            i1: self.read_chunks.i1.clone(),
+            i2: self.read_chunks.i2.clone(),
             r1_interleaved: self.reads_interleaved,
         }
     }
@@ -337,26 +338,6 @@ impl RnaRead {
         self.read.get(WhichRead::R2, ReadPart::Qual).unwrap()
     }
 
-    /// Sample index (I1) sequence
-    pub fn si_seq(&self) -> Option<&[u8]> {
-        self.read.get(WhichRead::I1, ReadPart::Seq)
-    }
-
-    /// Sample index (I1) QVs
-    pub fn si_qual(&self) -> Option<&[u8]> {
-        self.read.get(WhichRead::I1, ReadPart::Qual)
-    }
-
-    /// Raw, uncorrected barcode sequence
-    pub fn raw_bc_seq(&self) -> &[u8] {
-        self.read.get_range(&self.bc_range, ReadPart::Seq).unwrap()
-    }
-
-    /// Raw barcode QVs
-    pub fn raw_bc_qual(&self) -> &[u8] {
-        self.read.get_range(&self.bc_range, ReadPart::Qual).unwrap()
-    }
-
     /// Raw, uncorrected barcode sequence
     pub fn raw_umi_seq(&self) -> &[u8] {
         self.read.get_range(&self.umi_range, ReadPart::Seq).unwrap()
@@ -451,7 +432,7 @@ impl RnaRead {
 }
 
 #[cfg(test)]
-mod test_rna_cfg {
+mod tests {
     use super::*;
     use serde_json;
 
