@@ -9,6 +9,7 @@ use fxhash::FxHashMap;
 use std::ops::Range;
 use WhichEnd;
 use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
+use std::cmp::min;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
@@ -138,6 +139,29 @@ struct ReadChunks {
     i2: Option<String>,
 }
 
+/// `RnaChunk` represents a chunk of reads from any of our RNA products.
+/// This is typically created by the `SETUP_CHUNKS` stage in our pipelines.
+/// This struct knows how to interpret the raw fastq data using the `chemistry`.
+/// `RnaChunk` is a `FastqProcessor`, meaning it can process the raw reads and
+/// create `RnaRead`, which resolves various regions in the read such as BC, UMI etc.
+/// You can also specify a subsample rate and set R1/R2 lengths.
+/// 
+/// # Example
+/// See the tests
+/// 
+/// # Tests
+/// * `test_rna_chunk_processor_interleaved_sc_vdj` - Test that the `RnaRead`
+/// produced by the `RnaChunk` has the expected barcode, umi, read1, read2 for
+/// VDJ chemistry with interleaved reads.
+/// * `test_rna_chunk_processor_interleaved_sc_vdj_r2` - Test that the `RnaRead`
+/// produced by the `RnaChunk` has the expected barcode, umi, read1, read2 for
+/// VDJ R2-only chemistry with interleaved reads.
+/// * `test_rna_chunk_processor_non_interleaved_sc_vdj` - Test that the `RnaRead`
+/// produced by the `RnaChunk` has the expected barcode, umi, read1, read2 for
+/// VDJ chemistry with non-interleaved reads.
+/// * `test_rna_chunk_processor_non_interleaved_sc_vdj_r2` - Test that the `RnaRead`
+/// produced by the `RnaChunk` has the expected barcode, umi, read1, read2 for
+/// VDJ R2-only chemistry with non-interleaved reads.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RnaChunk {
     chemistry: ChemistryDef,
@@ -151,14 +175,48 @@ pub struct RnaChunk {
 }
 
 impl RnaChunk {
+
+    /// Create a new `RnaChunk`.
+    pub fn new(chemistry: ChemistryDef, gem_group: u16, fastqs: InputFastqs, read_group: String) -> RnaChunk {
+        RnaChunk {
+            chemistry,
+            gem_group,
+            read_chunks: ReadChunks {
+                r1: fastqs.r1,
+                r2: fastqs.r2,
+                i1: fastqs.i1,
+                i2: fastqs.i2,
+            },
+            read_group,
+            reads_interleaved: fastqs.r1_interleaved,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        }
+    }
+
+    /// Set the subsample rate
+    /// 
+    /// # Test
+    /// * `test_rna_chunk_subsample()` - Make sure we get roughly as many
+    /// reads as expected after subsampling
     pub fn subsample_rate(&mut self, value: f64) -> &mut Self {
         self.subsample_rate = Some(value);
         self
     }
+    /// Set the length to hard trim the read1 in the input fastq.
+    /// 
+    /// # Test
+    /// * `prop_test_rna_chunk_trim()` - Make sure that trimming works as
+    /// expected for arbitrary inputs
     pub fn illumina_r1_trim_length(&mut self, value: usize) -> &mut Self {
         self.read_lengths.insert(WhichRead::R1, value);
         self
     }
+    /// Set the length to hard trim the read2 in the input fastq
+    /// 
+    /// # Test
+    /// * `prop_test_rna_chunk_trim()` - Make sure that trimming works as
+    /// expected for arbitrary inputs
     pub fn illumina_r2_trim_length(&mut self, value: usize) -> &mut Self {
         self.read_lengths.insert(WhichRead::R2, value);
         self
@@ -188,7 +246,8 @@ impl FastqProcessor for RnaChunk {
                 chem.rna_read_length,
             );
             if let Some(len) = self.read_lengths.get(&read_type) {
-                range.intersect(RpRange::new(read_type, 0, Some(*len)))
+                let trim_len = min(*len, read.len(read_type).unwrap_or(0));
+                range.intersect(RpRange::new(read_type, 0, Some(trim_len)))
             }
             range
         };
@@ -201,7 +260,8 @@ impl FastqProcessor for RnaChunk {
                     chem.rna_read2_length,
                 );
                 if let Some(len) = self.read_lengths.get(&read_type) {
-                    range.intersect(RpRange::new(read_type, 0, Some(*len)))
+                    let trim_len = min(*len, read.len(read_type).unwrap_or(0));
+                    range.intersect(RpRange::new(read_type, 0, Some(trim_len)))
                 }
                 Some(range)
             },
@@ -226,6 +286,17 @@ impl FastqProcessor for RnaChunk {
         })
     }
 
+    /// Get the fastq files
+    /// 
+    /// # Panics
+    /// * If interleaved and r2 is not None
+    /// * If not interleaved and r2 is None
+    /// 
+    /// # Tests
+    /// * `test_rna_chunk_fastq_panic_1()` - Make sure that we panic if 
+    /// interleaved and r2 is not None
+    /// * `test_rna_chunk_fastq_panic_2()` - Make sure that we panic if 
+    /// not interleaved and r2 is None
     fn fastq_files(&self) -> InputFastqs {
         // Make sure that either 
         // - r2 is None and interleaved
@@ -234,7 +305,7 @@ impl FastqProcessor for RnaChunk {
             Some(_) => assert!(!self.reads_interleaved),
             None => assert!(self.reads_interleaved),
         }
-        
+
         InputFastqs {
             r1: self.read_chunks.r1.clone(),
             r2: self.read_chunks.r2.clone(),
@@ -309,10 +380,6 @@ impl RnaRead {
         &self.read
     }
 
-    pub fn is_paired_end(&self) -> bool {
-        self.r2_range.is_some()
-    }
-
     /// FASTQ read header
     pub fn header(&self) -> &[u8] {
         self.read.get(WhichRead::R1, ReadPart::Header).unwrap()
@@ -338,12 +405,12 @@ impl RnaRead {
         self.read.get(WhichRead::R2, ReadPart::Qual).unwrap()
     }
 
-    /// Raw, uncorrected barcode sequence
+    /// Raw, uncorrected UMI sequence
     pub fn raw_umi_seq(&self) -> &[u8] {
         self.read.get_range(&self.umi_range, ReadPart::Seq).unwrap()
     }
 
-    /// Raw barcode QVs
+    /// Raw UMI QVs
     pub fn raw_umi_qual(&self) -> &[u8] {
         self.read
             .get_range(&self.umi_range, ReadPart::Qual)
@@ -435,18 +502,391 @@ impl RnaRead {
 mod tests {
     use super::*;
     use serde_json;
+    use std::fs::File;
+    use std::path::Path;
+    use proptest::arbitrary::any;
 
     #[test]
     fn test_vdj_cfg() {
-        use std::fs::File;
         let c: Vec<RnaChunk> = serde_json::from_reader(File::open("tests/vdj_rna_chunk.json").unwrap()).unwrap();
         println!("{:?}", c);
     }
 
     #[test]
     fn test_gex_cfg() {
-        use std::fs::File;
         let c: Vec<RnaChunk> = serde_json::from_reader(File::open("tests/gex_rna_chunk.json").unwrap()).unwrap();
         println!("{:?}", c);
     }
+
+    fn get_vdj_chemistry() -> ChemistryDef {
+        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap()).unwrap()
+    }
+
+    fn get_vdj_r2_chemistry() -> ChemistryDef {
+        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_r2_chemistry.json").unwrap()).unwrap()
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_rna_chunk_fastq_panic_1() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/r1_1k.fasta.lz4".into(),
+                r2: Some("tests/rna_read/r2_1k.fasta.lz4".into()),
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: true,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        };
+        let _ = chunk.fastq_files();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_rna_chunk_fastq_panic_2() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/r1_1k.fasta.lz4".into(),
+                r2: None,
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: false,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        };
+        let _ = chunk.fastq_files();
+    }
+
+    fn load_expected(fname: impl AsRef<Path>) -> Vec<Vec<u8>> {
+        let expected: Vec<String> = serde_json::from_reader(File::open(fname).unwrap()).unwrap();
+        expected.into_iter().map(|x| x.as_bytes().to_vec()).collect()
+    }
+
+    #[test]
+    fn test_rna_chunk_processor_interleaved_sc_vdj() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/interleaved_2k.fastq.lz4".into(),
+                r2: None,
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: true,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        };
+        let expected_bc = load_expected("tests/rna_read/bc.json");
+        let expected_bc_qual = load_expected("tests/rna_read/bc_qual.json");
+        let expected_umi = load_expected("tests/rna_read/umi.json");
+        let expected_umi_qual = load_expected("tests/rna_read/umi_qual.json");
+        let expected_r1 = load_expected("tests/rna_read/rna_r1.json");
+        let expected_r1_qual = load_expected("tests/rna_read/rna_r1_qual.json");
+        let expected_r2 = load_expected("tests/rna_read/rna_r2.json");
+        let expected_r2_qual = load_expected("tests/rna_read/rna_r2_qual.json");
+
+        for (i, rna_read_result) in chunk.iter().unwrap().enumerate() {
+            let rna_read = rna_read_result.unwrap();
+
+            // Check that the barcode data is correct
+            assert_eq!(rna_read.bc_range, RpRange::new(WhichRead::R1, 0, Some(16)));
+            assert_eq!(rna_read.barcode, Barcode::new(1, &expected_bc[i], true));
+            assert_eq!(rna_read.raw_bc_seq(), expected_bc[i].as_slice());
+            assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
+
+            // Check that the UMI data is correct
+            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
+            assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
+            assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
+
+            // Check that the R1 data is correct
+            assert_eq!(rna_read.r1_range, RpRange::new(WhichRead::R1, 41, None));
+            assert_eq!(rna_read.r1_seq(), expected_r1[i].as_slice());
+            assert_eq!(rna_read.r1_qual(), expected_r1_qual[i].as_slice());
+
+            // Check that the R2 data is correct
+            assert_eq!(rna_read.r2_range, Some(RpRange::new(WhichRead::R2, 0, None)));
+            assert_eq!(rna_read.r2_seq().unwrap(), expected_r2[i].as_slice());
+            assert_eq!(rna_read.r2_qual().unwrap(), expected_r2_qual[i].as_slice());
+        }
+    }
+
+    #[test]
+    fn test_rna_chunk_processor_interleaved_sc_vdj_r2() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_r2_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/interleaved_2k.fastq.lz4".into(),
+                r2: None,
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: true,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        };
+        let expected_bc = load_expected("tests/rna_read/bc.json");
+        let expected_bc_qual = load_expected("tests/rna_read/bc_qual.json");
+        let expected_umi = load_expected("tests/rna_read/umi.json");
+        let expected_umi_qual = load_expected("tests/rna_read/umi_qual.json");
+        let expected_r1 = load_expected("tests/rna_read/rna_r2.json");
+        let expected_r1_qual = load_expected("tests/rna_read/rna_r2_qual.json");
+
+        for (i, rna_read_result) in chunk.iter().unwrap().enumerate() {
+            let rna_read = rna_read_result.unwrap();
+
+            // Check that the barcode data is correct
+            assert_eq!(rna_read.bc_range, RpRange::new(WhichRead::R1, 0, Some(16)));
+            assert_eq!(rna_read.barcode, Barcode::new(1, &expected_bc[i], true));
+            assert_eq!(rna_read.raw_bc_seq(), expected_bc[i].as_slice());
+            assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
+
+            // Check that the UMI data is correct
+            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
+            assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
+            assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
+
+            // Check that the R1 data is correct
+            assert_eq!(rna_read.r1_range, RpRange::new(WhichRead::R2, 0, None));
+            assert_eq!(rna_read.r1_seq(), expected_r1[i].as_slice());
+            assert_eq!(rna_read.r1_qual(), expected_r1_qual[i].as_slice());
+
+            // Check that the R2 data is correct
+            assert_eq!(rna_read.r2_range, None);
+            assert_eq!(rna_read.r2_seq(), None);
+            assert_eq!(rna_read.r2_qual(), None);
+        }
+    }
+
+    #[test]
+    fn test_rna_chunk_processor_non_interleaved_sc_vdj() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/r1_2k.fastq.lz4".into(),
+                r2: Some("tests/rna_read/r2_2k.fastq.lz4".into()),
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: false,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        };
+        let expected_bc = load_expected("tests/rna_read/bc.json");
+        let expected_bc_qual = load_expected("tests/rna_read/bc_qual.json");
+        let expected_umi = load_expected("tests/rna_read/umi.json");
+        let expected_umi_qual = load_expected("tests/rna_read/umi_qual.json");
+        let expected_r1 = load_expected("tests/rna_read/rna_r1.json");
+        let expected_r1_qual = load_expected("tests/rna_read/rna_r1_qual.json");
+        let expected_r2 = load_expected("tests/rna_read/rna_r2.json");
+        let expected_r2_qual = load_expected("tests/rna_read/rna_r2_qual.json");
+
+        for (i, rna_read_result) in chunk.iter().unwrap().enumerate() {
+            let rna_read = rna_read_result.unwrap();
+
+            // Check that the barcode data is correct
+            assert_eq!(rna_read.bc_range, RpRange::new(WhichRead::R1, 0, Some(16)));
+            assert_eq!(rna_read.barcode, Barcode::new(1, &expected_bc[i], true));
+            assert_eq!(rna_read.raw_bc_seq(), expected_bc[i].as_slice());
+            assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
+
+            // Check that the UMI data is correct
+            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
+            assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
+            assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
+
+            // Check that the R1 data is correct
+            assert_eq!(rna_read.r1_range, RpRange::new(WhichRead::R1, 41, None));
+            assert_eq!(rna_read.r1_seq(), expected_r1[i].as_slice());
+            assert_eq!(rna_read.r1_qual(), expected_r1_qual[i].as_slice());
+
+            // Check that the R2 data is correct
+            assert_eq!(rna_read.r2_range, Some(RpRange::new(WhichRead::R2, 0, None)));
+            assert_eq!(rna_read.r2_seq().unwrap(), expected_r2[i].as_slice());
+            assert_eq!(rna_read.r2_qual().unwrap(), expected_r2_qual[i].as_slice());
+        }
+    }
+
+    #[test]
+    fn test_rna_chunk_processor_non_interleaved_sc_vdj_r2() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_r2_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/r1_2k.fastq.lz4".into(),
+                r2: Some("tests/rna_read/r2_2k.fastq.lz4".into()),
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: false,
+            subsample_rate: None,
+            read_lengths: FxHashMap::default(),
+        };
+        let expected_bc = load_expected("tests/rna_read/bc.json");
+        let expected_bc_qual = load_expected("tests/rna_read/bc_qual.json");
+        let expected_umi = load_expected("tests/rna_read/umi.json");
+        let expected_umi_qual = load_expected("tests/rna_read/umi_qual.json");
+        let expected_r1 = load_expected("tests/rna_read/rna_r2.json");
+        let expected_r1_qual = load_expected("tests/rna_read/rna_r2_qual.json");
+
+        for (i, rna_read_result) in chunk.iter().unwrap().enumerate() {
+            let rna_read = rna_read_result.unwrap();
+
+            // Check that the barcode data is correct
+            assert_eq!(rna_read.bc_range, RpRange::new(WhichRead::R1, 0, Some(16)));
+            assert_eq!(rna_read.barcode, Barcode::new(1, &expected_bc[i], true));
+            assert_eq!(rna_read.raw_bc_seq(), expected_bc[i].as_slice());
+            assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
+
+            // Check that the UMI data is correct
+            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
+            assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
+            assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
+
+            // Check that the R1 data is correct
+            assert_eq!(rna_read.r1_range, RpRange::new(WhichRead::R2, 0, None));
+            assert_eq!(rna_read.r1_seq(), expected_r1[i].as_slice());
+            assert_eq!(rna_read.r1_qual(), expected_r1_qual[i].as_slice());
+
+            // Check that the R2 data is correct
+            assert_eq!(rna_read.r2_range, None);
+            assert_eq!(rna_read.r2_seq(), None);
+            assert_eq!(rna_read.r2_qual(), None);
+        }
+    }
+
+    #[test]
+    fn test_rna_chunk_subsample() {
+        let chunk = RnaChunk {
+            chemistry: get_vdj_chemistry(),
+            gem_group: 1,
+            read_chunks: ReadChunks{
+                r1: "tests/rna_read/interleaved_2k.fastq".into(),
+                r2: None,
+                i1: None,
+                i2: None,
+            },
+            read_group: "Blah".into(),
+            reads_interleaved: true,
+            subsample_rate: Some(0.2),
+            read_lengths: FxHashMap::default(),
+        };
+        let processed_reads: usize = chunk.iter().unwrap().map(|_| 1).sum();
+        println!("{}", processed_reads);
+        // Expecting 400 reads since we start with 2000 reads
+        assert!(processed_reads > 300); // < 1e-6 probability of this happening by chance
+        assert!(processed_reads < 500); // < 1e-6 probability of this happening by chance
+    }
+
+    proptest! {
+        #[test]
+        fn prop_test_rna_chunk_trim(
+            r1_length in 41usize..,
+            trim_r1 in any::<bool>(),
+            r2_length in any::<usize>(),
+            trim_r2 in any::<bool>()
+        ) { 
+            // SC-VDJ chemistry
+            {
+                let expected_r1_length = if trim_r1 {
+                    Some(min(150-41, r1_length-41))
+                } else {
+                    None
+                };
+
+                let expected_r2_length = if trim_r2 {
+                    Some(min(150, r2_length))
+                } else {
+                    None
+                };
+                
+                let mut chunk = RnaChunk {
+                    chemistry: get_vdj_chemistry(),
+                    gem_group: 1,
+                    read_chunks: ReadChunks{
+                        r1: "tests/rna_read/interleaved_2k.fastq.lz4".into(),
+                        r2: None,
+                        i1: None,
+                        i2: None,
+                    },
+                    read_group: "Blah".into(),
+                    reads_interleaved: true,
+                    subsample_rate: None,
+                    read_lengths: FxHashMap::default(),
+                };
+                if trim_r1 {
+                    chunk.illumina_r1_trim_length(r1_length);
+                }
+                if trim_r2 {
+                    chunk.illumina_r2_trim_length(r2_length);
+                }
+
+                for rna_read_result in chunk.iter().unwrap().take(100) {
+                    let rna_read = rna_read_result.unwrap();
+                    assert_eq!(rna_read.bc_range, RpRange::new(WhichRead::R1, 0, Some(16)));
+                    assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+                    assert_eq!(rna_read.r1_range, RpRange::new(WhichRead::R1, 41, expected_r1_length));
+                    assert_eq!(rna_read.r2_range, Some(RpRange::new(WhichRead::R2, 0, expected_r2_length)));
+                }
+            }
+            // SC-VDJ R2 chemistry
+            {
+                let expected_r1_length = if trim_r2 {
+                    Some(min(150, r2_length))
+                } else {
+                    None
+                };
+
+                let mut chunk = RnaChunk {
+                    chemistry: get_vdj_r2_chemistry(),
+                    gem_group: 1,
+                    read_chunks: ReadChunks{
+                        r1: "tests/rna_read/interleaved_2k.fastq.lz4".into(),
+                        r2: None,
+                        i1: None,
+                        i2: None,
+                    },
+                    read_group: "Blah".into(),
+                    reads_interleaved: true,
+                    subsample_rate: None,
+                    read_lengths: FxHashMap::default(),
+                };
+                if trim_r1 {
+                    chunk.illumina_r1_trim_length(r1_length);
+                }
+                if trim_r2 {
+                    chunk.illumina_r2_trim_length(r2_length);
+                }
+
+                for rna_read_result in chunk.iter().unwrap().take(100) {
+                    let rna_read = rna_read_result.unwrap();
+                    assert_eq!(rna_read.bc_range, RpRange::new(WhichRead::R1, 0, Some(16)));
+                    assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+                    assert_eq!(rna_read.r1_range, RpRange::new(WhichRead::R2, 0, expected_r1_length));
+                    assert_eq!(rna_read.r2_range, None);
+                }
+            }
+        }
+    }
+    
 }
