@@ -445,6 +445,12 @@ impl RnaRead {
         }
     }
 
+    /// Given an `RpRange` and a list of adapter trimmers, this function 
+    /// searches for all the adapters within the `RpRange` and returns a
+    /// `Range<usize>`, which you need to shrink the `RpRange` to.
+    /// It also returns a hashmap from the adapter name to the `RpRange`
+    /// where the adapter was found. This is useful for book-keeping and 
+    /// computing metrics.
     fn trim_adapters_helper<'a>(
         &mut self,
         read_range: RpRange,
@@ -470,9 +476,23 @@ impl RnaRead {
         (shrink_range, adapter_pos)
     }
 
+    /// Perform adapter trimming on the `RnaRead` and return the positions
+    /// of the adapters found.
+    /// 
+    /// # Inputs
+    /// * `adapter_catalog`: Packages all the adapter trimmers
+    /// 
+    /// # Output
+    /// * `FxHashMap<String, RpRange>` - where the key is the name of the adapter
+    /// and values is the `RpRange` where the adapter is found. Clearly, the adapters
+    /// which are not present in the read will not be part of the output. The `ReadAdapterCatalog`
+    /// guarantees that no two adapters share the same name, so there is no confusion.ReadPart
+    /// 
+    /// # Test
+    /// * `test_rna_read_adapter_trim()`: Test that we can trim reads consistent with cutadapt.
     pub fn trim_adapters<'a>(
         &mut self,
-        adapter_catalog: &'a mut ReadAdapterCatalog<'a>,
+        adapter_catalog: &mut ReadAdapterCatalog<'a>,
     ) -> FxHashMap<String, RpRange> {
 
         let mut result = FxHashMap::default();
@@ -888,5 +908,110 @@ mod tests {
             }
         }
     }
-    
+
+    #[test]
+    fn test_rna_read_adapter_trim() {
+        // The VDJ adapters are listed in `tests/rna_read/vdj_adapters.json`. The reads in `tests/rna_read/interleaved_2k_insert.fastq` were
+        // trimmed using cutadapt and saved in `tests/rna_read/interleaved_trimmed_2k.fastq` (See `tests/rna_read/run_cutadapt.sh`). This
+        // test makes sure that the trimming that we produce exactly matches the cutadapt outputs. There are 2000 read pairs in total and 85
+        // read pairs are trimmed in total.
+        use adapter_trimmer::{Adapter, ReadAdapterCatalog};
+        use read_pair_iter::ReadPairIter;
+
+        let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> = serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap()).unwrap();
+        let mut ad_catalog = ReadAdapterCatalog::new();
+        for (read, adapters) in vdj_adapters.iter() {
+            for adapter in adapters {
+                ad_catalog.add_adapter(*read, adapter);
+            }
+        }
+
+        let fastqs = InputFastqs {
+            // This file was created by running the script `tests/rna_read/run_cutadapt.sh`
+            // It is be the trimmed output fastq returned by cutadapt
+            r1: "tests/rna_read/interleaved_trimmed_2k.fastq".into(),
+            r2: None,
+            i1: None,
+            i2: None,
+            r1_interleaved: true,
+        };
+
+        // SCVDJ Chemistry
+        {
+            let rp_iter = ReadPairIter::from_fastq_files(fastqs.clone()).unwrap();
+
+            let chunk = RnaChunk {
+                chemistry: get_vdj_chemistry(),
+                gem_group: 1,
+                read_chunks: ReadChunks{
+                    r1: "tests/rna_read/interleaved_2k.fastq".into(),
+                    r2: None,
+                    i1: None,
+                    i2: None,
+                },
+                read_group: "Blah".into(),
+                reads_interleaved: true,
+                subsample_rate: None,
+                read_lengths: FxHashMap::default(),
+            };
+
+            let mut n_trimmed = 0;
+            let mut adapter_counts: FxHashMap<String, usize> = FxHashMap::default();
+            for (rna_read_result, rp_result) in chunk.iter().unwrap().zip(rp_iter) {
+                let mut rna_read = rna_read_result.unwrap();
+                let mut adapter_positions = rna_read.trim_adapters(&mut ad_catalog);
+                for (k, _) in adapter_positions.drain() {
+                    *adapter_counts.entry(k).or_insert(0) += 1;
+                }
+                let rp = rp_result.unwrap();
+                assert_eq!(rna_read.r1_seq(), rp.get(WhichRead::R1, ReadPart::Seq).unwrap());
+                assert_eq!(rna_read.r2_seq().unwrap(), rp.get(WhichRead::R2, ReadPart::Seq).unwrap());
+                if rna_read.r1_seq().len() != 109 || rna_read.r2_seq().unwrap().len() != 150 {
+                    n_trimmed += 1;
+                }
+            }
+            println!("Trimmed {} sequences", n_trimmed);
+
+            // The counts returned by cutadapt does not completely agree with this, because they count things
+            // differently when multiple adapters are found for a read.
+            assert_eq!(adapter_counts.get("R2_rc"), Some(&27));
+            assert_eq!(adapter_counts.get("P7_rc"), Some(&8));
+            assert_eq!(adapter_counts.get("polyA"), Some(&8));
+            assert_eq!(adapter_counts.get("rt_primer_rc"), Some(&2));
+            assert_eq!(adapter_counts.get("spacer"), None);
+            assert_eq!(adapter_counts.get("spacer_rc"), Some(&66));
+            assert_eq!(adapter_counts.get("R1_rc"), Some(&29));
+            assert_eq!(adapter_counts.get("P5_rc"), Some(&14));
+            assert_eq!(adapter_counts.get("polyT"), Some(&4));
+            assert_eq!(adapter_counts.get("rt_primer"), Some(&1));
+        }
+
+        // SC-VDJ R2 chemistry
+        {
+            let rp_iter = ReadPairIter::from_fastq_files(fastqs.clone()).unwrap();
+
+            let chunk = RnaChunk {
+                chemistry: get_vdj_r2_chemistry(),
+                gem_group: 1,
+                read_chunks: ReadChunks{
+                    r1: "tests/rna_read/interleaved_2k.fastq".into(),
+                    r2: None,
+                    i1: None,
+                    i2: None,
+                },
+                read_group: "Blah".into(),
+                reads_interleaved: true,
+                subsample_rate: None,
+                read_lengths: FxHashMap::default(),
+            };
+
+            for (rna_read_result, rp_result) in chunk.iter().unwrap().zip(rp_iter) {
+                let mut rna_read = rna_read_result.unwrap();
+                rna_read.trim_adapters(&mut ad_catalog);
+                let rp = rp_result.unwrap();
+                assert_eq!(rna_read.r1_seq(), rp.get(WhichRead::R2, ReadPart::Seq).unwrap());
+                assert_eq!(rna_read.r2_seq(), None);
+            }
+        }
+    }
 }

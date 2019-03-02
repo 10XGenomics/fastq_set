@@ -734,6 +734,10 @@ impl<'a> ReadAdapterCatalog<'a> {
         }
     }
 
+    pub fn add_adapter(&mut self, read: WhichRead, adapter: &'a Adapter) {
+        self.push_trimmer(read, AdapterTrimmer::new(adapter));
+    }
+
     pub fn get_mut_trimmers(&mut self, read: WhichRead) -> &mut Vec<AdapterTrimmer<'a>> {
         match read {
             WhichRead::R1 => &mut self.read1_trimmers,
