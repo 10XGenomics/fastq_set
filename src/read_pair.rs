@@ -72,6 +72,17 @@ impl WhichRead {
     }
 }
 
+impl fmt::Display for WhichRead {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match self {
+            WhichRead::R1 => "read1",
+            WhichRead::R2 => "read2",
+            WhichRead::I1 => "index1",
+            WhichRead::I2 => "index2",
+        })
+    }
+}
+
 /// Components of a FASTQ record.
 #[derive(Debug, Copy, Clone)]
 pub enum ReadPart {
@@ -83,12 +94,12 @@ pub enum ReadPart {
 /// Compact representation of selected read and an interval in that read.
 /// Supports offsets and lengths up to 32K.
 /// Internally it is stored as a `u32` with the following bit layout
-///
+/// ```text
 /// +-----------+--------------+-----------+
 /// | WhichRead | Start Offset | Length    |
 /// | (2 bits)  | (15 bits)    | (15 bits) |
 /// +-----------+--------------+-----------+
-/// 
+/// ```
 /// Length is optional, with `None` indicating everything until the end of the read.
 /// 
 /// # Example

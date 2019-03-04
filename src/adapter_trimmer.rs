@@ -23,6 +23,8 @@ use bio::alignment::sparse::HashMapFx;
 use read_pair::WhichRead;
 use std::cmp::{max, min};
 use std::collections::HashSet;
+use std::collections::HashMap;
+use std::hash::BuildHasher;
 use std::i32;
 use std::ops::Range;
 use WhichEnd;
@@ -747,6 +749,18 @@ impl<'a> ReadAdapterCatalog<'a> {
                 read
             ),
         }
+    }
+}
+
+impl<'a, S> From<&'a HashMap<WhichRead, Vec<Adapter>, S>> for ReadAdapterCatalog<'a> where S: BuildHasher {
+    fn from(adapter_map: &'a HashMap<WhichRead, Vec<Adapter>, S>) -> Self {
+        let mut catalog = ReadAdapterCatalog::new();
+        for (read, adapters) in adapter_map {
+            for adapter in adapters {
+                catalog.add_adapter(*read, adapter);
+            }
+        }
+        catalog
     }
 }
 

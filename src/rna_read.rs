@@ -225,6 +225,13 @@ impl RnaChunk {
 
 impl FastqProcessor for RnaChunk {
     type ReadType = RnaRead;
+    /// This function creates a processed `RnaRead` from a raw `ReadPair`
+    /// using the chemistry stored in `self`. A rough outline of what
+    /// happens inside:
+    /// - Attach Barcodes and UMIs
+    /// - Find the ranges for RNA read1 and RNA read2. Remember, RNA read1 could
+    /// point to illumina read2, ut it guaranteed to be empty
+    /// - Optionally hard trim the illumina R1 and R2 reads
     fn process_read(&self, read: ReadPair) -> Option<RnaRead> {
         let chem = &self.chemistry;
 
@@ -378,6 +385,9 @@ impl RnaRead {
     }
     pub fn readpair(&self) -> &ReadPair {
         &self.read
+    }
+    pub fn r2_exists(&self) -> bool {
+        self.r2_range.is_some()
     }
 
     /// FASTQ read header
@@ -919,12 +929,7 @@ mod tests {
         use read_pair_iter::ReadPairIter;
 
         let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> = serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap()).unwrap();
-        let mut ad_catalog = ReadAdapterCatalog::new();
-        for (read, adapters) in vdj_adapters.iter() {
-            for adapter in adapters {
-                ad_catalog.add_adapter(*read, adapter);
-            }
-        }
+        let mut ad_catalog = ReadAdapterCatalog::from(&vdj_adapters);
 
         let fastqs = InputFastqs {
             // This file was created by running the script `tests/rna_read/run_cutadapt.sh`
@@ -971,6 +976,7 @@ mod tests {
                 }
             }
             println!("Trimmed {} sequences", n_trimmed);
+            println!("Counts {:#?}", adapter_counts);
 
             // The counts returned by cutadapt does not completely agree with this, because they count things
             // differently when multiple adapters are found for a read.
