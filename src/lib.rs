@@ -8,7 +8,7 @@
 #![allow(
     clippy::range_plus_one,
     clippy::naive_bytecount,
-    clippy::option_map_unit_fn,
+    clippy::option_map_unit_fn
 )]
 
 #[cfg(test)]

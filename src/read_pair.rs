@@ -74,12 +74,16 @@ impl WhichRead {
 
 impl fmt::Display for WhichRead {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            WhichRead::R1 => "read1",
-            WhichRead::R2 => "read2",
-            WhichRead::I1 => "index1",
-            WhichRead::I2 => "index2",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                WhichRead::R1 => "read1",
+                WhichRead::R2 => "read2",
+                WhichRead::I1 => "index1",
+                WhichRead::I2 => "index2",
+            }
+        )
     }
 }
 
@@ -101,7 +105,7 @@ pub enum ReadPart {
 /// +-----------+--------------+-----------+
 /// ```
 /// Length is optional, with `None` indicating everything until the end of the read.
-/// 
+///
 /// # Example
 /// ```rust
 /// extern crate fastq_10x;
@@ -116,28 +120,28 @@ pub enum ReadPart {
 ///     sep: None,
 /// };
 /// let input = [Some(read1), None, None, None];
-/// 
+///
 /// // WARNING: DO NOT USE THIS FUNCTION IF YOU ARE STREAMING FASTQ DATA
 /// // AND WANT TO CREATE ReadPair STRUCTS.
 /// // USE `fastq_10x::read_pair_iter::ReadPairIter` INSTEAD.
 /// let read_pair = ReadPair::new(input);
 /// // Let's say the read1 is of the form BC(16)-UMI(10)-Insert. This example will
 /// // setup different RpRanges to represent these ranges.
-/// 
+///
 /// let barcode_range = RpRange::new(WhichRead::R1, 0, Some(16));
 /// assert_eq!(read_pair.get_range(barcode_range, ReadPart::Seq).unwrap(), b"GTCGCACTGATCTGGG".to_vec().as_slice());
-/// 
+///
 /// let umi_range = RpRange::new(WhichRead::R1, 16, Some(10));
 /// assert_eq!(read_pair.get_range(umi_range, ReadPart::Seq).unwrap(), b"TTAGGCGCGG".to_vec().as_slice());
-/// 
+///
 /// let mut r1_range = RpRange::new(WhichRead::R1, 26, None); // None => everything beyond offset
 /// assert_eq!(read_pair.get_range(r1_range, ReadPart::Seq).unwrap(), b"AGCCGAGGGTTGCACCATTTTTCATTATTGAATGCCAAGATA".to_vec().as_slice());
-/// 
+///
 /// // Let's say you want to trim first 5 bases in r1
 /// r1_range.trim(WhichEnd::FivePrime, 5);
 /// assert_eq!(r1_range.offset(), 31);
 /// assert_eq!(r1_range.len(), None);
-/// 
+///
 /// // Let's say you only want to consider first 50 bases of the read1.seq
 /// // and update the r1_range accordingly
 /// let useful_range = RpRange::new(WhichRead::R1, 0, Some(50));
@@ -178,7 +182,7 @@ impl RpRange {
     ///
     /// # Panics
     /// * If `offset` or `len` is >= `2^15`
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use fastq_10x::read_pair::RpRange;
@@ -188,7 +192,7 @@ impl RpRange {
     /// assert!(range.offset() == 10);
     /// assert!(range.len() == Some(50));
     /// ```
-    /// 
+    ///
     /// # Tests
     /// * `test_rprange_invalid_offset()` - Test that this function panics with
     /// an offset that is too large
@@ -260,13 +264,13 @@ impl RpRange {
     }
 
     /// Intersect the `RpRange` with another.
-    /// 
+    ///
     /// # Input
     /// * `other` - Intersect `self` with this `RpRange`
-    /// 
+    ///
     /// # Panics
     /// * If `self` and `other` does not point to the same read
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use fastq_10x::read_pair::{RpRange, WhichRead};
@@ -278,7 +282,7 @@ impl RpRange {
     /// assert_eq!(r1_range.offset(), 20);
     /// assert_eq!(r1_range.len(), Some(read_seq.len()-20));
     /// ```
-    /// 
+    ///
     /// # Tests
     /// * `test_rprange_intersect_panic()` - Make sure that this function panics
     /// if the reads do not match
@@ -287,17 +291,20 @@ impl RpRange {
     /// * `test_rprange_intersect_other_open()` - Test a case when only other length is set
     /// * `test_rprange_intersect_both_closed()` - Test a case when both lengths are set
     pub fn intersect(&mut self, other: RpRange) {
-        use std::cmp::{min, max};
+        use std::cmp::{max, min};
         assert!(
             self.read() == other.read(),
             "Self = {:?} and other = {:?} does not have the same read",
-            self, other
+            self,
+            other
         );
 
         let self_offset = self.offset();
         let other_offset = other.offset();
         let new_end = match (self.len(), other.len()) {
-            (Some(self_len), Some(other_len)) => Some(min(self_offset + self_len, other_offset + other_len)),
+            (Some(self_len), Some(other_len)) => {
+                Some(min(self_offset + self_len, other_offset + other_len))
+            }
             (Some(self_len), None) => Some(self_offset + self_len),
             (None, Some(other_len)) => Some(other_offset + other_len),
             (None, None) => None,
@@ -308,7 +315,7 @@ impl RpRange {
             Some(end) => {
                 let final_offset = min(end, new_offset);
                 self.set_offset(final_offset);
-                self.set_len(end-final_offset);
+                self.set_len(end - final_offset);
             }
             None => {
                 self.set_offset(new_offset);
@@ -323,12 +330,12 @@ impl RpRange {
     ///
     /// # Input
     /// * `shrink_range` - `Range<usize>` to shrink the `RpRange` to
-    /// 
+    ///
     /// # Panics
     /// * If the length is set and the `shrink_range` is not within `0..self.len().unwrap()`
     /// * If shrink_range.start > shrink_range.end
-    /// 
-    /// 
+    ///
+    ///
     /// # Example
     /// ```rust
     /// use fastq_10x::read_pair::{RpRange, WhichRead};
@@ -340,7 +347,7 @@ impl RpRange {
     /// assert!(rp_range.offset() == 30); // 20 + 10
     /// assert!(rp_range.len() == Some(40)); // 60-20
     /// ```
-    /// 
+    ///
     /// # Tests
     /// * `test_shrink_invalid_range_1()`: Test for panic if shrink range start is > length
     /// * `test_shrink_invalid_range_2()`: Test for panic if shrink range end is > length
@@ -349,10 +356,10 @@ impl RpRange {
     /// * `prop_test_rprange_shrink()`: Test shrink for arbitrary values of
     /// `RpRange` and valid `shrink_range`
     pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
-
         assert!(
             shrink_range.start <= shrink_range.end,
-            "RpRange shrink() expects a valid range with start<=end. Received {:?}", shrink_range
+            "RpRange shrink() expects a valid range with start<=end. Received {:?}",
+            shrink_range
         );
 
         if let Some(len) = self.len() {
@@ -370,15 +377,15 @@ impl RpRange {
     }
 
     /// Trim the `RpRange` by specifying the `end` and the `amount`
-    /// 
+    ///
     /// # Inputs
     /// * `end` - whether to trim the `FivePrime` end or the `ThreePrime` end
     /// * `amount` - how many bases to trim.
-    /// 
+    ///
     /// # Panics
     /// * To trim the `ThreePrime` end, the length needs to be known. Panics otherwise
     /// * If length is known, panics if the amount to trim is more than the length
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use fastq_10x::read_pair::{RpRange, WhichRead};
@@ -389,7 +396,7 @@ impl RpRange {
     /// assert!(rp_range1.read() == WhichRead::R1); // Unchanged
     /// assert!(rp_range1.offset() == 50); // 40 + 10
     /// assert!(rp_range1.len() == None); // Still until the end
-    /// 
+    ///
     /// let mut rp_range2 = RpRange::new(WhichRead::R1, 40, Some(110));
     /// // Trim 20 bases in the 3' end
     /// // Trimming from 3' end needs the length to be set. In this
@@ -399,13 +406,13 @@ impl RpRange {
     /// assert!(rp_range2.offset() == 40); // Unchanged
     /// assert!(rp_range2.len() == Some(90)); // 110-20
     /// ```
-    /// 
+    ///
     /// # Tests
     /// * `test_rprange_trim_without_len()` - Make sure 3' trimming without length panics
     /// * `prop_test_rprange_trim()` - Proptest to make sure the trim results are correct
     pub fn trim(&mut self, end: WhichEnd, amount: usize) {
-
-        if amount == 0 { // Trivial case
+        if amount == 0 {
+            // Trivial case
             return;
         }
 
@@ -421,9 +428,11 @@ impl RpRange {
             WhichEnd::ThreePrime => {
                 match self.len() {
                     Some(len) => self.set_len(len - amount), // Won't underflow because of the assert above
-                    None => panic!("ThreePrime trim is only possible for RpRange with known length!"),
+                    None => {
+                        panic!("ThreePrime trim is only possible for RpRange with known length!")
+                    }
                 }
-            },
+            }
             WhichEnd::FivePrime => {
                 let new_offset = self.offset() + amount;
                 self.set_offset(new_offset);

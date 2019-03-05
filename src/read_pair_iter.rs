@@ -162,12 +162,7 @@ impl ReadPairIter {
 
                 if any_not_complete {
                     // Index of a finished iterator
-                    let ended_index = iter_ended
-                        .iter()
-                        .enumerate()
-                        .find(|(_, v)| **v)
-                        .unwrap()
-                        .0;
+                    let ended_index = iter_ended.iter().enumerate().find(|(_, v)| **v).unwrap().0;
 
                     let msg = format_err!(
                         "Input FASTQ file {:?} ended prematurely",

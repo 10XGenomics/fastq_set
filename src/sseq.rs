@@ -39,7 +39,7 @@ impl SSeq {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.length==0
+        self.length == 0
     }
 }
 
@@ -72,7 +72,6 @@ impl PartialEq for SSeq {
         self.seq() == other.seq()
     }
 }
-
 
 use std::fmt;
 impl fmt::Debug for SSeq {

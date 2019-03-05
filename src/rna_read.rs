@@ -3,13 +3,13 @@
 //! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries.
 //! Provides access to the barcode and allows for dynamic trimming.
 
-use adapter_trimmer::{intersect_ranges, ReadAdapterCatalog, AdapterTrimmer};
-use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
+use adapter_trimmer::{intersect_ranges, AdapterTrimmer, ReadAdapterCatalog};
 use fxhash::FxHashMap;
+use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
+use std::cmp::min;
 use std::ops::Range;
 use WhichEnd;
 use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
-use std::cmp::min;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
@@ -145,10 +145,10 @@ struct ReadChunks {
 /// `RnaChunk` is a `FastqProcessor`, meaning it can process the raw reads and
 /// create `RnaRead`, which resolves various regions in the read such as BC, UMI etc.
 /// You can also specify a subsample rate and set R1/R2 lengths.
-/// 
+///
 /// # Example
 /// See the tests
-/// 
+///
 /// # Tests
 /// * `test_rna_chunk_processor_interleaved_sc_vdj` - Test that the `RnaRead`
 /// produced by the `RnaChunk` has the expected barcode, umi, read1, read2 for
@@ -175,9 +175,13 @@ pub struct RnaChunk {
 }
 
 impl RnaChunk {
-
     /// Create a new `RnaChunk`.
-    pub fn new(chemistry: ChemistryDef, gem_group: u16, fastqs: InputFastqs, read_group: String) -> RnaChunk {
+    pub fn new(
+        chemistry: ChemistryDef,
+        gem_group: u16,
+        fastqs: InputFastqs,
+        read_group: String,
+    ) -> RnaChunk {
         RnaChunk {
             chemistry,
             gem_group,
@@ -195,7 +199,7 @@ impl RnaChunk {
     }
 
     /// Set the subsample rate
-    /// 
+    ///
     /// # Test
     /// * `test_rna_chunk_subsample()` - Make sure we get roughly as many
     /// reads as expected after subsampling
@@ -204,7 +208,7 @@ impl RnaChunk {
         self
     }
     /// Set the length to hard trim the read1 in the input fastq.
-    /// 
+    ///
     /// # Test
     /// * `prop_test_rna_chunk_trim()` - Make sure that trimming works as
     /// expected for arbitrary inputs
@@ -213,7 +217,7 @@ impl RnaChunk {
         self
     }
     /// Set the length to hard trim the read2 in the input fastq
-    /// 
+    ///
     /// # Test
     /// * `prop_test_rna_chunk_trim()` - Make sure that trimming works as
     /// expected for arbitrary inputs
@@ -247,11 +251,7 @@ impl FastqProcessor for RnaChunk {
         );
         let r1_range = {
             let read_type = chem.rna_read_type;
-            let mut range = RpRange::new(
-                read_type,
-                chem.rna_read_offset,
-                chem.rna_read_length,
-            );
+            let mut range = RpRange::new(read_type, chem.rna_read_offset, chem.rna_read_length);
             if let Some(len) = self.read_lengths.get(&read_type) {
                 let trim_len = min(*len, read.len(read_type).unwrap_or(0));
                 range.intersect(RpRange::new(read_type, 0, Some(trim_len)))
@@ -271,7 +271,7 @@ impl FastqProcessor for RnaChunk {
                     range.intersect(RpRange::new(read_type, 0, Some(trim_len)))
                 }
                 Some(range)
-            },
+            }
             None => None,
         };
 
@@ -294,18 +294,18 @@ impl FastqProcessor for RnaChunk {
     }
 
     /// Get the fastq files
-    /// 
+    ///
     /// # Panics
     /// * If interleaved and r2 is not None
     /// * If not interleaved and r2 is None
-    /// 
+    ///
     /// # Tests
-    /// * `test_rna_chunk_fastq_panic_1()` - Make sure that we panic if 
+    /// * `test_rna_chunk_fastq_panic_1()` - Make sure that we panic if
     /// interleaved and r2 is not None
-    /// * `test_rna_chunk_fastq_panic_2()` - Make sure that we panic if 
+    /// * `test_rna_chunk_fastq_panic_2()` - Make sure that we panic if
     /// not interleaved and r2 is None
     fn fastq_files(&self) -> InputFastqs {
-        // Make sure that either 
+        // Make sure that either
         // - r2 is None and interleaved
         // - r2 is Some and not interleaved
         match self.read_chunks.r2 {
@@ -422,9 +422,7 @@ impl RnaRead {
 
     /// Raw UMI QVs
     pub fn raw_umi_qual(&self) -> &[u8] {
-        self.read
-            .get_range(self.umi_range, ReadPart::Qual)
-            .unwrap()
+        self.read.get_range(self.umi_range, ReadPart::Qual).unwrap()
     }
 
     /// Usable R1 bases after removal of BC and trimming
@@ -455,11 +453,11 @@ impl RnaRead {
         }
     }
 
-    /// Given an `RpRange` and a list of adapter trimmers, this function 
+    /// Given an `RpRange` and a list of adapter trimmers, this function
     /// searches for all the adapters within the `RpRange` and returns a
     /// `Range<usize>`, which you need to shrink the `RpRange` to.
     /// It also returns a hashmap from the adapter name to the `RpRange`
-    /// where the adapter was found. This is useful for book-keeping and 
+    /// where the adapter was found. This is useful for book-keeping and
     /// computing metrics.
     fn trim_adapters_helper<'a>(
         &mut self,
@@ -477,34 +475,36 @@ impl RnaRead {
         let shrink_range = trim_results.iter().fold(0..seq.len(), |acc, (_, x)| {
             intersect_ranges(&acc, &x.retain_range)
         });
-        let adapter_pos = trim_results.into_iter().fold(FxHashMap::default(), |mut acc, (name, trim_result)| {
-            let mut this_range = read_range;
-            this_range.shrink(&trim_result.adapter_range);
-            acc.insert(name, this_range);
-            acc
-        });
+        let adapter_pos =
+            trim_results
+                .into_iter()
+                .fold(FxHashMap::default(), |mut acc, (name, trim_result)| {
+                    let mut this_range = read_range;
+                    this_range.shrink(&trim_result.adapter_range);
+                    acc.insert(name, this_range);
+                    acc
+                });
         (shrink_range, adapter_pos)
     }
 
     /// Perform adapter trimming on the `RnaRead` and return the positions
     /// of the adapters found.
-    /// 
+    ///
     /// # Inputs
     /// * `adapter_catalog`: Packages all the adapter trimmers
-    /// 
+    ///
     /// # Output
     /// * `FxHashMap<String, RpRange>` - where the key is the name of the adapter
     /// and values is the `RpRange` where the adapter is found. Clearly, the adapters
     /// which are not present in the read will not be part of the output. The `ReadAdapterCatalog`
     /// guarantees that no two adapters share the same name, so there is no confusion.ReadPart
-    /// 
+    ///
     /// # Test
     /// * `test_rna_read_adapter_trim()`: Test that we can trim reads consistent with cutadapt.
     pub fn trim_adapters<'a>(
         &mut self,
         adapter_catalog: &mut ReadAdapterCatalog<'a>,
     ) -> FxHashMap<String, RpRange> {
-
         let mut result = FxHashMap::default();
         // Trim r1
         {
@@ -531,29 +531,33 @@ impl RnaRead {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::arbitrary::any;
     use serde_json;
     use std::fs::File;
     use std::path::Path;
-    use proptest::arbitrary::any;
 
     #[test]
     fn test_vdj_cfg() {
-        let c: Vec<RnaChunk> = serde_json::from_reader(File::open("tests/vdj_rna_chunk.json").unwrap()).unwrap();
+        let c: Vec<RnaChunk> =
+            serde_json::from_reader(File::open("tests/vdj_rna_chunk.json").unwrap()).unwrap();
         println!("{:?}", c);
     }
 
     #[test]
     fn test_gex_cfg() {
-        let c: Vec<RnaChunk> = serde_json::from_reader(File::open("tests/gex_rna_chunk.json").unwrap()).unwrap();
+        let c: Vec<RnaChunk> =
+            serde_json::from_reader(File::open("tests/gex_rna_chunk.json").unwrap()).unwrap();
         println!("{:?}", c);
     }
 
     fn get_vdj_chemistry() -> ChemistryDef {
-        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap()).unwrap()
+        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
+            .unwrap()
     }
 
     fn get_vdj_r2_chemistry() -> ChemistryDef {
-        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_r2_chemistry.json").unwrap()).unwrap()
+        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_r2_chemistry.json").unwrap())
+            .unwrap()
     }
 
     #[test]
@@ -562,7 +566,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/r1_1k.fasta.lz4".into(),
                 r2: Some("tests/rna_read/r2_1k.fasta.lz4".into()),
                 i1: None,
@@ -582,7 +586,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/r1_1k.fasta.lz4".into(),
                 r2: None,
                 i1: None,
@@ -598,7 +602,10 @@ mod tests {
 
     fn load_expected(fname: impl AsRef<Path>) -> Vec<Vec<u8>> {
         let expected: Vec<String> = serde_json::from_reader(File::open(fname).unwrap()).unwrap();
-        expected.into_iter().map(|x| x.as_bytes().to_vec()).collect()
+        expected
+            .into_iter()
+            .map(|x| x.as_bytes().to_vec())
+            .collect()
     }
 
     #[test]
@@ -606,7 +613,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/interleaved_2k.fastq.lz4".into(),
                 r2: None,
                 i1: None,
@@ -636,7 +643,10 @@ mod tests {
             assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
 
             // Check that the UMI data is correct
-            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(
+                rna_read.umi_range,
+                RpRange::new(WhichRead::R1, 16, Some(10))
+            );
             assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
             assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
             assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
@@ -647,7 +657,10 @@ mod tests {
             assert_eq!(rna_read.r1_qual(), expected_r1_qual[i].as_slice());
 
             // Check that the R2 data is correct
-            assert_eq!(rna_read.r2_range, Some(RpRange::new(WhichRead::R2, 0, None)));
+            assert_eq!(
+                rna_read.r2_range,
+                Some(RpRange::new(WhichRead::R2, 0, None))
+            );
             assert_eq!(rna_read.r2_seq().unwrap(), expected_r2[i].as_slice());
             assert_eq!(rna_read.r2_qual().unwrap(), expected_r2_qual[i].as_slice());
         }
@@ -658,7 +671,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_r2_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/interleaved_2k.fastq.lz4".into(),
                 r2: None,
                 i1: None,
@@ -686,7 +699,10 @@ mod tests {
             assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
 
             // Check that the UMI data is correct
-            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(
+                rna_read.umi_range,
+                RpRange::new(WhichRead::R1, 16, Some(10))
+            );
             assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
             assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
             assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
@@ -708,7 +724,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/r1_2k.fastq.lz4".into(),
                 r2: Some("tests/rna_read/r2_2k.fastq.lz4".into()),
                 i1: None,
@@ -738,7 +754,10 @@ mod tests {
             assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
 
             // Check that the UMI data is correct
-            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(
+                rna_read.umi_range,
+                RpRange::new(WhichRead::R1, 16, Some(10))
+            );
             assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
             assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
             assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
@@ -749,7 +768,10 @@ mod tests {
             assert_eq!(rna_read.r1_qual(), expected_r1_qual[i].as_slice());
 
             // Check that the R2 data is correct
-            assert_eq!(rna_read.r2_range, Some(RpRange::new(WhichRead::R2, 0, None)));
+            assert_eq!(
+                rna_read.r2_range,
+                Some(RpRange::new(WhichRead::R2, 0, None))
+            );
             assert_eq!(rna_read.r2_seq().unwrap(), expected_r2[i].as_slice());
             assert_eq!(rna_read.r2_qual().unwrap(), expected_r2_qual[i].as_slice());
         }
@@ -760,7 +782,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_r2_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/r1_2k.fastq.lz4".into(),
                 r2: Some("tests/rna_read/r2_2k.fastq.lz4".into()),
                 i1: None,
@@ -788,7 +810,10 @@ mod tests {
             assert_eq!(rna_read.raw_bc_qual(), expected_bc_qual[i].as_slice());
 
             // Check that the UMI data is correct
-            assert_eq!(rna_read.umi_range, RpRange::new(WhichRead::R1, 16, Some(10)));
+            assert_eq!(
+                rna_read.umi_range,
+                RpRange::new(WhichRead::R1, 16, Some(10))
+            );
             assert_eq!(rna_read.umi, Umi::new(&expected_umi[i]));
             assert_eq!(rna_read.raw_umi_seq(), expected_umi[i].as_slice());
             assert_eq!(rna_read.raw_umi_qual(), expected_umi_qual[i].as_slice());
@@ -810,7 +835,7 @@ mod tests {
         let chunk = RnaChunk {
             chemistry: get_vdj_chemistry(),
             gem_group: 1,
-            read_chunks: ReadChunks{
+            read_chunks: ReadChunks {
                 r1: "tests/rna_read/interleaved_2k.fastq".into(),
                 r2: None,
                 i1: None,
@@ -835,7 +860,7 @@ mod tests {
             trim_r1 in any::<bool>(),
             r2_length in any::<usize>(),
             trim_r2 in any::<bool>()
-        ) { 
+        ) {
             // SC-VDJ chemistry
             {
                 let expected_r1_length = if trim_r1 {
@@ -849,7 +874,7 @@ mod tests {
                 } else {
                     None
                 };
-                
+
                 let mut chunk = RnaChunk {
                     chemistry: get_vdj_chemistry(),
                     gem_group: 1,
@@ -928,7 +953,9 @@ mod tests {
         use adapter_trimmer::{Adapter, ReadAdapterCatalog};
         use read_pair_iter::ReadPairIter;
 
-        let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> = serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap()).unwrap();
+        let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> =
+            serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap())
+                .unwrap();
         let mut ad_catalog = ReadAdapterCatalog::from(&vdj_adapters);
 
         let fastqs = InputFastqs {
@@ -948,7 +975,7 @@ mod tests {
             let chunk = RnaChunk {
                 chemistry: get_vdj_chemistry(),
                 gem_group: 1,
-                read_chunks: ReadChunks{
+                read_chunks: ReadChunks {
                     r1: "tests/rna_read/interleaved_2k.fastq".into(),
                     r2: None,
                     i1: None,
@@ -969,8 +996,14 @@ mod tests {
                     *adapter_counts.entry(k).or_insert(0) += 1;
                 }
                 let rp = rp_result.unwrap();
-                assert_eq!(rna_read.r1_seq(), rp.get(WhichRead::R1, ReadPart::Seq).unwrap());
-                assert_eq!(rna_read.r2_seq().unwrap(), rp.get(WhichRead::R2, ReadPart::Seq).unwrap());
+                assert_eq!(
+                    rna_read.r1_seq(),
+                    rp.get(WhichRead::R1, ReadPart::Seq).unwrap()
+                );
+                assert_eq!(
+                    rna_read.r2_seq().unwrap(),
+                    rp.get(WhichRead::R2, ReadPart::Seq).unwrap()
+                );
                 if rna_read.r1_seq().len() != 109 || rna_read.r2_seq().unwrap().len() != 150 {
                     n_trimmed += 1;
                 }
@@ -999,7 +1032,7 @@ mod tests {
             let chunk = RnaChunk {
                 chemistry: get_vdj_r2_chemistry(),
                 gem_group: 1,
-                read_chunks: ReadChunks{
+                read_chunks: ReadChunks {
                     r1: "tests/rna_read/interleaved_2k.fastq".into(),
                     r2: None,
                     i1: None,
@@ -1015,7 +1048,10 @@ mod tests {
                 let mut rna_read = rna_read_result.unwrap();
                 rna_read.trim_adapters(&mut ad_catalog);
                 let rp = rp_result.unwrap();
-                assert_eq!(rna_read.r1_seq(), rp.get(WhichRead::R2, ReadPart::Seq).unwrap());
+                assert_eq!(
+                    rna_read.r1_seq(),
+                    rp.get(WhichRead::R2, ReadPart::Seq).unwrap()
+                );
                 assert_eq!(rna_read.r2_seq(), None);
             }
         }
