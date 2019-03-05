@@ -72,15 +72,12 @@ impl ReadPairIter {
         let mut iters = [None, None, None, None];
         let mut paths = [None, None, None, None];
 
-        for (idx, r) in [r1, r2, i1, i2].into_iter().enumerate() {
-            match r {
-                &Some(ref p) => {
-                    let rdr = utils::open_with_gz(p)?;
-                    let parser = fastq::Parser::new(rdr);
-                    iters[idx] = Some(parser.ref_iter());
-                    paths[idx] = Some(p.as_ref().to_path_buf());
-                }
-                _ => (),
+        for (idx, r) in [r1, r2, i1, i2].iter().enumerate() {
+            if let Some(ref p) = *r {
+                let rdr = utils::open_with_gz(p)?;
+                let parser = fastq::Parser::new(rdr);
+                iters[idx] = Some(parser.ref_iter());
+                paths[idx] = Some(p.as_ref().to_path_buf());
             }
         }
 
@@ -122,39 +119,36 @@ impl ReadPairIter {
             let mut iter_ended = [false; 4];
 
             for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
-                match iter_opt {
-                    &mut Some(ref mut iter) => {
-                        iter.advance()?;
-                        {
-                            let record = iter.get();
-                            // track which reader finished
-                            if record.is_none() {
-                                iter_ended[idx] = true;
-                            }
-                            if sample {
-                                let which = WhichRead::read_types()[idx];
-                                record.map(|r| rp.push_read(&r, which));
-                            }
+                if let Some(ref mut iter) = *iter_opt {
+                    iter.advance()?;
+                    {
+                        let record = iter.get();
+                        // track which reader finished
+                        if record.is_none() {
+                            iter_ended[idx] = true;
                         }
-
-                        // If R1 is interleaved, read another entry
-                        // and store it as R2
-                        if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
-                            iter.advance()?;
-                            let record = iter.get();
-                            if record.is_none() {
-                                // We should only hit this if the FASTQ has an odd
-                                // number of records. Throw an error
-                                let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
-                                return Err(msg);
-                            }
-                            if sample {
-                                let which = WhichRead::read_types()[idx + 1];
-                                record.map(|r| rp.push_read(&r, which));
-                            }
+                        if sample {
+                            let which = WhichRead::read_types()[idx];
+                            record.map(|r| rp.push_read(&r, which));
                         }
                     }
-                    &mut None => (),
+
+                    // If R1 is interleaved, read another entry
+                    // and store it as R2
+                    if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
+                        iter.advance()?;
+                        let record = iter.get();
+                        if record.is_none() {
+                            // We should only hit this if the FASTQ has an odd
+                            // number of records. Throw an error
+                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
+                            return Err(msg);
+                        }
+                        if sample {
+                            let which = WhichRead::read_types()[idx + 1];
+                            record.map(|r| rp.push_read(&r, which));
+                        }
+                    }
                 }
             }
 
@@ -171,8 +165,7 @@ impl ReadPairIter {
                     let ended_index = iter_ended
                         .iter()
                         .enumerate()
-                        .filter(|(_, v)| **v)
-                        .next()
+                        .find(|(_, v)| **v)
                         .unwrap()
                         .0;
 

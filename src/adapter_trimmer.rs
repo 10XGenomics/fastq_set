@@ -371,7 +371,7 @@ impl<'a> AdapterTrimmer<'a> {
             .into_iter()
             .chain(read.iter().map(|&x| (x == base) as usize))
             .scan(0, |state, x| {
-                *state = *state + x;
+                *state += x;
                 Some(*state)
             })
             .collect();
@@ -704,6 +704,7 @@ fn compute_path(
     })
 }
 
+#[derive(Default)]
 pub struct ReadAdapterCatalog<'a> {
     adapter_names: HashSet<&'a str>,
     read1_trimmers: Vec<AdapterTrimmer<'a>>,
@@ -712,11 +713,7 @@ pub struct ReadAdapterCatalog<'a> {
 
 impl<'a> ReadAdapterCatalog<'a> {
     pub fn new() -> Self {
-        ReadAdapterCatalog {
-            adapter_names: HashSet::new(),
-            read1_trimmers: Vec::new(),
-            read2_trimmers: Vec::new(),
-        }
+        ReadAdapterCatalog::default()
     }
 
     pub fn push_trimmer(&mut self, read: WhichRead, trimmer: AdapterTrimmer<'a>) {

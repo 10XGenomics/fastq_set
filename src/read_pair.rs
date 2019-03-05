@@ -125,13 +125,13 @@ pub enum ReadPart {
 /// // setup different RpRanges to represent these ranges.
 /// 
 /// let barcode_range = RpRange::new(WhichRead::R1, 0, Some(16));
-/// assert_eq!(read_pair.get_range(&barcode_range, ReadPart::Seq).unwrap(), b"GTCGCACTGATCTGGG".to_vec().as_slice());
+/// assert_eq!(read_pair.get_range(barcode_range, ReadPart::Seq).unwrap(), b"GTCGCACTGATCTGGG".to_vec().as_slice());
 /// 
 /// let umi_range = RpRange::new(WhichRead::R1, 16, Some(10));
-/// assert_eq!(read_pair.get_range(&umi_range, ReadPart::Seq).unwrap(), b"TTAGGCGCGG".to_vec().as_slice());
+/// assert_eq!(read_pair.get_range(umi_range, ReadPart::Seq).unwrap(), b"TTAGGCGCGG".to_vec().as_slice());
 /// 
 /// let mut r1_range = RpRange::new(WhichRead::R1, 26, None); // None => everything beyond offset
-/// assert_eq!(read_pair.get_range(&r1_range, ReadPart::Seq).unwrap(), b"AGCCGAGGGTTGCACCATTTTTCATTATTGAATGCCAAGATA".to_vec().as_slice());
+/// assert_eq!(read_pair.get_range(r1_range, ReadPart::Seq).unwrap(), b"AGCCGAGGGTTGCACCATTTTTCATTATTGAATGCCAAGATA".to_vec().as_slice());
 /// 
 /// // Let's say you want to trim first 5 bases in r1
 /// r1_range.trim(WhichEnd::FivePrime, 5);
@@ -164,6 +164,7 @@ impl fmt::Debug for RpRange {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl RpRange {
     /// Create a `RpRange` that represent the interval [`offset`, `offset + len`) in
     /// the `read` component of a ReadPair.
@@ -211,20 +212,20 @@ impl RpRange {
 
     #[inline]
     /// Retrieive the read from the internal representation
-    pub fn read(&self) -> WhichRead {
+    pub fn read(self) -> WhichRead {
         let k = self.val >> 30;
         WhichRead::from(k)
     }
 
     #[inline]
     /// Retrieive the offset from the internal representation
-    pub fn offset(&self) -> usize {
+    pub fn offset(self) -> usize {
         ((self.val >> 15) & 0x7FFF) as usize
     }
 
     #[inline]
     /// Retrieive the (optional) length from the internal representation
-    pub fn len(&self) -> Option<usize> {
+    pub fn len(self) -> Option<usize> {
         let len_bits = self.val & 0x7FFF;
         if len_bits == 0x7FFF {
             None
@@ -452,14 +453,14 @@ impl<'a> MutReadPair<'a> {
         }
     }
 
-    pub fn new<R: Record>(buffer: &mut BytesMut, rr: [Option<R>; 4]) -> MutReadPair {
+    pub fn new<R: Record>(buffer: &'a mut BytesMut, rr: &[Option<R>; 4]) -> MutReadPair<'a> {
         let mut rp = MutReadPair::empty(buffer);
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
-            match _rec {
-                &Some(ref rec) => rp.push_read(rec, *which),
-                &None => (), // default ReadOffsets is exists = false
+            if let Some(ref rec) = *_rec {
+                rp.push_read(rec, *which)
             }
+            // default ReadOffsets is exists = false
         }
 
         rp
@@ -526,12 +527,12 @@ impl ReadPair {
 
     #[inline]
     /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
-    pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
+    pub fn get_range(&self, rp_range: RpRange, part: ReadPart) -> Option<&[u8]> {
         let read = self.get(rp_range.read(), part);
         read.map(|r| rp_range.slice(r))
     }
 
-    pub fn to_owned_record(self) -> HashMap<WhichRead, OwnedRecord> {
+    pub fn to_owned_record(&self) -> HashMap<WhichRead, OwnedRecord> {
         let mut result = HashMap::new();
         for &which in WhichRead::read_types().iter() {
             if self.offsets[which as usize].exists {
@@ -579,7 +580,7 @@ impl ReadPair {
     /// only. Use `ReadPairIter` if you are iterating over a fastq.
     pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
         let mut buffer = BytesMut::with_capacity(4096);
-        MutReadPair::new(&mut buffer, rr).freeze()
+        MutReadPair::new(&mut buffer, &rr).freeze()
     }
 }
 
@@ -766,7 +767,7 @@ mod tests {
             };
             let mut input = [None, None, None, None];
             input[pos] = Some(owned);
-            let read_pair = MutReadPair::new(&mut buffer, input).freeze();
+            let read_pair = MutReadPair::new(&mut buffer, &input).freeze();
             let read = WhichRead::from(pos);
             assert_eq!(read_pair.get(read, ReadPart::Header), Some(head.as_slice()));
             assert_eq!(read_pair.get(read, ReadPart::Qual), Some(qual.as_slice()));

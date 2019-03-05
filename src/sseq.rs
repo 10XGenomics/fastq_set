@@ -8,7 +8,7 @@ use std::str;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct SSeq {
     pub(crate) length: u8,
     pub(crate) sequence: [u8; 23],
@@ -37,6 +37,10 @@ impl SSeq {
     pub fn len(&self) -> usize {
         self.length as usize
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.length==0
+    }
 }
 
 impl AsRef<[u8]> for SSeq {
@@ -62,6 +66,13 @@ impl Hash for SSeq {
         self.seq().hash(state);
     }
 }
+
+impl PartialEq for SSeq {
+    fn eq(&self, other: &SSeq) -> bool {
+        self.seq() == other.seq()
+    }
+}
+
 
 use std::fmt;
 impl fmt::Debug for SSeq {

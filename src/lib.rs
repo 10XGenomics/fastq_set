@@ -4,6 +4,13 @@
 //! UMI sequences.
 //!
 
+// Allowed clippy lints
+#![allow(
+    clippy::range_plus_one,
+    clippy::naive_bytecount,
+    clippy::option_map_unit_fn,
+)]
+
 #[cfg(test)]
 #[macro_use]
 extern crate proptest;
@@ -252,7 +259,7 @@ where
             .with_subsample_rate(processor.read_subsample_rate());
         Ok(FastqProcessorIter {
             read_pair_iter,
-            processor: processor,
+            processor,
         })
     }
 
@@ -262,7 +269,7 @@ where
             .with_seed(seed);
         Ok(FastqProcessorIter {
             read_pair_iter,
-            processor: processor,
+            processor,
         })
     }
 }

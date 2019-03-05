@@ -277,10 +277,10 @@ impl FastqProcessor for RnaChunk {
 
         let barcode = Barcode::new(
             self.gem_group,
-            read.get_range(&bc_range, ReadPart::Seq).unwrap(),
+            read.get_range(bc_range, ReadPart::Seq).unwrap(),
             true,
         );
-        let umi = Umi::new(read.get_range(&umi_range, ReadPart::Seq).unwrap());
+        let umi = Umi::new(read.get_range(umi_range, ReadPart::Seq).unwrap());
 
         Some(RnaRead {
             read,
@@ -358,11 +358,11 @@ impl HasBarcode for RnaRead {
     }
 
     fn raw_bc_seq(&self) -> &[u8] {
-        self.read.get_range(&self.bc_range, ReadPart::Seq).unwrap()
+        self.read.get_range(self.bc_range, ReadPart::Seq).unwrap()
     }
 
     fn raw_bc_qual(&self) -> &[u8] {
-        self.read.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+        self.read.get_range(self.bc_range, ReadPart::Qual).unwrap()
     }
 }
 
@@ -417,30 +417,30 @@ impl RnaRead {
 
     /// Raw, uncorrected UMI sequence
     pub fn raw_umi_seq(&self) -> &[u8] {
-        self.read.get_range(&self.umi_range, ReadPart::Seq).unwrap()
+        self.read.get_range(self.umi_range, ReadPart::Seq).unwrap()
     }
 
     /// Raw UMI QVs
     pub fn raw_umi_qual(&self) -> &[u8] {
         self.read
-            .get_range(&self.umi_range, ReadPart::Qual)
+            .get_range(self.umi_range, ReadPart::Qual)
             .unwrap()
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_seq(&self) -> &[u8] {
-        self.read.get_range(&self.r1_range, ReadPart::Seq).unwrap()
+        self.read.get_range(self.r1_range, ReadPart::Seq).unwrap()
     }
 
     /// Usable R1 bases after removal of BC and trimming
     pub fn r1_qual(&self) -> &[u8] {
-        self.read.get_range(&self.r1_range, ReadPart::Qual).unwrap()
+        self.read.get_range(self.r1_range, ReadPart::Qual).unwrap()
     }
 
     /// Usable R2 bases after removal of BC and trimming
     pub fn r2_seq(&self) -> Option<&[u8]> {
         if let Some(range) = self.r2_range {
-            self.read.get_range(&range, ReadPart::Seq)
+            self.read.get_range(range, ReadPart::Seq)
         } else {
             None
         }
@@ -449,7 +449,7 @@ impl RnaRead {
     /// Usable R2 bases after removal of BC and trimming
     pub fn r2_qual(&self) -> Option<&[u8]> {
         if let Some(range) = self.r2_range {
-            self.read.get_range(&range, ReadPart::Qual)
+            self.read.get_range(range, ReadPart::Qual)
         } else {
             None
         }
@@ -466,7 +466,7 @@ impl RnaRead {
         read_range: RpRange,
         trimmers: &mut Vec<AdapterTrimmer<'a>>,
     ) -> (Range<usize>, FxHashMap<String, RpRange>) {
-        let seq = self.read.get_range(&read_range, ReadPart::Seq).unwrap();
+        let seq = self.read.get_range(read_range, ReadPart::Seq).unwrap();
         let trim_results: Vec<_> = trimmers
             .iter_mut()
             .filter_map(|t| {
@@ -478,7 +478,7 @@ impl RnaRead {
             intersect_ranges(&acc, &x.retain_range)
         });
         let adapter_pos = trim_results.into_iter().fold(FxHashMap::default(), |mut acc, (name, trim_result)| {
-            let mut this_range = read_range.clone();
+            let mut this_range = read_range;
             this_range.shrink(&trim_result.adapter_range);
             acc.insert(name, this_range);
             acc
