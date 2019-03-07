@@ -32,10 +32,15 @@ tenkit = { path = "../tenkit" }
 
 [dev-dependencies]
 time = "*"
-proptest = "0.8.0"
 file_diff = "1.0"
 criterion = "0.2"
 
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[dev-dependencies.proptest]
+version = "0.9" # Only works for 0.9.1 or newer
+default-features = false
+# Enable all default features not known to break code coverage builds
+features = ["default-code-coverage"]
