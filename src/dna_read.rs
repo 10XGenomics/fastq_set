@@ -296,8 +296,12 @@ mod test_dna_cfg {
             procs.push(prc);
         }
 
-        let bc_sort_results =
-            crate::bc_sort::barcode_sort_workflow(procs, "tests", "tests/10K-agora-dev.txt").unwrap();
+        // Only run the full bc-sort workflow in release mode -- it's too slow in debug mode.
+        #[cfg(not(debug_assertions))]
+        {
+            let bc_sort_results =
+                crate::bc_sort::barcode_sort_workflow(procs, "tests", "tests/10K-agora-dev.txt").unwrap();
+        }
     }
 
     const CRG_CFG: &str = r#"
