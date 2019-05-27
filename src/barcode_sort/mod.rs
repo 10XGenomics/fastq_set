@@ -99,8 +99,8 @@ where
         self.sorter.finish()
     }
 
-    pub fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) {
-        self.sorter.write_barcode_counts(path);
+    pub fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
+        self.sorter.write_barcode_counts(path)
     }
 
     pub fn num_valid_reads(&self) -> i64 {
@@ -182,17 +182,17 @@ where
         Ok(())
     }
 
-    fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) {
+    fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         self.valid_bc_distribution
-            .to_file(path, SerdeFormat::Binary);
+            .to_file(path, SerdeFormat::Binary)
     }
 }
 
 pub fn write_merged_barcode_counts<P: AsRef<Path>, Q: AsRef<Path>>(
     shard_counts: &[P],
     merged_file: Q,
-) {
+) -> Result<(), Error> {
     let bc_counts: SimpleHistogram<Barcode> =
         SimpleHistogram::from_files(shard_counts, SerdeFormat::Binary);
-    bc_counts.to_file(merged_file, SerdeFormat::Binary);
+    bc_counts.to_file(merged_file, SerdeFormat::Binary)
 }
