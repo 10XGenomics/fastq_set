@@ -81,7 +81,7 @@ impl FastqProcessor for DnaProcessor {
 
         // Snip out barcode
         let barcode = {
-            let bc_seq = read.get_range(&bc_range, ReadPart::Seq).unwrap();
+            let bc_seq = read.get_range(bc_range, ReadPart::Seq).unwrap();
             let is_valid = self.whitelist.contains_key(bc_seq);
             Barcode::new(self.chunk.gem_group, bc_seq, is_valid)
         };
@@ -145,11 +145,11 @@ impl HasBarcode for DnaRead {
     }
 
     fn raw_bc_seq(&self) -> &[u8] {
-        self.data.get_range(&self.bc_range, ReadPart::Seq).unwrap()
+        self.data.get_range(self.bc_range, ReadPart::Seq).unwrap()
     }
 
     fn raw_bc_qual(&self) -> &[u8] {
-        self.data.get_range(&self.bc_range, ReadPart::Qual).unwrap()
+        self.data.get_range(self.bc_range, ReadPart::Qual).unwrap()
     }
 }
 

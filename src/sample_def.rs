@@ -35,7 +35,7 @@ impl SampleDef {
     pub fn get_fastqs(&self) -> Vec<InputFastqs> {
         let msg = "Sample indices must be a non-empty list!";
         let indices = self.sample_indices.as_ref().expect(msg);
-        if indices.len() == 0 {
+        if indices.is_empty() {
             panic!(msg);
         }
 
@@ -65,7 +65,7 @@ impl SampleDef {
     }
 }
 
-fn is_dna(seq: &String) -> bool {
+fn is_dna(seq: &str) -> bool {
     seq.chars().all(|c| "ACGT".contains(c))
 }
 
@@ -74,7 +74,7 @@ const MAX_NS: usize = 2;
 fn find_fastqs_10x(
     path: &PathBuf,
     read_types: &[&str],
-    sample_index: &String,
+    sample_index: &str,
     lanes: &Option<Vec<usize>>,
 ) -> Vec<InputFastqs> {
     let si_regex = Regex::new(r".*si-([A-Z]*)_").unwrap();
@@ -139,11 +139,11 @@ fn find_fastqs_10x(
     vec![]
 }
 
-fn find_fastqs_bcl2fastq(
-    _path: &PathBuf,
-    _read_types: &[&str],
-    _sample: &Option<String>,
-    _lanes: &Option<Vec<usize>>,
-) -> Vec<InputFastqs> {
-    vec![]
-}
+// fn find_fastqs_bcl2fastq(
+//     _path: &PathBuf,
+//     _read_types: &[&str],
+//     _sample: &Option<String>,
+//     _lanes: &Option<Vec<usize>>,
+// ) -> Vec<InputFastqs> {
+//     vec![]
+// }

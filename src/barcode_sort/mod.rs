@@ -14,7 +14,7 @@ use HasBarcode;
 // TODO: Set the parameters optimally?
 pub const SEND_BUFFER_SZ: usize = 256;
 pub const DISK_CHUNK_SZ: usize = 2048; // 2MB if ~1kB per record
-pub const ITEM_BUFFER_SZ: usize = 2097152; // 2GB if above holds
+pub const ITEM_BUFFER_SZ: usize = 2_097_152; // 2GB if above holds
 
 pub trait ReadVisitor {
     type ReadType;
@@ -89,7 +89,7 @@ where
         {
             nreads += 1;
             let mut read = read_result?;
-            let mut bc = read.barcode().clone();
+            let mut bc = *read.barcode();
             self.checker.check(&mut bc);
             read.set_barcode(bc);
             visitor.visit_read(&mut read)?;

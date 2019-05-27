@@ -1,0 +1,244 @@
+This is cutadapt 1.16 with Python 2.7.14
+Command line parameters: --times 3 --overlap 5 -f fastq --interleaved -o interleaved_trimmed_2k.fastq -g spacer=^TTTCTTATATGGG -a R2_rc=AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC -a P7_rc=ATCTCGTATGCCGTCTTCTGCTTG -a polyA=AAAAAAAAAAAAAAAAAAAA -a rt_primer_rc=ATGTACTCTGCGTTGATACCACTGCTT -A spacer_rc=CCCATATAAGAAA -A R1_rc=AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT -A P5_rc=AGATCTCGGTGGTCGCCGTATCATT -G polyT=TTTTTTTTTTTTTTTTTTTT -G rt_primer=XAAGCAGTGGTATCAACGCAGAGTACAT interleaved_2k_insert.fastq
+Running on 1 core
+Trimming 10 adapters with at most 10.0% errors in paired-end mode ...
+Finished in 0.21 s (107 us/read; 0.56 M reads/minute).
+
+=== Summary ===
+
+Total read pairs processed:              2,000
+  Read 1 with adapter:                      38 (1.9%)
+  Read 2 with adapter:                      76 (3.8%)
+Pairs written (passing filters):         2,000 (100.0%)
+
+Total basepairs processed:       518,000 bp
+  Read 1:       218,000 bp
+  Read 2:       300,000 bp
+Total written (filtered):        513,661 bp (99.2%)
+  Read 1:       216,660 bp
+  Read 2:       297,001 bp
+
+=== First read: Adapter R2_rc ===
+
+Sequence: AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC; Type: regular 3'; Length: 34; Trimmed: 27 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-29 bp: 2; 30-34 bp: 3
+
+Bases preceding removed adapters:
+  A: 11.1%
+  C: 25.9%
+  G: 48.1%
+  T: 11.1%
+  none/other: 3.7%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+5	4	2.0	0	4
+6	2	0.5	0	2
+7	3	0.1	0	3
+8	1	0.0	0	1
+9	2	0.0	0	2
+12	2	0.0	1	2
+13	1	0.0	1	1
+14	1	0.0	1	1
+16	1	0.0	1	1
+20	1	0.0	2	1
+21	1	0.0	2	1
+23	1	0.0	2	1
+34	1	0.0	3	1
+38	2	0.0	3	2
+51	1	0.0	3	0 1
+55	1	0.0	3	1
+74	1	0.0	3	1
+109	1	0.0	3	1
+
+=== First read: Adapter P7_rc ===
+
+Sequence: ATCTCGTATGCCGTCTTCTGCTTG; Type: regular 3'; Length: 24; Trimmed: 4 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-24 bp: 2
+
+Bases preceding removed adapters:
+  A: 0.0%
+  C: 0.0%
+  G: 100.0%
+  T: 0.0%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+72	1	0.0	2	1
+81	1	0.0	2	1
+82	1	0.0	2	1
+85	1	0.0	2	1
+
+=== First read: Adapter polyA ===
+
+Sequence: AAAAAAAAAAAAAAAAAAAA; Type: regular 3'; Length: 20; Trimmed: 5 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20 bp: 2
+
+Bases preceding removed adapters:
+  A: 0.0%
+  C: 0.0%
+  G: 80.0%
+  T: 20.0%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+5	1	2.0	0	1
+84	1	0.0	2	1
+94	1	0.0	2	0 0 1
+106	1	0.0	2	0 0 1
+108	1	0.0	2	0 0 1
+
+=== First read: Adapter rt_primer_rc ===
+
+Sequence: ATGTACTCTGCGTTGATACCACTGCTT; Type: regular 3'; Length: 27; Trimmed: 2 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-27 bp: 2
+
+Bases preceding removed adapters:
+  A: 0.0%
+  C: 0.0%
+  G: 100.0%
+  T: 0.0%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+5	1	2.0	0	1
+9	1	0.0	0	0 1
+
+=== First read: Adapter spacer ===
+
+Sequence: TTTCTTATATGGG; Type: anchored 5'; Length: 13; Trimmed: 0 times.
+
+=== Second read: Adapter spacer_rc ===
+
+Sequence: CCCATATAAGAAA; Type: regular 3'; Length: 13; Trimmed: 66 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-13 bp: 1
+
+Bases preceding removed adapters:
+  A: 3.0%
+  C: 51.5%
+  G: 6.1%
+  T: 39.4%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+5	3	2.0	0	3
+6	1	0.5	0	1
+10	1	0.0	1	1
+11	3	0.0	1	3
+12	2	0.0	1	2
+13	1	0.0	1	1
+14	2	0.0	1	2
+15	2	0.0	1	2
+16	2	0.0	1	2
+17	2	0.0	1	2
+20	3	0.0	1	3
+22	2	0.0	1	2
+24	1	0.0	1	1
+25	1	0.0	1	1
+26	1	0.0	1	1
+27	1	0.0	1	1
+29	3	0.0	1	3
+31	1	0.0	1	1
+32	1	0.0	1	1
+33	1	0.0	1	1
+36	1	0.0	1	1
+39	13	0.0	1	13
+40	1	0.0	1	0 1
+41	1	0.0	1	1
+42	1	0.0	1	1
+43	2	0.0	1	2
+44	2	0.0	1	2
+45	2	0.0	1	2
+46	2	0.0	1	2
+47	1	0.0	1	1
+48	3	0.0	1	3
+51	2	0.0	1	2
+52	1	0.0	1	1
+
+=== Second read: Adapter R1_rc ===
+
+Sequence: AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT; Type: regular 3'; Length: 33; Trimmed: 16 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-29 bp: 2; 30-33 bp: 3
+
+Bases preceding removed adapters:
+  A: 25.0%
+  C: 18.8%
+  G: 31.2%
+  T: 25.0%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+14	1	0.0	1	1
+16	1	0.0	1	1
+20	1	0.0	2	1
+21	1	0.0	2	1
+23	1	0.0	2	1
+34	1	0.0	3	1
+38	2	0.0	3	2
+51	1	0.0	3	1
+55	1	0.0	3	1
+74	1	0.0	3	1
+109	1	0.0	3	1
+114	1	0.0	3	1
+123	1	0.0	3	1
+124	1	0.0	3	1
+127	1	0.0	3	1
+
+=== Second read: Adapter P5_rc ===
+
+Sequence: AGATCTCGGTGGTCGCCGTATCATT; Type: regular 3'; Length: 25; Trimmed: 1 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-25 bp: 2
+
+Bases preceding removed adapters:
+  A: 0.0%
+  C: 0.0%
+  G: 100.0%
+  T: 0.0%
+  none/other: 0.0%
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+6	1	0.5	0	1
+
+=== Second read: Adapter polyT ===
+
+Sequence: TTTTTTTTTTTTTTTTTTTT; Type: regular 5'; Length: 20; Trimmed: 4 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20 bp: 2
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+5	3	2.0	0	3
+11	1	0.0	1	0 1
+
+=== Second read: Adapter rt_primer ===
+
+Sequence: XAAGCAGTGGTATCAACGCAGAGTACAT; Type: regular 5'; Length: 28; Trimmed: 1 times.
+
+No. of allowed errors:
+0-9 bp: 0; 10-19 bp: 1; 20-28 bp: 2
+
+Overview of removed sequences
+length	count	expect	max.err	error counts
+5	1	2.0	0	1
+

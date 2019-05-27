@@ -119,7 +119,7 @@ impl BarcodeCorrector {
         whitelist.extend(wl.keys());
 
         Ok(BarcodeCorrector {
-            whitelist: whitelist,
+            whitelist,
             bc_counts,
             max_expected_barcode_errors,
             bc_confidence_threshold,
@@ -134,8 +134,9 @@ impl BarcodeCorrector {
     /// Use these components to compute a posterior distribution of wl_bc candidates, and correct
     /// the barcode if there's a whitelist barcode with posterior probability greater than
     /// self.bc_confidence_threshold
+    #[allow(clippy::needless_range_loop)]
     pub fn correct_barcode(&self, observed_barcode: &Barcode, qual: &[u8]) -> Option<Barcode> {
-        let mut a = observed_barcode.sequence.clone();
+        let mut a = observed_barcode.sequence; // Create a copy
 
         let mut candidates: Vec<(Of64, Barcode)> = Vec::new();
         let mut total_likelihood = Of64::from(0.0);
@@ -170,24 +171,20 @@ impl BarcodeCorrector {
 
         let expected_errors: f64 = qual.iter().cloned().map(probability).sum();
 
-        match best_option {
-            Some((best_like, best_bc)) => {
-                if expected_errors < self.max_expected_barcode_errors
-                    && best_like / total_likelihood > thresh
-                {
-                    return Some(best_bc);
-                }
+        if let Some((best_like, best_bc)) = best_option {
+            if expected_errors < self.max_expected_barcode_errors
+                && best_like / total_likelihood > thresh
+            {
+                return Some(best_bc);
             }
-            _ => (),
-        };
-
-        return None;
+        }
+        None
     }
 }
 
 pub fn probability(qual: u8) -> f64 {
     //33 is the illumina qual offset
-    let q = qual as f64;
+    let q = f64::from(qual);
     (10_f64).powf(-(q - 33.0) / 10.0)
 }
 

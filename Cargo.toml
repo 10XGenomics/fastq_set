@@ -32,5 +32,5 @@ tenkit = { path = "../tenkit" }
 
 [dev-dependencies]
 time = "*"
-proptest = "0.6.0"
+proptest = "0.8.0"
 file_diff = "1.0"

@@ -72,6 +72,21 @@ impl WhichRead {
     }
 }
 
+impl fmt::Display for WhichRead {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                WhichRead::R1 => "read1",
+                WhichRead::R2 => "read2",
+                WhichRead::I1 => "index1",
+                WhichRead::I2 => "index2",
+            }
+        )
+    }
+}
+
 /// Components of a FASTQ record.
 #[derive(Debug, Copy, Clone)]
 pub enum ReadPart {
@@ -80,15 +95,61 @@ pub enum ReadPart {
     Qual,
 }
 
-/// Compact representation of selected ReadPart and a interval in that read.
+/// Compact representation of selected read and an interval in that read.
 /// Supports offsets and lengths up to 32K.
 /// Internally it is stored as a `u32` with the following bit layout
-///
+/// ```text
 /// +-----------+--------------+-----------+
 /// | WhichRead | Start Offset | Length    |
 /// | (2 bits)  | (15 bits)    | (15 bits) |
 /// +-----------+--------------+-----------+
-
+/// ```
+/// Length is optional, with `None` indicating everything until the end of the read.
+///
+/// # Example
+/// ```rust
+/// extern crate fastq_10x;
+/// extern crate fastq;
+/// use fastq_10x::read_pair::{RpRange, WhichRead, ReadPart, ReadPair};
+/// use fastq_10x::WhichEnd;
+/// use fastq::OwnedRecord;
+/// let read1 = OwnedRecord {
+///     head: b"some_name".to_vec(),
+///     seq: b"GTCGCACTGATCTGGGTTAGGCGCGGAGCCGAGGGTTGCACCATTTTTCATTATTGAATGCCAAGATA".to_vec(),
+///     qual: b"IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII".to_vec(),
+///     sep: None,
+/// };
+/// let input = [Some(read1), None, None, None];
+///
+/// // WARNING: DO NOT USE THIS FUNCTION IF YOU ARE STREAMING FASTQ DATA
+/// // AND WANT TO CREATE ReadPair STRUCTS.
+/// // USE `fastq_10x::read_pair_iter::ReadPairIter` INSTEAD.
+/// let read_pair = ReadPair::new(input);
+/// // Let's say the read1 is of the form BC(16)-UMI(10)-Insert. This example will
+/// // setup different RpRanges to represent these ranges.
+///
+/// let barcode_range = RpRange::new(WhichRead::R1, 0, Some(16));
+/// assert_eq!(read_pair.get_range(barcode_range, ReadPart::Seq).unwrap(), b"GTCGCACTGATCTGGG".to_vec().as_slice());
+///
+/// let umi_range = RpRange::new(WhichRead::R1, 16, Some(10));
+/// assert_eq!(read_pair.get_range(umi_range, ReadPart::Seq).unwrap(), b"TTAGGCGCGG".to_vec().as_slice());
+///
+/// let mut r1_range = RpRange::new(WhichRead::R1, 26, None); // None => everything beyond offset
+/// assert_eq!(read_pair.get_range(r1_range, ReadPart::Seq).unwrap(), b"AGCCGAGGGTTGCACCATTTTTCATTATTGAATGCCAAGATA".to_vec().as_slice());
+///
+/// // Let's say you want to trim first 5 bases in r1
+/// r1_range.trim(WhichEnd::FivePrime, 5);
+/// assert_eq!(r1_range.offset(), 31);
+/// assert_eq!(r1_range.len(), None);
+///
+/// // Let's say you only want to consider first 50 bases of the read1.seq
+/// // and update the r1_range accordingly
+/// let useful_range = RpRange::new(WhichRead::R1, 0, Some(50));
+/// r1_range.intersect(useful_range);
+/// assert_eq!(r1_range.offset(), 31);
+/// assert_eq!(r1_range.len(), Some(19));
+///
+/// ```
 #[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct RpRange {
     val: u32,
@@ -107,6 +168,7 @@ impl fmt::Debug for RpRange {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl RpRange {
     /// Create a `RpRange` that represent the interval [`offset`, `offset + len`) in
     /// the `read` component of a ReadPair.
@@ -116,11 +178,28 @@ impl RpRange {
     /// * `offset` - Start of the interval. Must be less than 2^15 (=32,768)
     /// * `len` - Optional length that determines the end of the interval. A
     /// value `None` indicates everything from `offset` until the end of the
-    /// `read`. It is recommended that you specify the length as it is necessary
-    /// to perform trim and shrink operations on `RpRange`
+    /// `read`. Must be less than 2^15 (=32,768)
     ///
     /// # Panics
     /// * If `offset` or `len` is >= `2^15`
+    ///
+    /// # Example
+    /// ```rust
+    /// use fastq_10x::read_pair::RpRange;
+    /// use fastq_10x::read_pair::WhichRead;
+    /// let range = RpRange::new(WhichRead::R1, 10, Some(50));
+    /// assert!(range.read() == WhichRead::R1);
+    /// assert!(range.offset() == 10);
+    /// assert!(range.len() == Some(50));
+    /// ```
+    ///
+    /// # Tests
+    /// * `test_rprange_invalid_offset()` - Test that this function panics with
+    /// an offset that is too large
+    /// * `test_rprange_invalid_len()` - Test that this function panics with
+    /// a length that is too large
+    /// * `prop_test_rprange_representation()` - Test that arbitrary construction of RpRange
+    /// stores the values correctly.
     pub fn new(read: WhichRead, offset: usize, len: Option<usize>) -> RpRange {
         assert!(offset < (1 << 15));
         let len_bits = match len {
@@ -137,20 +216,20 @@ impl RpRange {
 
     #[inline]
     /// Retrieive the read from the internal representation
-    pub fn read(&self) -> WhichRead {
+    pub fn read(self) -> WhichRead {
         let k = self.val >> 30;
         WhichRead::from(k)
     }
 
     #[inline]
     /// Retrieive the offset from the internal representation
-    pub fn offset(&self) -> usize {
+    pub fn offset(self) -> usize {
         ((self.val >> 15) & 0x7FFF) as usize
     }
 
     #[inline]
     /// Retrieive the (optional) length from the internal representation
-    pub fn len(&self) -> Option<usize> {
+    pub fn len(self) -> Option<usize> {
         let len_bits = self.val & 0x7FFF;
         if len_bits == 0x7FFF {
             None
@@ -169,58 +248,196 @@ impl RpRange {
     }
 
     // Set the length
+    // # Tests
+    // * `prop_test_rprange_setter()`
     fn set_len(&mut self, len: usize) {
         assert!(len < (1 << 15));
         self.val = (self.val & (!0x7FFFu32)) | len as u32;
     }
 
     // Set the offset
+    // # Tests
+    // * `prop_test_rprange_setter()`
     fn set_offset(&mut self, offset: usize) {
         assert!(offset < (1 << 15));
         self.val = (self.val & (!(0x7FFFu32 << 15))) | (offset as u32) << 15;
     }
 
-    pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
+    /// Intersect the `RpRange` with another.
+    ///
+    /// # Input
+    /// * `other` - Intersect `self` with this `RpRange`
+    ///
+    /// # Panics
+    /// * If `self` and `other` does not point to the same read
+    ///
+    /// # Example
+    /// ```rust
+    /// use fastq_10x::read_pair::{RpRange, WhichRead};
+    /// let read_seq = b"AAGCAGGGGCGGGCAAATCCAGCCGTTACCTTACACGCCCCACTGGGAAG";
+    /// let full_range = RpRange::new(WhichRead::R1, 0, Some(read_seq.len()));
+    /// let mut r1_range = RpRange::new(WhichRead::R1, 20, None);
+    /// r1_range.intersect(full_range);
+    /// assert_eq!(r1_range.read(), WhichRead::R1);
+    /// assert_eq!(r1_range.offset(), 20);
+    /// assert_eq!(r1_range.len(), Some(read_seq.len()-20));
+    /// ```
+    ///
+    /// # Tests
+    /// * `test_rprange_intersect_panic()` - Make sure that this function panics
+    /// if the reads do not match
+    /// * `test_rprange_intersect_both_open()` - Test a case when both lengths are not set
+    /// * `test_rprange_intersect_self_open()` - Test a case when only self length is set
+    /// * `test_rprange_intersect_other_open()` - Test a case when only other length is set
+    /// * `test_rprange_intersect_both_closed()` - Test a case when both lengths are set
+    pub fn intersect(&mut self, other: RpRange) {
+        use std::cmp::{max, min};
         assert!(
-            self.len().is_some(),
-            "Shrink is only supported for RpRange with known length!"
+            self.read() == other.read(),
+            "Self = {:?} and other = {:?} does not have the same read",
+            self,
+            other
         );
 
-        let trim_5p = TrimDef {
-            read: self.read(),
-            end: WhichEnd::FivePrime,
-            amount: shrink_range.start,
-        };
-        let trim_3p = TrimDef {
-            read: self.read(),
-            end: WhichEnd::ThreePrime,
-            amount: self.len().unwrap().saturating_sub(shrink_range.end),
+        let self_offset = self.offset();
+        let other_offset = other.offset();
+        let new_end = match (self.len(), other.len()) {
+            (Some(self_len), Some(other_len)) => {
+                Some(min(self_offset + self_len, other_offset + other_len))
+            }
+            (Some(self_len), None) => Some(self_offset + self_len),
+            (None, Some(other_len)) => Some(other_offset + other_len),
+            (None, None) => None,
         };
 
-        self.trim(trim_5p);
-        self.trim(trim_3p);
+        let new_offset = max(self_offset, other_offset);
+        match new_end {
+            Some(end) => {
+                let final_offset = min(end, new_offset);
+                self.set_offset(final_offset);
+                self.set_len(end - final_offset);
+            }
+            None => {
+                self.set_offset(new_offset);
+            }
+        }
     }
 
-    pub fn trim(&mut self, trim_def: TrimDef) {
-        assert!(trim_def.read == self.read());
+    /// Shrink an `RpRange` using the specifed local range. This is useful
+    /// in adapter trimming, for example when you find a 3' adapter at some
+    /// position `x` from the start of this `RpRange` and want to only retain
+    /// the range `[0..x)` within this `RpRange`
+    ///
+    /// # Input
+    /// * `shrink_range` - `Range<usize>` to shrink the `RpRange` to
+    ///
+    /// # Panics
+    /// * If the length is set and the `shrink_range` is not within `0..self.len().unwrap()`
+    /// * If shrink_range.start > shrink_range.end
+    ///
+    ///
+    /// # Example
+    /// ```rust
+    /// use fastq_10x::read_pair::{RpRange, WhichRead};
+    /// // 100 bases in R1 starting from base 10
+    /// let mut rp_range = RpRange::new(WhichRead::R1, 10, Some(100));
+    /// let shrink_range = 20..60;
+    /// rp_range.shrink(&shrink_range);
+    /// assert!(rp_range.read() == WhichRead::R1);
+    /// assert!(rp_range.offset() == 30); // 20 + 10
+    /// assert!(rp_range.len() == Some(40)); // 60-20
+    /// ```
+    ///
+    /// # Tests
+    /// * `test_shrink_invalid_range_1()`: Test for panic if shrink range start is > length
+    /// * `test_shrink_invalid_range_2()`: Test for panic if shrink range end is > length
+    /// * `test_shrink_invalid_range_3()`: Test for panic if shrink range start > end
+    /// * `test_rprange_trivial_shrink()`: Test shrink to an empty range.
+    /// * `prop_test_rprange_shrink()`: Test shrink for arbitrary values of
+    /// `RpRange` and valid `shrink_range`
+    pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
         assert!(
-            self.len().is_some(),
-            "Trim is only supported for RpRange with known length!"
+            shrink_range.start <= shrink_range.end,
+            "RpRange shrink() expects a valid range with start<=end. Received {:?}",
+            shrink_range
         );
-        let l = self.len().unwrap();
-        assert!(
-            trim_def.amount <= l,
-            "Attempt to trim more than the length of RpRange"
-        );
-        if trim_def.amount > 0 {
-            match trim_def.end {
-                WhichEnd::ThreePrime => {
-                    self.set_len(l.saturating_sub(trim_def.amount));
+
+        if let Some(len) = self.len() {
+            assert!(
+                shrink_range.end <= len,
+                "Attempting to shrink more than the current length. shrink_range = {:?}, RpRange = {:?}",
+                shrink_range, self,
+            );
+        }
+
+        let new_offset = self.offset() + shrink_range.start;
+        let new_len = shrink_range.end - shrink_range.start;
+        self.set_offset(new_offset);
+        self.set_len(new_len);
+    }
+
+    /// Trim the `RpRange` by specifying the `end` and the `amount`
+    ///
+    /// # Inputs
+    /// * `end` - whether to trim the `FivePrime` end or the `ThreePrime` end
+    /// * `amount` - how many bases to trim.
+    ///
+    /// # Panics
+    /// * To trim the `ThreePrime` end, the length needs to be known. Panics otherwise
+    /// * If length is known, panics if the amount to trim is more than the length
+    ///
+    /// # Example
+    /// ```rust
+    /// use fastq_10x::read_pair::{RpRange, WhichRead};
+    /// use fastq_10x::WhichEnd;
+    /// let mut rp_range1 = RpRange::new(WhichRead::R1, 40, None);
+    /// // Trim 10 bases in the 5' end
+    /// rp_range1.trim(WhichEnd::FivePrime, 10);
+    /// assert!(rp_range1.read() == WhichRead::R1); // Unchanged
+    /// assert!(rp_range1.offset() == 50); // 40 + 10
+    /// assert!(rp_range1.len() == None); // Still until the end
+    ///
+    /// let mut rp_range2 = RpRange::new(WhichRead::R1, 40, Some(110));
+    /// // Trim 20 bases in the 3' end
+    /// // Trimming from 3' end needs the length to be set. In this
+    /// // case, the range defined is [40, 150)
+    /// rp_range2.trim(WhichEnd::ThreePrime, 20);
+    /// assert!(rp_range2.read() == WhichRead::R1); // Unchanged
+    /// assert!(rp_range2.offset() == 40); // Unchanged
+    /// assert!(rp_range2.len() == Some(90)); // 110-20
+    /// ```
+    ///
+    /// # Tests
+    /// * `test_rprange_trim_without_len()` - Make sure 3' trimming without length panics
+    /// * `prop_test_rprange_trim()` - Proptest to make sure the trim results are correct
+    pub fn trim(&mut self, end: WhichEnd, amount: usize) {
+        if amount == 0 {
+            // Trivial case
+            return;
+        }
+
+        // Panic if we know the length and are asked to trim more than the length
+        if let Some(l) = self.len() {
+            assert!(
+                amount <= l,
+                "Attempt to trim more than the length of RpRange"
+            );
+        }
+
+        match end {
+            WhichEnd::ThreePrime => {
+                match self.len() {
+                    Some(len) => self.set_len(len - amount), // Won't underflow because of the assert above
+                    None => {
+                        panic!("ThreePrime trim is only possible for RpRange with known length!")
+                    }
                 }
-                WhichEnd::FivePrime => {
-                    let offset = self.offset();
-                    self.set_offset(offset + trim_def.amount);
-                    self.set_len(l.saturating_sub(trim_def.amount));
+            }
+            WhichEnd::FivePrime => {
+                let new_offset = self.offset() + amount;
+                self.set_offset(new_offset);
+                if let Some(l) = self.len() {
+                    self.set_len(l - amount); // Won't underflow because of the assert above
                 }
             }
         }
@@ -245,14 +462,14 @@ impl<'a> MutReadPair<'a> {
         }
     }
 
-    pub fn new<R: Record>(buffer: &mut BytesMut, rr: [Option<R>; 4]) -> MutReadPair {
+    pub fn new<R: Record>(buffer: &'a mut BytesMut, rr: &[Option<R>; 4]) -> MutReadPair<'a> {
         let mut rp = MutReadPair::empty(buffer);
 
         for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
-            match _rec {
-                &Some(ref rec) => rp.push_read(rec, *which),
-                &None => (), // default ReadOffsets is exists = false
+            if let Some(ref rec) = *_rec {
+                rp.push_read(rec, *which)
             }
+            // default ReadOffsets is exists = false
         }
 
         rp
@@ -319,12 +536,12 @@ impl ReadPair {
 
     #[inline]
     /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
-    pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
+    pub fn get_range(&self, rp_range: RpRange, part: ReadPart) -> Option<&[u8]> {
         let read = self.get(rp_range.read(), part);
         read.map(|r| rp_range.slice(r))
     }
 
-    pub fn to_owned_record(self) -> HashMap<WhichRead, OwnedRecord> {
+    pub fn to_owned_record(&self) -> HashMap<WhichRead, OwnedRecord> {
         let mut result = HashMap::new();
         for &which in WhichRead::read_types().iter() {
             if self.offsets[which as usize].exists {
@@ -366,139 +583,13 @@ impl ReadPair {
 
         Ok(())
     }
-}
 
-#[derive(Debug, Copy, Clone)]
-pub struct TrimDef {
-    read: WhichRead,
-    end: WhichEnd,
-    amount: usize,
-}
-
-impl TrimDef {
-    fn new(read: WhichRead, end: WhichEnd, amount: usize) -> Self {
-        TrimDef { read, end, amount }
-    }
-}
-
-/// A `ReadPair` that supports trimming. All the data corresponding to the
-/// original `ReadPair` is retained and the trimming only shifts the
-/// offsets for indexing various data parts.
-///
-/// TODO: Is it better to add trim support to `ReadPair`?
-#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub struct TrimmedReadPair {
-    pub trimmed_ranges: [Option<RpRange>; 4],
-    readpair: ReadPair,
-}
-
-impl From<ReadPair> for TrimmedReadPair {
-    fn from(readpair: ReadPair) -> Self {
-        let mut trimmed_ranges = [None; 4];
-        for &which in WhichRead::read_types().iter() {
-            if readpair.offsets[which as usize].exists {
-                trimmed_ranges[which as usize] = Some(RpRange::new(
-                    which,
-                    0usize,
-                    readpair.offsets[which as usize].seq_len(),
-                ));
-            }
-        }
-        TrimmedReadPair {
-            trimmed_ranges,
-            readpair,
-        }
-    }
-}
-
-impl TrimmedReadPair {
-    /// Trim the reads using the input `TrimDef` which specifies
-    /// the read to trim, and how many nucleotides to trim from
-    /// which end
-    pub fn trim(&mut self, trim_def: TrimDef) -> &mut Self {
-        if trim_def.amount == 0 {
-            return self;
-        }
-        assert!(
-            self.trimmed_ranges[trim_def.read as usize].is_some(),
-            "ERROR: Attempt to trim an empty sequence"
-        );
-        self.trimmed_ranges[trim_def.read as usize]
-            .as_mut()
-            .unwrap()
-            .trim(trim_def);
-        self
-    }
-
-    fn is_trimmed(&self, read: WhichRead) -> bool {
-        if let Some(range) = self.trimmed_ranges[read as usize] {
-            range.len() == self.readpair.offsets[read as usize].seq_len()
-        } else {
-            false
-        }
-    }
-
-    /// Set the length of Illumina read1 to the specified length
-    /// If the specified length is greater than the read1 length,
-    /// this function does nothing. This function should be called
-    /// before applying any other trimming to read1, otherwise, it
-    /// will panic.
-    pub fn r1_length(&mut self, len: usize) -> &mut Self {
-        assert!(
-            self.is_trimmed(WhichRead::R1),
-            "ERROR: Read1 is already trimmed prior to calling r1_length()"
-        );
-        assert!(self.readpair.offsets[WhichRead::R1 as usize].exists);
-        let ind = WhichRead::R1 as usize;
-        let trim_amount = self.readpair.offsets[ind]
-            .seq_len()
-            .unwrap()
-            .saturating_sub(len);
-        let trim_def = TrimDef::new(WhichRead::R1, WhichEnd::ThreePrime, trim_amount);
-        self.trim(trim_def)
-    }
-
-    /// Set the length of Illumina read2 to the specified length
-    /// If the specified length is greater than the read2 length,
-    /// this function does nothing. This function should be called
-    /// before applying any other trimming to read2, otherwise, it
-    /// will panic.
-    pub fn r2_length(&mut self, len: usize) -> &mut Self {
-        assert!(
-            self.is_trimmed(WhichRead::R2),
-            "ERROR: Read2 is already trimmed prior to calling r2_length()"
-        );
-        assert!(self.readpair.offsets[WhichRead::R2 as usize].exists);
-        let ind = WhichRead::R2 as usize;
-        let trim_amount = self.readpair.offsets[ind]
-            .seq_len()
-            .unwrap()
-            .saturating_sub(len);
-        let trim_def = TrimDef::new(WhichRead::R2, WhichEnd::ThreePrime, trim_amount);
-        self.trim(trim_def)
-    }
-
-    #[inline]
-    /// Get a ReadPart `part` from a read `which`
-    pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
-        let untrimmed = self.readpair.get(which, part);
-        match part {
-            ReadPart::Qual | ReadPart::Seq => {
-                untrimmed.map(|r| self.trimmed_ranges[which as usize].unwrap().slice(r))
-            }
-            _ => untrimmed,
-        }
-    }
-
-    #[inline]
-    /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
-    pub fn get_range(&self, rp_range: &RpRange, part: ReadPart) -> Option<&[u8]> {
-        let read = self.get(rp_range.read(), part);
-        read.map(|r| rp_range.slice(r))
-    }
-
-    pub fn len(&self, which: WhichRead) -> Option<usize> {
-        self.trimmed_ranges[which as usize].and_then(|r| r.len())
+    /// WARNING: DO NOT USE THIS FUNCTION IF YOU ARE STREAMING FASTQ DATA
+    /// This function is intended for testing and illustration purposes
+    /// only. Use `ReadPairIter` if you are iterating over a fastq.
+    pub fn new<R: Record>(rr: [Option<R>; 4]) -> ReadPair {
+        let mut buffer = BytesMut::with_capacity(4096);
+        MutReadPair::new(&mut buffer, &rr).freeze()
     }
 }
 
@@ -527,28 +618,10 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn test_rprange_invalid_trim() {
-        // TrimDef should have the same read as in the RpRange
-        let mut r = RpRange::new(WhichRead::R1, 10, Some(20));
-        let trim_def = TrimDef {
-            read: WhichRead::R2,
-            end: WhichEnd::ThreePrime,
-            amount: 5,
-        };
-        r.trim(trim_def);
-    }
-
-    #[test]
-    #[should_panic]
     fn test_rprange_trim_without_len() {
-        // Trimming is not allowed if length is unknows
+        // 3' Trimming is not allowed if length is unknown
         let mut r = RpRange::new(WhichRead::R1, 10, None);
-        let trim_def = TrimDef {
-            read: WhichRead::R1,
-            end: WhichEnd::ThreePrime,
-            amount: 5,
-        };
-        r.trim(trim_def);
+        r.trim(WhichEnd::ThreePrime, 5);
     }
 
     #[test]
@@ -560,6 +633,27 @@ mod tests {
         assert_eq!(r.read(), WhichRead::R1);
         assert_eq!(r.offset(), 0);
         assert_eq!(r.len(), Some(0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_shrink_invalid_range_1() {
+        let mut r = RpRange::new(WhichRead::R1, 10, Some(20));
+        r.shrink(&(40..50));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_shrink_invalid_range_2() {
+        let mut r = RpRange::new(WhichRead::R1, 10, Some(20));
+        r.shrink(&(10..50));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_shrink_invalid_range_3() {
+        let mut r = RpRange::new(WhichRead::R1, 10, Some(20));
+        r.shrink(&(10..5));
     }
 
     proptest! {
@@ -608,33 +702,28 @@ mod tests {
         ) {
             // Make sure we trim the range correctly
             let mut rprange = RpRange { val };
+            let old_offset = rprange.offset();
+            let old_read = rprange.read();
             if let Some(l) = rprange.len() {
                 let amount = amount % max(l, 1);
-                let old_offset = rprange.offset();
-                let old_read = rprange.read();
                 if amount + old_offset < MAX_RPRANGE_ENTRY {
                     if end {
-                        let trim_def = TrimDef {
-                            read: rprange.read(),
-                            end: WhichEnd::ThreePrime,
-                            amount
-                        };
-                        rprange.trim(trim_def);
+                        rprange.trim(WhichEnd::ThreePrime, amount);
                         assert_eq!(rprange.read(), old_read);
                         assert_eq!(rprange.offset(), old_offset);
                         assert_eq!(rprange.len(), Some(l-amount));
                     } else {
-                        let trim_def = TrimDef {
-                            read: rprange.read(),
-                            end: WhichEnd::FivePrime,
-                            amount
-                        };
-                        rprange.trim(trim_def);
+                        rprange.trim(WhichEnd::FivePrime, amount);
                         assert_eq!(rprange.read(), old_read);
                         assert_eq!(rprange.offset(), old_offset + amount);
                         assert_eq!(rprange.len(), Some(l-amount));
                     }
                 }
+            } else {
+                rprange.trim(WhichEnd::FivePrime, amount);
+                assert_eq!(rprange.read(), old_read);
+                assert_eq!(rprange.offset(), old_offset + amount);
+                assert_eq!(rprange.len(), None);
             }
 
         }
@@ -650,24 +739,21 @@ mod tests {
             // Make sure we shrink the range correctly
             let mut rprange = RpRange { val };
 
-            if let Some(l) = rprange.len() {
-                // Shrink is only allowed if len is known
-                let x = x % max(l, 1);
-                let y = y % max(l, 1);
-                let shrink_range = min(x, y)..max(x, y);
+            let max_val = rprange.len().unwrap_or(MAX_RPRANGE_ENTRY);
+            let x = min(x, max_val);
+            let y = min(y, max_val);
+            let shrink_range = min(x, y)..max(x, y);
 
-                let old_offset = rprange.offset();
-                let old_read = rprange.read();
+            let old_offset = rprange.offset();
+            let old_read = rprange.read();
 
-                let expected_offset = old_offset + shrink_range.start;
-                let expected_len = Some(shrink_range.end - shrink_range.start);
-                if expected_offset < MAX_RPRANGE_ENTRY {
-                    rprange.shrink(&shrink_range);
-                    assert_eq!(rprange.read(), old_read);
-                    assert_eq!(rprange.offset(), expected_offset);
-                    assert_eq!(rprange.len(), expected_len);
-                }
-
+            let expected_offset = old_offset + shrink_range.start;
+            let expected_len = Some(shrink_range.end - shrink_range.start);
+            if expected_offset < MAX_RPRANGE_ENTRY {
+                rprange.shrink(&shrink_range);
+                assert_eq!(rprange.read(), old_read);
+                assert_eq!(rprange.offset(), expected_offset);
+                assert_eq!(rprange.len(), expected_len);
             }
 
         }
@@ -690,11 +776,54 @@ mod tests {
             };
             let mut input = [None, None, None, None];
             input[pos] = Some(owned);
-            let read_pair = MutReadPair::new(&mut buffer, input).freeze();
+            let read_pair = MutReadPair::new(&mut buffer, &input).freeze();
             let read = WhichRead::from(pos);
             assert_eq!(read_pair.get(read, ReadPart::Header), Some(head.as_slice()));
             assert_eq!(read_pair.get(read, ReadPart::Qual), Some(qual.as_slice()));
             assert_eq!(read_pair.get(read, ReadPart::Seq), Some(seq.as_slice()));
         }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_rprange_intersect_panic() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 0, None);
+        rp_range.intersect(RpRange::new(WhichRead::R2, 0, None));
+    }
+
+    #[test]
+    fn test_rprange_intersect_both_open() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 50, None);
+        rp_range.intersect(RpRange::new(WhichRead::R1, 10, None));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 50);
+        assert_eq!(rp_range.len(), None);
+    }
+
+    #[test]
+    fn test_rprange_intersect_self_open() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 30, None);
+        rp_range.intersect(RpRange::new(WhichRead::R1, 0, Some(100)));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 30);
+        assert_eq!(rp_range.len(), Some(70));
+    }
+
+    #[test]
+    fn test_rprange_intersect_other_open() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 30, Some(120));
+        rp_range.intersect(RpRange::new(WhichRead::R1, 65, None));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 65);
+        assert_eq!(rp_range.len(), Some(85));
+    }
+
+    #[test]
+    fn test_rprange_intersect_both_closed() {
+        let mut rp_range = RpRange::new(WhichRead::R1, 40, Some(110));
+        rp_range.intersect(RpRange::new(WhichRead::R1, 30, Some(70)));
+        assert_eq!(rp_range.read(), WhichRead::R1);
+        assert_eq!(rp_range.offset(), 40);
+        assert_eq!(rp_range.len(), Some(60));
     }
 }

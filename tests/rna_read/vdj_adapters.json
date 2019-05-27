@@ -1,0 +1,66 @@
+{
+    "R1": [
+        {
+            "name": "spacer",
+            "end": "five_prime",
+            "location": "anchored",
+            "seq": "TTTCTTATATGGG"
+        },
+        {
+            "name": "R2_rc",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
+        },
+        {
+            "name": "P7_rc",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "ATCTCGTATGCCGTCTTCTGCTTG"
+        },
+        {
+            "name": "polyA",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "AAAAAAAAAAAAAAAAAAAA"
+        },
+        {
+            "name": "rt_primer_rc",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "ATGTACTCTGCGTTGATACCACTGCTT"
+        }
+    ],
+    "R2" : [
+        {
+            "name": "spacer_rc",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "CCCATATAAGAAA"
+        },
+        {
+            "name": "R1_rc",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+        },
+        {
+            "name": "P5_rc",
+            "end": "three_prime",
+            "location": "anywhere",
+            "seq": "AGATCTCGGTGGTCGCCGTATCATT"
+        },
+        {
+            "name": "polyT",
+            "end": "five_prime",
+            "location": "anywhere",
+            "seq": "TTTTTTTTTTTTTTTTTTTT"
+        },
+        {
+            "name": "rt_primer",
+            "end": "five_prime",
+            "location": "non_internal",
+            "seq": "AAGCAGTGGTATCAACGCAGAGTACAT"
+        }
+    ]
+}
