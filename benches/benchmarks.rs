@@ -1,11 +1,15 @@
 #[macro_use]
 extern crate criterion;
 extern crate fastq_10x;
+extern crate fxhash;
 
-use criterion::Criterion;
+use criterion::{Benchmark, Criterion, Throughput};
+use fastq_10x::adapter_trimmer::{Adapter, ReadAdapterCatalog};
+use fastq_10x::read_pair::WhichRead;
 use fastq_10x::read_pair_iter::{InputFastqs, ReadPairIter};
 use fastq_10x::rna_read::{ChemistryDef, RnaChunk};
 use fastq_10x::FastqProcessor;
+use fxhash::FxHashMap;
 use std::fs::File;
 use std::process::Command;
 
@@ -73,9 +77,47 @@ fn rna_chunk_iter_count(chemistry: ChemistryDef, file: impl ToString) -> usize {
     chunk.iter().unwrap().count()
 }
 
+fn rna_read_trim(
+    chemistry: ChemistryDef,
+    fastq_file: impl ToString,
+    adapter_map: &FxHashMap<WhichRead, Vec<Adapter>>,
+) -> usize {
+    let mut ad_catalog = ReadAdapterCatalog::from(adapter_map);
+    let chunk = RnaChunk::new(
+        chemistry,
+        1,
+        InputFastqs {
+            r1: fastq_file.to_string(),
+            r2: None,
+            i1: None,
+            i2: None,
+            r1_interleaved: true,
+        },
+        "my_group".into(),
+    );
+    let mut ntrimmed = 0;
+    for rna_read_result in chunk.iter().unwrap() {
+        let mut rna_read = rna_read_result.unwrap();
+        let adapter_positions = rna_read.trim_adapters(&mut ad_catalog);
+        if !adapter_positions.is_empty() {
+            ntrimmed += 1;
+        }
+    }
+    ntrimmed
+}
+
+fn cutadapt_trim(fastq_file: impl ToString) -> bool {
+    Command::new("sh")
+        .arg("time_cutadapt.sh")
+        .arg(fastq_file.to_string())
+        .status()
+        .is_ok()
+}
+
 const INTERLEAVED_LZ4_FASTQ: &'static str = "tests/rna_read/interleaved_2k.fastq.lz4";
 const INTERLEAVED_GZ_FASTQ: &'static str = "tests/rna_read/interleaved_2k.fastq.gz";
 const INTERLEAVED_FASTQ: &'static str = "tests/rna_read/interleaved_2k.fastq";
+const INTERLEAVED_FASTQ_INSERT: &'static str = "tests/rna_read/interleaved_2k_insert.fastq";
 
 fn run_fastq_lz4_benchmark(c: &mut Criterion) {
     c.bench_function("bench-lz4-wc", |b| {
@@ -155,11 +197,32 @@ fn run_fastq_benchmark(c: &mut Criterion) {
     });
 }
 
+fn run_trim_benchmark(c: &mut Criterion) {
+    let chemistry: ChemistryDef =
+        serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
+            .unwrap();
+    let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> =
+        serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap()).unwrap();
+
+    c.bench(
+        "bench-read-trim",
+        Benchmark::new("rust-utils", move |b| {
+            b.iter(|| rna_read_trim(chemistry.clone(), INTERLEAVED_FASTQ, &vdj_adapters))
+        })
+        .with_function("cutadapt", |b| {
+            b.iter(|| assert!(cutadapt_trim(INTERLEAVED_FASTQ_INSERT)))
+        })
+        .sample_size(10)
+        .throughput(Throughput::Elements(2000)),
+    );
+}
+
 criterion_group!(
     benches,
     run_fastq_lz4_benchmark,
     run_fastq_benchmark,
-    run_fastq_gz_benchmark
+    run_fastq_gz_benchmark,
+    run_trim_benchmark
 );
 
 criterion_main!(benches);
