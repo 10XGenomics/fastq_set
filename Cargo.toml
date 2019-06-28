@@ -25,7 +25,7 @@ itertools = ">=0.6"
 lz4 = "*"
 fastq = "^0.6"
 bio = { git = "https://github.com/sreenathkrishnan/rust-bio" }
-shardio = { git = "https://github.com/10XGenomics/rust-shardio.git" }
+shardio = "0.5.3"
 
 metric = { path = "../metric" }
 tenkit = { path = "../tenkit" }

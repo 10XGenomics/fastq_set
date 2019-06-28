@@ -18,6 +18,7 @@ extern crate proptest;
 #[cfg(test)]
 extern crate file_diff;
 
+#[macro_use]
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
@@ -53,6 +54,9 @@ pub mod read_pair_iter;
 pub mod sample_def;
 
 pub mod barcode;
+// bc_sort is an older bc sorting workflow -- it's used in perf tests.
+// needs to be reconciled with mod barcode_sort.
+pub mod bc_sort;
 pub mod barcode_sort;
 pub mod metric_utils;
 pub mod sseq;
@@ -85,6 +89,18 @@ impl Barcode {
             sequence: SSeq::new(sequence),
             valid,
         }
+    }
+
+    pub fn from_sequence(seq: &[u8]) -> Result<Barcode, Error> {
+        let ss = std::str::from_utf8(seq)?;
+
+        let mut parts = ss.split("-");
+        let bc = parts.next().ok_or_else(|| format_err!("invalid 10x processed barcode: '{}'", ss))?;
+        let gg_str = parts.next().ok_or_else(|| format_err!("invalid 10x processed barcode: '{}'", ss))?;
+
+        use std::str::FromStr;
+        let gg = u16::from_str(gg_str)?;
+        Ok(Barcode::new(gg, bc.as_bytes(), true))
     }
 
     /// First possible valid barcode value. Use to query valid/invlaid barcode ranges.

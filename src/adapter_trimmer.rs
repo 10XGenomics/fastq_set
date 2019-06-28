@@ -486,7 +486,6 @@ pub struct TrimResult {
 /// # Test
 /// * test_intersect_ranges() - Tests this function for a small number of inputs
 pub fn intersect_ranges(a: &Range<usize>, b: &Range<usize>) -> Range<usize> {
-    use std::cmp::{max, min};
     let end = min(a.end, b.end);
     let start = min(max(a.start, b.start), end);
     Range { start, end }
