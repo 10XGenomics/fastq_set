@@ -239,8 +239,8 @@ where
                 // Counter for BCs
                 let mut counts = SimpleHistogram::new();
 
-                for _read_pair in self.reader.iter_range(&range).unwrap() {
-                    let mut read_pair = _read_pair.unwrap();
+                for _read_pair in self.reader.iter_range(&range)? {
+                    let mut read_pair = _read_pair?;
                     // Correct the BC, if possible
                     match self.corrector
                         .correct_barcode(&read_pair.barcode(), read_pair.barcode_qual())
@@ -254,14 +254,25 @@ where
                     if fxhash::hash(&read_pair.barcode().sequence()) >= bc_subsample_thresh {
                         // count reads on each (gem_group, bc)
                         counts.observe(read_pair.barcode());
-                        read_sender.send(read_pair).unwrap();
+                        read_sender.send(read_pair)?;
                     }
                 }
 
-                counts
+                Ok(counts)
             });
 
-        let bc_counts = chunk_results.reduce(|| SimpleHistogram::new(), |mut x,y| { x.merge(y); x });
+        // Deal with errors 
+        let bc_counts = chunk_results.reduce(
+            || Ok(SimpleHistogram::new()), 
+            |x: Result<_, Error>, y| {
+                match (x,y) {
+                    (Ok(mut x1), Ok(y1)) => { x1.merge(y1); Ok(x1)},
+                    (Err(e1), _) => Err(e1),
+                    (_, Err(e2)) => Err(e2),
+                }
+            }
+        )?;
+
         let _ = writer.finish()?;
 
         // Sum barcode counts to usize
