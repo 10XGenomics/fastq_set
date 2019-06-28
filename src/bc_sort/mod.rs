@@ -161,13 +161,13 @@ where
                                 // barcode subsampling
                                 let hash = fxhash::hash(&read_pair.barcode().sequence());
                                 if hash >= bc_subsample_thresh as usize {
-                                    bc_sender.send(read_pair)
+                                    bc_sender.send(read_pair)?;
                                 }
                             }
                             false => {
                                 // don't bc subsample these reads yet -- that will
                                 // happen in the 2nd pass in 'process_unbarcoded'
-                                bc_sender.send(read_pair)
+                                bc_sender.send(read_pair)?;
                             }
                         }
                     }
@@ -239,7 +239,8 @@ where
                 // Counter for BCs
                 let mut counts = SimpleHistogram::new();
 
-                for mut read_pair in self.reader.iter_range(&range) {
+                for _read_pair in self.reader.iter_range(&range).unwrap() {
+                    let mut read_pair = _read_pair.unwrap();
                     // Correct the BC, if possible
                     match self.corrector
                         .correct_barcode(&read_pair.barcode(), read_pair.barcode_qual())
@@ -253,7 +254,7 @@ where
                     if fxhash::hash(&read_pair.barcode().sequence()) >= bc_subsample_thresh {
                         // count reads on each (gem_group, bc)
                         counts.observe(read_pair.barcode());
-                        read_sender.send(read_pair)
+                        read_sender.send(read_pair).unwrap();
                     }
                 }
 
@@ -306,7 +307,7 @@ where
 
     let corrector = BarcodeCorrector::new(barcode_whitelist, init_counts.clone(), 1.5, 0.9)?;
 
-    let reader = shardio::ShardReader::<<P as FastqProcessor>::ReadType, BcSortOrder>::open(&pass1_fn);
+    let reader = shardio::ShardReader::<<P as FastqProcessor>::ReadType, BcSortOrder>::open(&pass1_fn)?;
 
     let mut correct = CorrectBcs::new(reader, corrector, Some(1.0f64));
 
