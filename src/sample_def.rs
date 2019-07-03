@@ -5,7 +5,8 @@ use fxhash::FxHashMap;
 use glob::glob;
 use regex::Regex;
 use std::path::PathBuf;
-use tenkit::constants::SAMPLE_INDEX_MAP;
+
+use crate::sample_index_map::SAMPLE_INDEX_MAP;
 use InputFastqs;
 
 #[allow(non_camel_case_types)]

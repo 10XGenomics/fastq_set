@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Patrick Marks <patrick@10xgenomics.com>"]
 
 [dependencies]
-ordered-float = "0.3.0"
+ordered-float = "1"
 flate2 = { version = "^1.0", features = ["zlib"], default-features = false }
 serde_derive = "*"
 serde_json = "*"
@@ -15,6 +15,7 @@ failure = "*"
 tempfile = "3"
 glob = "0.2"
 regex = "1"
+lazy_static = "1"
 
 rayon = "*"
 log = "*"
@@ -28,7 +29,6 @@ bio = { git = "https://github.com/sreenathkrishnan/rust-bio" }
 shardio = "0.5.3"
 
 metric = { path = "../metric" }
-tenkit = { path = "../tenkit" }
 
 [dev-dependencies]
 time = "*"

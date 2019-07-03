@@ -19,6 +19,9 @@ extern crate proptest;
 extern crate file_diff;
 
 #[macro_use]
+extern crate lazy_static;
+
+#[macro_use]
 extern crate failure;
 extern crate fastq;
 extern crate flate2;
@@ -47,11 +50,10 @@ extern crate log;
 extern crate lz4;
 extern crate metric;
 
-extern crate tenkit;
-
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod sample_def;
+pub mod sample_index_map;
 
 pub mod barcode;
 // bc_sort is an older bc sorting workflow -- it's used in perf tests.
