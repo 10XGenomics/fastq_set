@@ -5,7 +5,7 @@
 
 use failure::Error;
 use ordered_float::NotNaN;
-use std::cmp::max;
+use std::cmp::min;
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
@@ -15,6 +15,8 @@ use std::io::BufRead;
 
 use utils;
 use {Barcode, SSeq};
+
+const BC_MAX_QV: u8 = 66; // This is the illumina quality value
 
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
@@ -157,8 +159,12 @@ impl BarcodeCorrector {
 
                 if self.whitelist.contains(&a) {
                     let bc_count = self.bc_counts.get(&trial_bc);
-                    let prob_edit = max(Of64::from(0.0005), Of64::from(probability(qv)));
-                    let likelihood = prob_edit * max(Of64::from(bc_count as f64), Of64::from(0.5));
+                    // No pseudo counts
+                    if bc_count == 0 {
+                        continue;
+                    }
+                    let prob_edit = Of64::from(probability(min(qv, BC_MAX_QV)));
+                    let likelihood = prob_edit * Of64::from(bc_count as f64);
                     candidates.push((likelihood, trial_bc));
                     total_likelihood += likelihood;
                 }
