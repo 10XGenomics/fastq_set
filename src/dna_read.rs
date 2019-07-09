@@ -300,7 +300,8 @@ mod test_dna_cfg {
         #[cfg(not(debug_assertions))]
         {
             let bc_sort_results =
-                crate::bc_sort::barcode_sort_workflow(procs, "tests", "tests/10K-agora-dev.txt").unwrap();
+                crate::bc_sort::barcode_sort_workflow(procs, "tests", "tests/10K-agora-dev.txt")
+                    .unwrap();
         }
     }
 

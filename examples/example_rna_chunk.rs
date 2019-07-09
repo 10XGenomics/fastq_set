@@ -8,8 +8,7 @@ use std::fs::File;
 
 fn main() {
     let chemistry: ChemistryDef = serde_json::from_reader(
-        File::open("tests/rna_read/sc_vdj_chemistry.json")
-            .expect("Failed to open chemistry json"),
+        File::open("tests/rna_read/sc_vdj_chemistry.json").expect("Failed to open chemistry json"),
     )
     .unwrap();
     let file = "tests/rna_read/interleaved_2k.fastq";
