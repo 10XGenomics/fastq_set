@@ -8,11 +8,11 @@ use std::fs::File;
 
 fn main() {
     let chemistry: ChemistryDef = serde_json::from_reader(
-        File::open("/mnt/yard1/sreenath/tests/datasets/chemistry_def/sc_vdj_chemistry.json")
+        File::open("tests/rna_read/sc_vdj_chemistry.json")
             .expect("Failed to open chemistry json"),
     )
     .unwrap();
-    let file = "/mnt/yard1/sreenath/tests/datasets/vdj_fastqs/micro_100k.fastq";
+    let file = "tests/rna_read/interleaved_2k.fastq";
 
     let chunk = RnaChunk::new(
         chemistry,
