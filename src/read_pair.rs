@@ -719,7 +719,7 @@ mod tests {
                         assert_eq!(rprange.len(), Some(l-amount));
                     }
                 }
-            } else {
+            } else if amount < (MAX_RPRANGE_ENTRY - old_offset) {
                 rprange.trim(WhichEnd::FivePrime, amount);
                 assert_eq!(rprange.read(), old_read);
                 assert_eq!(rprange.offset(), old_offset + amount);
