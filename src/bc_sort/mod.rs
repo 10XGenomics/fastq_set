@@ -10,8 +10,8 @@ use failure::Error;
 use fxhash;
 use fxhash::FxHashMap;
 use shardio::{Range, ShardReader, ShardSender, ShardWriter, SortKey};
-use std::marker::PhantomData;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 use rayon::prelude::*;
 
@@ -22,13 +22,13 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use shardio;
 
-use metric::{Metric, SimpleHistogram};
 use barcode::{reduce_counts, BarcodeChecker, BarcodeCorrector};
+use metric::{Metric, SimpleHistogram};
 use read_pair_iter::ReadPairIter;
+use std::borrow::Cow;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use {Barcode, FastqProcessor, HasBarcode};
-use std::borrow::Cow;
 
 /// A marker for sorting objects by their barcode sequence. Incorrect barcodes will
 /// be sorted together at the start, followed by correct barcodes. See the definition of `Barcode` for details.
@@ -57,7 +57,6 @@ pub(crate) fn reduce_counts_err<K: Hash + Eq>(
     }
 }
 
-
 /// Ingest raw FASTQ using the input data and setting encapsulated in `ProcType`, to generate
 /// a stream of 'interpreted' reads of type `ReadType`.  Check the barcodes of each object
 /// against that whitelist to mark them as correct. Send the `ReadType` objects to a shardio
@@ -70,13 +69,11 @@ pub struct SortByBc<ProcType> {
 impl<ProcType> SortByBc<ProcType>
 where
     ProcType: FastqProcessor + Send + Sync + Clone,
-    <ProcType as FastqProcessor>::ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    <ProcType as FastqProcessor>::ReadType:
+        'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
 {
     /// Check a new SortByBc object.
-    pub fn new(
-        fastq_inputs: Vec<ProcType>,
-        barcode_checker: BarcodeChecker,
-    ) -> SortByBc<ProcType> {
+    pub fn new(fastq_inputs: Vec<ProcType>, barcode_checker: BarcodeChecker) -> SortByBc<ProcType> {
         SortByBc {
             fastq_inputs,
             barcode_checker,
@@ -90,11 +87,19 @@ where
         &self,
         read_path: impl AsRef<Path>,
     ) -> Result<(u64, u64, SimpleHistogram<Barcode>), Error> {
-        let mut writer =
-            ShardWriter::<<ProcType as FastqProcessor>::ReadType, BcSortOrder>::new(read_path, 16, 128, 1 << 22)?;
+        let mut writer = ShardWriter::<<ProcType as FastqProcessor>::ReadType, BcSortOrder>::new(
+            read_path,
+            16,
+            128,
+            1 << 22,
+        )?;
 
         // FIXME - configure thread consumption
-        let fq_w_senders: Vec<(ProcType, ShardSender<<ProcType as FastqProcessor>::ReadType>)> = self.fastq_inputs
+        let fq_w_senders: Vec<(
+            ProcType,
+            ShardSender<<ProcType as FastqProcessor>::ReadType>,
+        )> = self
+            .fastq_inputs
             .iter()
             .cloned()
             .map(|fq| (fq, writer.get_sender()))
@@ -102,16 +107,18 @@ where
 
         let bc_counts = fq_w_senders
             .into_par_iter()
-            .map(|(fq, sender)| {
-                self.process_fastq(fq, sender)
-            })
-            .reduce(|| Ok(SimpleHistogram::new()), |v1, v2| {
-                match (v1,v2) {
-                    (Ok(mut h1), Ok(h2)) => { h1.merge(h2); Ok(h1) },
+            .map(|(fq, sender)| self.process_fastq(fq, sender))
+            .reduce(
+                || Ok(SimpleHistogram::new()),
+                |v1, v2| match (v1, v2) {
+                    (Ok(mut h1), Ok(h2)) => {
+                        h1.merge(h2);
+                        Ok(h1)
+                    }
                     (Err(e1), _) => Err(e1),
                     (_, Err(e2)) => Err(e2),
-                }
-            })?;
+                },
+            )?;
 
         writer.finish()?;
 
@@ -179,7 +186,8 @@ where
 }
 
 fn count_reads(bc_counts: &SimpleHistogram<Barcode>, valid: bool) -> u64 {
-    bc_counts.distribution()
+    bc_counts
+        .distribution()
         .iter()
         .filter(|(k, _)| k.is_valid() == valid)
         .map(|v| v.1.count() as u64)
@@ -224,11 +232,12 @@ where
         let bc_subsample_thresh = 0;
 
         /*= self.bc_subsample_rate.map_or(0,
-                                    |r| {   assert!( r > 0.0, "zero barcode fraction passed in");
-                                            ((1.0-r) * u64::max_value() as f64) as usize } );
-*/
+                                            |r| {   assert!( r > 0.0, "zero barcode fraction passed in");
+                                                    ((1.0-r) * u64::max_value() as f64) as usize } );
+        */
 
-        let chunks = self.reader
+        let chunks = self
+            .reader
             .make_chunks(8, &Range::ends_at(Barcode::first_valid()));
         let chunk_results = chunks
             .into_iter()
@@ -242,7 +251,8 @@ where
                 for _read_pair in self.reader.iter_range(&range)? {
                     let mut read_pair = _read_pair?;
                     // Correct the BC, if possible
-                    match self.corrector
+                    match self
+                        .corrector
                         .correct_barcode(&read_pair.barcode(), read_pair.barcode_qual())
                     {
                         Some(new_barcode) => read_pair.set_barcode(new_barcode),
@@ -261,16 +271,17 @@ where
                 Ok(counts)
             });
 
-        // Deal with errors 
+        // Deal with errors
         let bc_counts = chunk_results.reduce(
-            || Ok(SimpleHistogram::new()), 
-            |x: Result<_, Error>, y| {
-                match (x,y) {
-                    (Ok(mut x1), Ok(y1)) => { x1.merge(y1); Ok(x1)},
-                    (Err(e1), _) => Err(e1),
-                    (_, Err(e2)) => Err(e2),
+            || Ok(SimpleHistogram::new()),
+            |x: Result<_, Error>, y| match (x, y) {
+                (Ok(mut x1), Ok(y1)) => {
+                    x1.merge(y1);
+                    Ok(x1)
                 }
-            }
+                (Err(e1), _) => Err(e1),
+                (_, Err(e2)) => Err(e2),
+            },
         )?;
 
         let _ = writer.finish()?;
@@ -304,7 +315,8 @@ pub fn barcode_sort_workflow<P>(
 ) -> Result<BcSortResults, Error>
 where
     P: FastqProcessor + Send + Sync + Clone,
-    <P as FastqProcessor>::ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    <P as FastqProcessor>::ReadType:
+        'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
 {
     let tmp_dir = TempDir::new_in(path)?;
     let pass1_fn = tmp_dir.path().join("pass1_data.shardio");
@@ -318,7 +330,8 @@ where
 
     let corrector = BarcodeCorrector::new(barcode_whitelist, init_counts.clone(), 1.5, 0.9)?;
 
-    let reader = shardio::ShardReader::<<P as FastqProcessor>::ReadType, BcSortOrder>::open(&pass1_fn)?;
+    let reader =
+        shardio::ShardReader::<<P as FastqProcessor>::ReadType, BcSortOrder>::open(&pass1_fn)?;
 
     let mut correct = CorrectBcs::new(reader, corrector, Some(1.0f64));
 

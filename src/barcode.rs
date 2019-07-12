@@ -5,7 +5,7 @@
 
 use failure::Error;
 use ordered_float::NotNaN;
-use std::cmp::max;
+use std::cmp::{max, min};
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
@@ -15,6 +15,8 @@ use std::io::BufRead;
 
 use utils;
 use {Barcode, SSeq};
+
+const BC_MAX_QV: u8 = 66; // This is the illumina quality value
 
 /// Load a (possibly gzipped) barcode whitelist file.
 /// Each line in the file is a single whitelist barcode.
@@ -156,9 +158,9 @@ impl BarcodeCorrector {
                 };
 
                 if self.whitelist.contains(&a) {
-                    let bc_count = self.bc_counts.get(&trial_bc);
-                    let prob_edit = max(Of64::from(0.0005), Of64::from(probability(qv)));
-                    let likelihood = prob_edit * max(Of64::from(bc_count as f64), Of64::from(0.5));
+                    let bc_count = max(self.bc_counts.get(&trial_bc), 1); // Include pseudo count
+                    let prob_edit = Of64::from(probability(min(qv, BC_MAX_QV)));
+                    let likelihood = prob_edit * Of64::from(bc_count as f64);
                     candidates.push((likelihood, trial_bc));
                     total_likelihood += likelihood;
                 }
@@ -250,5 +252,35 @@ mod test {
             val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40]),
             Some(b1)
         );
+    }
+
+    proptest! {
+        #[test]
+        fn prop_test_n_in_barcode(
+            n_pos in (0..16usize)
+        ) {
+            let mut wl = FxHashSet::default();
+            let bc = Barcode::test_valid(b"GCGATTGACCCAAAGG");
+            wl.insert(bc.sequence);
+            let counts = SimpleHistogram::new();
+            let corrector = BarcodeCorrector {
+                max_expected_barcode_errors: 1.0,
+                bc_confidence_threshold: 0.975,
+                whitelist: wl,
+                bc_counts: counts,
+            };
+
+            let mut bc_seq_with_n = bc.sequence().to_vec();
+            bc_seq_with_n[n_pos] = b'N';
+            let mut qual = vec![53; bc_seq_with_n.len()];
+            qual[n_pos] = 35;
+            let bc_with_n = Barcode::test_invalid(&bc_seq_with_n);
+
+            assert_eq!(
+                corrector.correct_barcode(&bc_with_n, &qual),
+                Some(bc)
+            );
+
+        }
     }
 }
