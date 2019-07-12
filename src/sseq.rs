@@ -5,6 +5,7 @@
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::str;
+use std::ops::{Index, IndexMut};
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
@@ -40,6 +41,28 @@ impl SSeq {
 
     pub fn is_empty(&self) -> bool {
         self.length == 0
+    }
+}
+
+impl Index<usize> for SSeq {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        if index >= self.length as usize {
+            panic!("index out of bounds")
+        }
+
+        &self.sequence[index]
+    }
+}
+
+impl IndexMut<usize> for SSeq {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        if index >= self.length as usize {
+            panic!("index out of bounds")
+        }
+
+        &mut self.sequence[index]
     }
 }
 
