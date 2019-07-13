@@ -4,8 +4,8 @@
 
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
-use std::str;
 use std::ops::{Index, IndexMut};
+use std::str;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.

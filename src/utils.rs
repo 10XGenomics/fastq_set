@@ -2,13 +2,13 @@
 
 //! Utility methods.
 
+use std::any::{Any, TypeId};
 use std::boxed::Box;
+use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::Path;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::any::{Any, TypeId};
 
 use std::fmt::Debug;
 
@@ -75,7 +75,10 @@ pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path> + Debug>(
     let file_type_hash: u64 = deserialize_from(&mut reader)?;
 
     if type_hash != file_type_hash {
-        let err = format_err!("data type in file '{:?}' does not match expected type", filename.as_ref());
+        let err = format_err!(
+            "data type in file '{:?}' does not match expected type",
+            filename.as_ref()
+        );
         return Err(err);
     }
 
@@ -89,7 +92,6 @@ mod test {
 
     #[test]
     fn test_write_obj_read_obj() {
-
         let fn1 = "test1.bin";
         let fn2 = "test2.bin";
 
@@ -108,4 +110,4 @@ mod test {
         let read2_wrong: Result<Vec<u8>, _> = read_obj(fn2);
         assert!(read2_wrong.is_err());
     }
-} 
+}
