@@ -11,8 +11,8 @@ use std::str;
 /// Used as a convenient container for barcode or UMI sequences.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct SSeq {
-    pub(crate) length: u8,
     pub(crate) sequence: [u8; 23],
+    pub(crate) length: u8,
 }
 
 impl SSeq {
@@ -104,5 +104,32 @@ impl fmt::Debug for SSeq {
             s.push(self.sequence[pos] as char);
         }
         write!(f, "{}", s)
+    }
+}
+
+#[cfg(test)]
+mod sseq_test {
+    use sseq::SSeq;
+
+    #[test]
+    fn sort_test() {
+        let s1: &[u8] = b"ASDFQ";
+        let s2 = b"ASDFQA";
+        let s3 = b"ASDF";
+        let s4 = b"ASDF";
+        let s5 = b"";
+        let s6 = b"A";
+        let s7 = b"QERQGHBARTQBEWC";
+        let s8 = b"AWERQWERTQER";
+
+        let mut seqs = vec![s1, s2, s3, s4, s5, s6, s7, s8];
+        let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::new(x)).collect();
+
+        seqs.sort();
+        sseqs.sort();
+
+        for i in 0 .. seqs.len() {
+            assert_eq!(seqs[i], sseqs[i].seq());
+        }
     }
 }
