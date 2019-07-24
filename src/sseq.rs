@@ -128,7 +128,7 @@ mod sseq_test {
         seqs.sort();
         sseqs.sort();
 
-        for i in 0 .. seqs.len() {
+        for i in 0..seqs.len() {
             assert_eq!(seqs[i], sseqs[i].seq());
         }
     }
