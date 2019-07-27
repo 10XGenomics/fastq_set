@@ -42,6 +42,31 @@ impl SSeq {
     pub fn is_empty(&self) -> bool {
         self.length == 0
     }
+
+    pub fn encode_2bit_u32(&self) -> u32 {
+        let mut res: u32 = 0;
+        assert!(self.length < 16);
+
+        for (bit_pos, str_pos) in (0..self.length).rev().enumerate() {
+            let byte: u32 = match self.sequence[str_pos as usize] {
+                b'a' => 0,
+                b'A' => 0,
+                b'c' => 1,
+                b'C' => 1,
+                b'g' => 2,
+                b'G' => 2,
+                b't' => 3,
+                b'T' => 3,
+                _ => panic!("non-ACGT sequence"),
+            };
+
+            let v = byte << (bit_pos * 2);
+
+            res = res | v;
+        }
+
+        res
+    }
 }
 
 impl Index<usize> for SSeq {
@@ -131,5 +156,23 @@ mod sseq_test {
         for i in 0..seqs.len() {
             assert_eq!(seqs[i], sseqs[i].seq());
         }
+    }
+
+    #[test]
+    fn dna_encode() {
+        let s1 = SSeq::new(b"AAAAA");
+        assert_eq!(s1.encode_2bit_u32(), 0);
+
+        let s1 = SSeq::new(b"AAAAT");
+        assert_eq!(s1.encode_2bit_u32(), 3);
+
+        let s1 = SSeq::new(b"AAACA");
+        assert_eq!(s1.encode_2bit_u32(), 4);
+
+        let s1 = SSeq::new(b"AACAA");
+        assert_eq!(s1.encode_2bit_u32(), 16);
+
+        let s1 = SSeq::new(b"AATA");
+        assert_eq!(s1.encode_2bit_u32(), 12);
     }
 }
