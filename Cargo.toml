@@ -34,6 +34,7 @@ metric = { path = "../metric" }
 time = "*"
 file_diff = "1.0"
 criterion = "0.2"
+bincode = "*"
 
 [[bench]]
 name = "benchmarks"

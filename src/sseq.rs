@@ -7,9 +7,12 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
 use std::str;
 
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use serde::de::{self, Visitor};
+
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, Eq)]
+#[derive(Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct SSeq {
     pub(crate) sequence: [u8; 23],
     pub(crate) length: u8,
@@ -132,8 +135,46 @@ impl fmt::Debug for SSeq {
     }
 }
 
+impl Serialize for SSeq {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(self.seq())
+    }
+}
+
+impl<'de> Deserialize<'de> for SSeq {
+    fn deserialize<D>(deserializer: D) -> Result<SSeq, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+       deserializer.deserialize_bytes(SSeqVisitor)
+    }
+}
+
+struct SSeqVisitor;
+
+impl<'de> Visitor<'de> for SSeqVisitor {
+    type Value = SSeq;
+
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an integer between -2^31 and 2^31")
+    }
+
+
+    fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(SSeq::new(value))
+    }
+}
+
 #[cfg(test)]
 mod sseq_test {
+    use bincode;
     use sseq::SSeq;
 
     #[test]
@@ -174,5 +215,20 @@ mod sseq_test {
 
         let s1 = SSeq::new(b"AATA");
         assert_eq!(s1.encode_2bit_u32(), 12);
+    }
+
+    #[test]
+    fn test_serde() { 
+        let seq = b"AGCTAGTCAGTCAGTA";
+        let mut sseqs = Vec::new();
+        for i in 0 .. 4 {
+            let s = SSeq::new(seq);
+            sseqs.push(s);
+        }
+
+        let mut buf = Vec::new();
+        bincode::serialize_into(&mut buf, &sseqs);
+        let roundtrip: Vec<SSeq> = bincode::deserialize_from(&buf[..]).unwrap();
+        assert_eq!(sseqs, roundtrip);
     }
 }
