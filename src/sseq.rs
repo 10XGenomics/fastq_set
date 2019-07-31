@@ -7,8 +7,8 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
 use std::str;
 
-use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
@@ -149,7 +149,7 @@ impl<'de> Deserialize<'de> for SSeq {
     where
         D: Deserializer<'de>,
     {
-       deserializer.deserialize_bytes(SSeqVisitor)
+        deserializer.deserialize_bytes(SSeqVisitor)
     }
 }
 
@@ -158,11 +158,9 @@ struct SSeqVisitor;
 impl<'de> Visitor<'de> for SSeqVisitor {
     type Value = SSeq;
 
-
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("an integer between -2^31 and 2^31")
     }
-
 
     fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
     where
@@ -175,6 +173,7 @@ impl<'de> Visitor<'de> for SSeqVisitor {
 #[cfg(test)]
 mod sseq_test {
     use bincode;
+    use proptest;
     use sseq::SSeq;
 
     #[test]
@@ -218,17 +217,29 @@ mod sseq_test {
     }
 
     #[test]
-    fn test_serde() { 
+    fn test_serde() {
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
-        for i in 0 .. 4 {
+        for i in 0..4 {
             let s = SSeq::new(seq);
             sseqs.push(s);
         }
 
         let mut buf = Vec::new();
-        bincode::serialize_into(&mut buf, &sseqs);
+        bincode::serialize_into(&mut buf, &sseqs).unwrap();
         let roundtrip: Vec<SSeq> = bincode::deserialize_from(&buf[..]).unwrap();
         assert_eq!(sseqs, roundtrip);
+    }
+
+    proptest! {
+        #[test]
+        fn prop_test_serde_sseq(
+            ref seq in proptest::collection::vec(proptest::arbitrary::any::<u8>(), 0usize..=23usize),
+        ) {
+            let target = SSeq::new(&seq);
+            let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
+            let decoded: SSeq = bincode::deserialize(&encoded[..]).unwrap();
+            prop_assert_eq!(target, decoded);
+        }
     }
 }

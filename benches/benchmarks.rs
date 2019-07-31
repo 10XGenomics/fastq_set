@@ -217,29 +217,22 @@ fn run_trim_benchmark(c: &mut Criterion) {
     );
 }
 
-
 fn sseq_serde_bincode(c: &mut Criterion) {
-
     c.bench_function("bench-sseq-serde", |b| {
-
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
-        for i in 0 .. 1_000_0 {
+        for i in 0..10_000 {
             let s = fastq_10x::sseq::SSeq::new(seq);
             sseqs.push(s);
         }
 
-        b.iter(
-            || {
+        b.iter(|| {
             let mut b = Vec::new();
             bincode::serialize_into(&mut b, &sseqs);
             assert!(b.len() > 0);
-            }
-        )
+        })
     });
-
 }
-
 
 criterion_group!(
     benches,
