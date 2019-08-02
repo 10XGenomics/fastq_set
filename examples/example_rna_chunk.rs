@@ -1,5 +1,4 @@
-extern crate fastq_10x;
-extern crate serde_json;
+use serde_json;
 
 use fastq_10x::read_pair_iter::InputFastqs;
 use fastq_10x::rna_read::{ChemistryDef, RnaChunk};

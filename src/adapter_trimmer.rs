@@ -17,17 +17,18 @@
 //! A 5' adapter can be treated as a 3' adapter with
 //! the read reversed. Perhaps it makes sense to use
 //! this symmetry in the algorithm?
+use crate::read_pair::WhichRead;
+use crate::WhichEnd;
 use bio::alignment::pairwise::{self, MatchParams, Scoring};
 use bio::alignment::sparse;
 use bio::alignment::sparse::HashMapFx;
-use read_pair::WhichRead;
+use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 use std::i32;
 use std::ops::Range;
-use WhichEnd;
 
 type Aligner = pairwise::banded::Aligner<MatchParams>;
 

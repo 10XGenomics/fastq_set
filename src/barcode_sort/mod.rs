@@ -1,4 +1,7 @@
-use barcode::BarcodeChecker;
+use crate::barcode::BarcodeChecker;
+use crate::Barcode;
+use crate::FastqProcessor;
+use crate::HasBarcode;
 use failure::Error;
 use metric::{Metric, SerdeFormat, SimpleHistogram};
 use serde::Serialize;
@@ -7,9 +10,6 @@ use std;
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::path::Path;
-use Barcode;
-use FastqProcessor;
-use HasBarcode;
 
 // TODO: Set the parameters optimally?
 pub const SEND_BUFFER_SZ: usize = 256;
@@ -118,7 +118,7 @@ where
     T: HasBarcode,
 {
     type Key = Barcode;
-    fn sort_key(v: &T) -> Cow<Barcode> {
+    fn sort_key(v: &T) -> Cow<'_, Barcode> {
         Cow::Borrowed(v.barcode())
     }
 }

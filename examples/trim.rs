@@ -1,19 +1,15 @@
-extern crate fastq_10x;
 use fastq_10x::adapter_trimmer::{Adapter, AdapterTrimmer};
 
-extern crate failure;
 use failure::Error;
-extern crate serde;
+
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
+use serde_json;
 
 use std::fs::File;
 
-extern crate bio;
 use bio::io::fasta::{Reader, Writer};
 
-extern crate time;
 use time::PreciseTime;
 
 use std::env;

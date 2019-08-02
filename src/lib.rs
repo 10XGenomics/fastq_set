@@ -11,44 +11,7 @@
     clippy::option_map_unit_fn
 )]
 
-#[cfg(test)]
-#[macro_use]
-extern crate proptest;
-
-#[cfg(test)]
-extern crate file_diff;
-
-#[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
-extern crate failure;
-extern crate fastq;
-extern crate flate2;
-extern crate itertools;
-extern crate ordered_float;
-
-extern crate glob;
-extern crate regex;
-
-#[macro_use]
-extern crate serde_derive;
-extern crate bincode;
-extern crate bytes;
-extern crate serde;
-extern crate serde_bytes;
-
-extern crate fxhash;
-extern crate rand;
-extern crate rayon;
-extern crate serde_json;
-extern crate shardio;
-extern crate tempfile;
-
-extern crate bio;
-extern crate log;
-extern crate lz4;
-extern crate metric;
+use fastq;
 
 pub mod read_pair;
 pub mod read_pair_iter;
@@ -71,9 +34,10 @@ pub mod rna_read;
 pub use fastq::OwnedRecord;
 pub use fastq::Record;
 
-use failure::Error;
-use read_pair_iter::{InputFastqs, ReadPairIter};
-use sseq::SSeq;
+use crate::read_pair_iter::{InputFastqs, ReadPairIter};
+use crate::sseq::SSeq;
+use failure::{format_err, Error};
+use serde::{Deserialize, Serialize};
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
 /// FIXME : Should we use the `valid` field for `PartialEq`, `Eq`, `Hash`?
@@ -163,7 +127,7 @@ impl Barcode {
 }
 
 impl std::fmt::Display for Barcode {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
@@ -247,14 +211,14 @@ pub trait FastqProcessor {
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
 
-    fn iter(&self) -> Result<FastqProcessorIter<Self>, Error>
+    fn iter(&self) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
         Self: Sized,
     {
         FastqProcessorIter::new(self)
     }
 
-    fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<Self>, Error>
+    fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
         Self: Sized,
     {
@@ -266,7 +230,7 @@ pub trait FastqProcessor {
 
 pub struct FastqProcessorIter<'a, Processor>
 where
-    Processor: 'a + FastqProcessor,
+    Processor: FastqProcessor,
 {
     read_pair_iter: ReadPairIter,
     processor: &'a Processor,

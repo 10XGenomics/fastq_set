@@ -1,4 +1,3 @@
-extern crate fastq_10x;
 use fastq_10x::read_pair_iter::ReadPairIter;
 
 fn main() {

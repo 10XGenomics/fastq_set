@@ -1,4 +1,5 @@
 use fxhash::FxHashMap;
+use lazy_static::lazy_static;
 
 lazy_static! {
     pub static ref SAMPLE_INDEX_MAP: FxHashMap<&'static str, [&'static str; 4]> = {

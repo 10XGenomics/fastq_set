@@ -3,14 +3,15 @@
 //! Container for the FASTQ data from a single sequencing 'cluster',
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
+use crate::WhichEnd;
 use bytes::{Bytes, BytesMut};
 use failure::Error;
 use fastq::{OwnedRecord, Record};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
 use std::ops;
-use WhichEnd;
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
 /// header exists at buf[start .. head], seq exists at buf[head .. seq], etc.
@@ -73,7 +74,7 @@ impl WhichRead {
 }
 
 impl fmt::Display for WhichRead {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
@@ -156,7 +157,7 @@ pub struct RpRange {
 }
 
 impl fmt::Debug for RpRange {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "RpRange {{ read: {:?}, offset: {}, len: {:?}, val: {:#b} }}",
@@ -454,7 +455,7 @@ pub(crate) struct MutReadPair<'a> {
 }
 
 impl<'a> MutReadPair<'a> {
-    pub(super) fn empty(buffer: &mut BytesMut) -> MutReadPair {
+    pub(super) fn empty(buffer: &mut BytesMut) -> MutReadPair<'_> {
         let offsets = [ReadOffset::default(); 4];
         MutReadPair {
             offsets,
@@ -596,8 +597,8 @@ impl ReadPair {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest;
     use proptest::arbitrary::any;
+    use proptest::proptest;
     use proptest::strategy::Strategy;
     use std::cmp::{max, min};
 

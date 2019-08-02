@@ -3,13 +3,14 @@
 //! ReadPair wrapper object for RNA reads from Single Cell 3' nad Single Cell 5' / VDJ ibraries.
 //! Provides access to the barcode and allows for dynamic trimming.
 
-use adapter_trimmer::{intersect_ranges, AdapterTrimmer, ReadAdapterCatalog};
+use crate::adapter_trimmer::{intersect_ranges, AdapterTrimmer, ReadAdapterCatalog};
+use crate::read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
+use crate::WhichEnd;
+use crate::{Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
 use fxhash::FxHashMap;
-use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
+use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::ops::Range;
-use WhichEnd;
-use {Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
@@ -532,6 +533,7 @@ impl RnaRead {
 mod tests {
     use super::*;
     use proptest::arbitrary::any;
+    use proptest::proptest;
     use serde_json;
     use std::fs::File;
     use std::path::Path;
@@ -950,8 +952,8 @@ mod tests {
         // trimmed using cutadapt and saved in `tests/rna_read/interleaved_trimmed_2k.fastq` (See `tests/rna_read/run_cutadapt.sh`). This
         // test makes sure that the trimming that we produce exactly matches the cutadapt outputs. There are 2000 read pairs in total and 85
         // read pairs are trimmed in total.
-        use adapter_trimmer::{Adapter, ReadAdapterCatalog};
-        use read_pair_iter::ReadPairIter;
+        use crate::adapter_trimmer::{Adapter, ReadAdapterCatalog};
+        use crate::read_pair_iter::ReadPairIter;
 
         let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> =
             serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap())

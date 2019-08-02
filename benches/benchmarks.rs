@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate criterion;
-extern crate fastq_10x;
-extern crate fxhash;
 
 use criterion::{Benchmark, Criterion, Throughput};
 use fastq_10x::adapter_trimmer::{Adapter, ReadAdapterCatalog};

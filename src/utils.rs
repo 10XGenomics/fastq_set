@@ -16,14 +16,14 @@ use bincode::{deserialize_from, serialize_into};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use failure::Error;
+use failure::{format_err, Error};
 use flate2::read::MultiGzDecoder;
 use lz4;
 
 const GZ_BUF_SIZE: usize = 1 << 22;
 
 /// Open a (possibly gzipped) file into a BufReader.
-pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<BufRead>, Error> {
+pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<dyn BufRead>, Error> {
     let r = File::open(p.as_ref())?;
 
     let ext = p.as_ref().extension().unwrap();
@@ -88,15 +88,15 @@ pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path> + Debug>(
 
 #[cfg(test)]
 mod test {
-    use utils::*;
+    use crate::utils::*;
 
     #[test]
     fn test_write_obj_read_obj() {
         let fn1 = "test1.bin";
         let fn2 = "test2.bin";
 
-        write_obj(&vec![1u8, 2u8, 3u8], fn1);
-        write_obj(&vec![1u64, 2u64, 3u64], fn2);
+        write_obj(&vec![1u8, 2u8, 3u8], fn1).unwrap();
+        write_obj(&vec![1u64, 2u64, 3u64], fn2).unwrap();
 
         let read1: Result<Vec<u8>, _> = read_obj(fn1);
         assert!(read1.is_ok());

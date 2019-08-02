@@ -126,7 +126,7 @@ impl PartialEq for SSeq {
 
 use std::fmt;
 impl fmt::Debug for SSeq {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s = String::new();
         for pos in 0..self.len() {
             s.push(self.sequence[pos] as char);
@@ -172,9 +172,9 @@ impl<'de> Visitor<'de> for SSeqVisitor {
 
 #[cfg(test)]
 mod sseq_test {
+    use crate::sseq::SSeq;
     use bincode;
-    use proptest;
-    use sseq::SSeq;
+    use proptest::{prop_assert_eq, proptest};
 
     #[test]
     fn sort_test() {
@@ -220,7 +220,7 @@ mod sseq_test {
     fn test_serde() {
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
-        for i in 0..4 {
+        for _ in 0..4 {
             let s = SSeq::new(seq);
             sseqs.push(s);
         }

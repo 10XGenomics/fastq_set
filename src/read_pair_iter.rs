@@ -3,17 +3,18 @@
 //! Read a set of FASTQs, convert into an Iterator over ReadPairs.
 
 use failure::Error;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use crate::read_pair::{MutReadPair, ReadPair, WhichRead};
 use fastq::{self, RecordRefIter};
-use read_pair::{MutReadPair, ReadPair, WhichRead};
 
+use crate::utils;
 use bytes::{BufMut, BytesMut};
 use failure::format_err;
 use rand::distributions::{Distribution, Range};
 use rand::{SeedableRng, XorShiftRng};
 use std::io::BufRead;
-use utils;
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
 /// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field,
@@ -36,7 +37,7 @@ const BUF_SIZE: usize = 4096 * 4;
 /// as well as an interleaved R1/R2 file. Supports plain or gzipped FASTQ files, which
 /// will be detected based on the filename extension.
 pub struct ReadPairIter {
-    iters: [Option<RecordRefIter<Box<BufRead>>>; 4],
+    iters: [Option<RecordRefIter<Box<dyn BufRead>>>; 4],
     paths: [Option<PathBuf>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,

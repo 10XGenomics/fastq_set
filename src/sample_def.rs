@@ -4,10 +4,11 @@
 use fxhash::FxHashMap;
 use glob::glob;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::sample_index_map::SAMPLE_INDEX_MAP;
-use InputFastqs;
+use crate::InputFastqs;
 
 #[allow(non_camel_case_types)]
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]

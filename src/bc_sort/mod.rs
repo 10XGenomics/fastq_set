@@ -15,20 +15,19 @@ use std::marker::PhantomData;
 
 use rayon::prelude::*;
 
-use rand::Rng;
-use rand::XorShiftRng;
+use rand::{Rng, SeedableRng, XorShiftRng};
 
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use shardio;
 
-use barcode::{reduce_counts, BarcodeChecker, BarcodeCorrector};
+use crate::barcode::{reduce_counts, BarcodeChecker, BarcodeCorrector};
+use crate::read_pair_iter::ReadPairIter;
+use crate::{Barcode, FastqProcessor, HasBarcode};
 use metric::{Metric, SimpleHistogram};
-use read_pair_iter::ReadPairIter;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use {Barcode, FastqProcessor, HasBarcode};
 
 /// A marker for sorting objects by their barcode sequence. Incorrect barcodes will
 /// be sorted together at the start, followed by correct barcodes. See the definition of `Barcode` for details.
@@ -41,7 +40,7 @@ where
     T: HasBarcode,
 {
     type Key = Barcode;
-    fn sort_key(v: &T) -> Cow<Barcode> {
+    fn sort_key(v: &T) -> Cow<'_, Barcode> {
         Cow::Borrowed(v.barcode())
     }
 }
@@ -138,7 +137,7 @@ where
         let mut counts = SimpleHistogram::new();
 
         // Always subsample deterministically
-        let mut rand = XorShiftRng::new_unseeded();
+        let mut rand = XorShiftRng::from_seed([0; 16]);
         // below: 1.0-r "inverts" the sense of the fraction so that values near
         // 1.0 don't overflow.  Values near zero are a problem.
         let bc_subsample_thresh = chunk.bc_subsample_rate();
@@ -199,7 +198,6 @@ fn count_reads(bc_counts: &SimpleHistogram<Barcode>, valid: bool) -> u64 {
 pub struct CorrectBcs<ReadType: HasBarcode> {
     reader: ShardReader<ReadType, BcSortOrder>,
     corrector: BarcodeCorrector,
-    bc_subsample_rate: Option<f64>,
     phantom: PhantomData<ReadType>,
 }
 
@@ -210,12 +208,10 @@ where
     pub fn new(
         reader: ShardReader<ReadType, BcSortOrder>,
         corrector: BarcodeCorrector,
-        bc_subsample_rate: Option<f64>,
     ) -> CorrectBcs<ReadType> {
         CorrectBcs {
             reader,
             corrector,
-            bc_subsample_rate,
             phantom: PhantomData,
         }
     }
@@ -226,15 +222,6 @@ where
     ) -> Result<(u64, u64, SimpleHistogram<Barcode>), Error> {
         let mut writer: ShardWriter<ReadType, BcSortOrder> =
             ShardWriter::new(corrected_reads_fn.as_ref(), 16, 1 << 12, 1 << 21)?;
-
-        // below: 1.0-r "inverts" the sense of the fraction so that values near
-        // 1.0 don't overflow.  Values near zero are a problem.
-        let bc_subsample_thresh = 0;
-
-        /*= self.bc_subsample_rate.map_or(0,
-                                            |r| {   assert!( r > 0.0, "zero barcode fraction passed in");
-                                                    ((1.0-r) * u64::max_value() as f64) as usize } );
-        */
 
         let chunks = self
             .reader
@@ -259,13 +246,9 @@ where
                         _ => (),
                     }
 
-                    // Read subsampling has already occured in process_fastq -- don't repeat here
-                    // barcode subsampling
-                    if fxhash::hash(&read_pair.barcode().sequence()) >= bc_subsample_thresh {
-                        // count reads on each (gem_group, bc)
-                        counts.observe(read_pair.barcode());
-                        read_sender.send(read_pair)?;
-                    }
+                    // count reads on each (gem_group, bc)
+                    counts.observe(read_pair.barcode());
+                    read_sender.send(read_pair)?;
                 }
 
                 Ok(counts)
@@ -333,7 +316,7 @@ where
     let reader =
         shardio::ShardReader::<<P as FastqProcessor>::ReadType, BcSortOrder>::open(&pass1_fn)?;
 
-    let mut correct = CorrectBcs::new(reader, corrector, Some(1.0f64));
+    let mut correct = CorrectBcs::new(reader, corrector);
 
     let (corrected, still_incorrect, corrected_counts) = correct.process_unbarcoded(&pass2_fn)?;
     assert_eq!(init_incorrect, corrected + still_incorrect);

@@ -4,7 +4,7 @@
 //! and correcting incorrect barcodes.
 
 use failure::Error;
-use ordered_float::NotNaN;
+use ordered_float::NotNan;
 use std::cmp::{max, min};
 use std::path::Path;
 
@@ -13,8 +13,8 @@ use metric::SimpleHistogram;
 use std::hash::Hash;
 use std::io::BufRead;
 
-use utils;
-use {Barcode, SSeq};
+use crate::utils;
+use crate::{Barcode, SSeq};
 
 const BC_MAX_QV: u8 = 66; // This is the illumina quality value
 
@@ -78,7 +78,7 @@ pub fn load_barcode_counts(
 ) -> Result<FxHashMap<Barcode, u32>, Error> {
     let mut counts = FxHashMap::default();
     for f in count_files {
-        let shard_counts = ::utils::read_obj(f.as_ref())?;
+        let shard_counts = crate::utils::read_obj(f.as_ref())?;
         counts = reduce_counts(counts, shard_counts);
     }
 
@@ -86,7 +86,7 @@ pub fn load_barcode_counts(
 }
 
 const BASE_OPTS: [u8; 4] = [b'A', b'C', b'G', b'T'];
-type Of64 = NotNaN<f64>;
+type Of64 = NotNan<f64>;
 
 /// Implement the standard 10x barcode correction algorithm.
 /// Requires the barcode whitelist (`whitelist`), and the observed counts
@@ -194,6 +194,7 @@ pub fn probability(qual: u8) -> f64 {
 mod test {
     use super::*;
     use metric::{Metric, SimpleHistogram};
+    use proptest::proptest;
 
     #[test]
     pub fn test_barcode_correction() {

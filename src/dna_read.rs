@@ -4,12 +4,13 @@
 //! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
 //! trimming.
 
+use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
 use fxhash::FxHashMap;
 
-use read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
-use {
+use crate::read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
+use crate::{
     AlignableReadPair, Barcode, FastqProcessor, HasBamTags, HasBarcode, HasSampleIndex,
     InputFastqs, SSeq,
 };
@@ -259,7 +260,7 @@ impl AlignableReadPair for DnaRead {
 #[cfg(test)]
 mod test_dna_cfg {
     use super::*;
-    use barcode::load_barcode_whitelist;
+    use crate::barcode::load_barcode_whitelist;
     use serde_json;
 
     fn load_dna_chunk_def(chunk_json: &str) -> Vec<DnaChunk> {
