@@ -1,3 +1,6 @@
+//! Mappings from symbol sample index set names to sample index sequences
+//! for official 10x sample index plate products.
+
 use fxhash::FxHashMap;
 use lazy_static::lazy_static;
 

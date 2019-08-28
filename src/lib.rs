@@ -4,6 +4,7 @@
 //! UMI sequences.
 //!
 
+#![deny(warnings)]
 // Allowed clippy lints
 #![allow(
     clippy::range_plus_one,
@@ -39,12 +40,12 @@ use crate::sseq::SSeq;
 use failure::{format_err, Error};
 use serde::{Deserialize, Serialize};
 
-/// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group
-/// FIXME : Should we use the `valid` field for `PartialEq`, `Eq`, `Hash`?
+/// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group.
+/// Note the natural sort order groups barcodes by GEM group, then whether they valid, then barcode sequence.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Barcode {
-    valid: bool,
     gem_group: u16,
+    valid: bool,
     sequence: SSeq,
 }
 

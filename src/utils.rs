@@ -48,7 +48,8 @@ pub fn write_obj<T: Any + Serialize, P: AsRef<Path> + Debug>(
     filename: P,
 ) -> Result<(), Error> {
     let f = File::create(&filename)?;
-    let mut writer = BufWriter::new(f);
+    let lz4_writer = lz4::EncoderBuilder::new().build(f)?;
+    let mut writer = BufWriter::new(lz4_writer);
 
     let typeid = TypeId::of::<T>();
     let mut hasher = DefaultHasher::new();
@@ -57,6 +58,8 @@ pub fn write_obj<T: Any + Serialize, P: AsRef<Path> + Debug>(
 
     serialize_into(&mut writer, &type_hash)?;
     serialize_into(&mut writer, &obj)?;
+
+    std::io::Write::flush(&mut writer)?;
     Ok(())
 }
 
@@ -65,7 +68,8 @@ pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path> + Debug>(
     filename: P,
 ) -> Result<T, Error> {
     let f = File::open(&filename)?;
-    let mut reader = BufReader::new(f);
+    let lz4_reader = lz4::Decoder::new(f)?;
+    let mut reader = BufReader::new(lz4_reader);
 
     let typeid = TypeId::of::<T>();
     let mut hasher = DefaultHasher::new();
@@ -91,23 +95,22 @@ mod test {
     use crate::utils::*;
 
     #[test]
-    fn test_write_obj_read_obj() {
+    fn test_write_obj_read_obj() -> Result<(), Error> {
         let fn1 = "test1.bin";
         let fn2 = "test2.bin";
 
         write_obj(&vec![1u8, 2u8, 3u8], fn1).unwrap();
         write_obj(&vec![1u64, 2u64, 3u64], fn2).unwrap();
 
-        let read1: Result<Vec<u8>, _> = read_obj(fn1);
-        assert!(read1.is_ok());
-
-        let read2: Result<Vec<u64>, _> = read_obj(fn2);
-        assert!(read2.is_ok());
+        let _read1: Vec<u8> = read_obj(fn1)?;
+        let _read2: Vec<u64> = read_obj(fn2)?;
 
         let read1_wrong: Result<Vec<u64>, _> = read_obj(fn1);
         assert!(read1_wrong.is_err());
 
         let read2_wrong: Result<Vec<u8>, _> = read_obj(fn2);
         assert!(read2_wrong.is_err());
+
+        Ok(())
     }
 }

@@ -10,7 +10,6 @@ use failure::Error;
 use fxhash;
 use fxhash::FxHashMap;
 use shardio::{Range, ShardReader, ShardSender, ShardWriter, SortKey};
-use std::hash::Hash;
 use std::marker::PhantomData;
 
 use rayon::prelude::*;
@@ -21,7 +20,7 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use shardio;
 
-use crate::barcode::{reduce_counts, BarcodeChecker, BarcodeCorrector};
+use crate::barcode::{BarcodeChecker, BarcodeCorrector};
 use crate::read_pair_iter::ReadPairIter;
 use crate::{Barcode, FastqProcessor, HasBarcode};
 use metric::{Metric, SimpleHistogram};
@@ -42,17 +41,6 @@ where
     type Key = Barcode;
     fn sort_key(v: &T) -> Cow<'_, Barcode> {
         Cow::Borrowed(v.barcode())
-    }
-}
-
-pub(crate) fn reduce_counts_err<K: Hash + Eq>(
-    v1: Result<FxHashMap<K, u32>, Error>,
-    v2: Result<FxHashMap<K, u32>, Error>,
-) -> Result<FxHashMap<K, u32>, Error> {
-    match (v1, v2) {
-        (Ok(m1), Ok(m2)) => Ok(reduce_counts(m1, m2)),
-        (Err(e1), _) => Err(e1),
-        (_, Err(e2)) => Err(e2),
     }
 }
 
@@ -279,14 +267,14 @@ where
 
 /// Encapsulates the results from the barcode sorting step.
 pub struct BcSortResults {
-    init_correct_data: PathBuf,
-    corrected_data: PathBuf,
-    total_read_pairs: u64,
-    init_correct_barcodes: u64,
-    corrected_barcodes: u64,
-    incorrect_barcodes: u64,
-    counts: FxHashMap<Barcode, i64>,
-    tmp_dir: TempDir,
+    pub init_correct_data: PathBuf,
+    pub corrected_data: PathBuf,
+    pub total_read_pairs: u64,
+    pub init_correct_barcodes: u64,
+    pub corrected_barcodes: u64,
+    pub incorrect_barcodes: u64,
+    pub counts: FxHashMap<Barcode, i64>,
+    pub tmp_dir: TempDir,
 }
 
 /// Single-machine barcode sorting workflow. FASTQ data and read settings are input via `chunks`. Outputs
