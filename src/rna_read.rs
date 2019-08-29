@@ -6,13 +6,12 @@
 use crate::adapter_trimmer::{intersect_ranges, AdapterTrimmer, ReadAdapterCatalog};
 use crate::read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
 use crate::WhichEnd;
-use crate::{Barcode, FastqProcessor, HasBarcode, HasSampleIndex, InputFastqs, Umi};
+use crate::{Barcode, FastqProcessor, HasBarcode, HasSampleIndex, HasUmi, InputFastqs, Umi};
 use fxhash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::ops::Range;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 /// Define a chemistry supported by our RNA products.
 ///
 /// A chemistry tells you where & how to look for various read components
@@ -97,6 +96,7 @@ use std::ops::Range;
 ///     "umi_read_type": "R1"
 /// }
 /// ```
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct ChemistryDef {
     barcode_read_length: usize,
     barcode_read_offset: usize,
@@ -336,7 +336,7 @@ impl FastqProcessor for RnaChunk {
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct RnaRead {
-    read: ReadPair,
+    pub read: ReadPair,
     barcode: Barcode,
     umi: Umi,
     bc_range: RpRange,
@@ -367,6 +367,15 @@ impl HasBarcode for RnaRead {
     }
 }
 
+impl HasUmi for RnaRead {
+    fn umi(&self) -> Umi {
+        self.umi
+    }
+    fn correct_umi(&mut self, _: &[u8]) {
+        unimplemented!()
+    }
+}
+
 impl HasSampleIndex for RnaRead {
     fn si_seq(&self) -> Option<&[u8]> {
         self.read.get(WhichRead::I1, ReadPart::Seq)
@@ -383,6 +392,18 @@ impl RnaRead {
     }
     pub fn umi_range(&self) -> &RpRange {
         &self.umi_range
+    }
+    pub fn r1_range(&self) -> RpRange {
+        self.r1_range
+    }
+    pub fn r1_read(&self) -> WhichRead {
+        self.r1_range.read()
+    }
+    pub fn r2_range(&self) -> Option<RpRange> {
+        self.r2_range
+    }
+    pub fn r2_read(&self) -> Option<WhichRead> {
+        self.r2_range.map(|x| x.read())
     }
     pub fn readpair(&self) -> &ReadPair {
         &self.read

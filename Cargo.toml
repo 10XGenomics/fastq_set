@@ -36,6 +36,8 @@ time = "*"
 file_diff = "1.0"
 criterion = "0.2"
 bincode = "*"
+tempfile = "3.1.0"
+psutil = ">=1.7"
 
 [[bench]]
 name = "benchmarks"

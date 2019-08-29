@@ -14,7 +14,7 @@ use std::path::Path;
 // TODO: Set the parameters optimally?
 pub const SEND_BUFFER_SZ: usize = 256;
 pub const DISK_CHUNK_SZ: usize = 2048; // 2MB if ~1kB per record
-pub const ITEM_BUFFER_SZ: usize = 2_097_152; // 2GB if above holds
+pub const ITEM_BUFFER_SZ: usize = 1_000_000; // 1GB if above holds
 
 pub trait ReadVisitor {
     type ReadType;
@@ -31,7 +31,7 @@ impl<T> ReadVisitor for DefaultVisitor<T> {
     }
 }
 
-pub struct BarcodeSortWorkflow<Processor, SortOrder>
+pub struct BarcodeSortWorkflow<Processor, SortOrder = BarcodeOrder>
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
@@ -93,7 +93,7 @@ where
             self.checker.check(&mut bc);
             read.set_barcode(bc);
             visitor.visit_read(&mut read)?;
-            self.sorter.process(read);
+            self.sorter.process(read)?;
         }
         println!("Processed {} reads", nreads);
         self.sorter.finish()
@@ -103,12 +103,12 @@ where
         self.sorter.write_barcode_counts(path)
     }
 
-    pub fn num_valid_reads(&self) -> i64 {
-        self.sorter.valid_reads
+    pub fn num_valid_items(&self) -> i64 {
+        self.sorter.valid_items
     }
 
-    pub fn num_invalid_reads(&self) -> i64 {
-        self.sorter.invalid_reads
+    pub fn num_invalid_items(&self) -> i64 {
+        self.sorter.invalid_items
     }
 }
 
@@ -123,7 +123,7 @@ where
     }
 }
 
-struct BarcodeAwareSorter<T, Order>
+struct BarcodeAwareSorter<T, Order = BarcodeOrder>
 where
     T: 'static + HasBarcode + Send + Serialize,
     Order: SortKey<T>,
@@ -133,8 +133,8 @@ where
     invalid_writer: ShardWriter<T, Order>,
     invalid_sender: ShardSender<T>,
     valid_bc_distribution: SimpleHistogram<Barcode>,
-    valid_reads: i64,
-    invalid_reads: i64,
+    valid_items: i64,
+    invalid_items: i64,
 }
 
 impl<T, Order> BarcodeAwareSorter<T, Order>
@@ -158,20 +158,21 @@ where
             invalid_writer,
             invalid_sender,
             valid_bc_distribution: SimpleHistogram::new(),
-            valid_reads: 0,
-            invalid_reads: 0,
+            valid_items: 0,
+            invalid_items: 0,
         })
     }
 
-    fn process(&mut self, read: T) {
+    fn process(&mut self, read: T) -> Result<(), Error> {
         if read.barcode().is_valid() {
             self.valid_bc_distribution.observe(read.barcode());
-            self.valid_sender.send(read).unwrap();
-            self.valid_reads += 1;
+            self.valid_sender.send(read)?;
+            self.valid_items += 1;
         } else {
-            self.invalid_sender.send(read).unwrap();
-            self.invalid_reads += 1;
+            self.invalid_sender.send(read)?;
+            self.invalid_items += 1;
         }
+        Ok(())
     }
 
     fn finish(&mut self) -> Result<(), Error> {

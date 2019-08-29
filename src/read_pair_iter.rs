@@ -6,7 +6,7 @@ use failure::Error;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::read_pair::{MutReadPair, ReadPair, WhichRead};
+use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, WhichRead};
 use fastq::{self, RecordRefIter};
 
 use crate::utils;
@@ -45,6 +45,7 @@ pub struct ReadPairIter {
     rand: XorShiftRng,
     range: Range<f64>,
     subsample_rate: f64,
+    storage: ReadPairStorage,
 }
 
 impl ReadPairIter {
@@ -92,15 +93,21 @@ impl ReadPairIter {
             rand: XorShiftRng::from_seed([42; 16]),
             range: Range::new(0.0, 1.0),
             subsample_rate: 1.0,
+            storage: ReadPairStorage::default(),
         })
     }
 
-    pub fn with_seed(mut self, seed: [u8; 16]) -> Self {
+    pub fn storage(mut self, storage: ReadPairStorage) -> Self {
+        self.storage = storage;
+        self
+    }
+
+    pub fn seed(mut self, seed: [u8; 16]) -> Self {
         self.rand = XorShiftRng::from_seed(seed);
         self
     }
 
-    pub fn with_subsample_rate(mut self, subsample_rate: f64) -> Self {
+    pub fn subsample_rate(mut self, subsample_rate: f64) -> Self {
         self.subsample_rate = subsample_rate;
         self
     }
@@ -111,7 +118,7 @@ impl ReadPairIter {
             self.buffer = BytesMut::with_capacity(BUF_SIZE)
         }
 
-        let mut rp = MutReadPair::empty(&mut self.buffer);
+        let mut rp = MutReadPair::empty(&mut self.buffer).storage(self.storage);
 
         loop {
             let sample = self.range.sample(&mut self.rand) < self.subsample_rate;
@@ -200,6 +207,7 @@ impl Iterator for ReadPairIter {
 mod test_read_pair_iter {
     use super::*;
     use file_diff::diff_files;
+    use itertools::Itertools;
     use std::fs::File;
     use std::io::Write;
 
@@ -310,5 +318,66 @@ mod test_read_pair_iter {
 
         let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, Error> {
+        let iter = ReadPairIter::new(
+            Some("tests/read_pair_iter/vdj_micro_50k.fastq"),
+            None,
+            None,
+            None,
+            true,
+        )
+        .unwrap()
+        .storage(storage);
+
+        let rss_before = psutil::process::Process::new(std::process::id() as i32)?
+            .memory()?
+            .resident;
+        let rp = iter.step_by(every).collect_vec();
+        let elements = rp.len();
+        let rss_after = psutil::process::Process::new(std::process::id() as i32)?
+            .memory()?
+            .resident;
+
+        drop(rp);
+        let rss_after_drop = psutil::process::Process::new(std::process::id() as i32)?
+            .memory()?
+            .resident;
+
+        let rss_used = rss_after.saturating_sub(rss_after_drop);
+        println!(
+            "{:<10} {:<10} {:<12} {:<12} {:<12} {:<12}",
+            every,
+            elements,
+            rss_before / 1024,
+            rss_after / 1024,
+            rss_used / 1024,
+            rss_after_drop / 1024
+        );
+        Ok(rss_used)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_mem_usage() {
+        println!(
+            "{:10} {:10} {:12} {:12} {:12} {:12}",
+            "Every", "Elements", "Before(kB)", "After(kB)", "Diff(kB)", "Drop(kB)"
+        );
+        let every = 4;
+        let used_rss = test_mem_single(every, ReadPairStorage::PerReadAllocation).unwrap();
+        // let used_rss = test_mem_single(every, ReadPairStorage::SharedBuffer).unwrap(); // This fails
+
+        // 50k lines = 6250 reads,
+        // With approx 1kB per read the total memory should be ~ 6.25MB / every
+        let max_used_rss = 7 * 1024 * 1024 / (every as u64);
+        assert!(
+            used_rss <= max_used_rss,
+            "Used {} bytes whereas max is {}",
+            used_rss,
+            max_used_rss
+        );
     }
 }

@@ -125,13 +125,19 @@ impl PartialEq for SSeq {
 }
 
 use std::fmt;
-impl fmt::Debug for SSeq {
+
+impl fmt::Display for SSeq {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s = String::new();
         for pos in 0..self.len() {
             s.push(self.sequence[pos] as char);
         }
         write!(f, "{}", s)
+    }
+}
+impl fmt::Debug for SSeq {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self, f)
     }
 }
 

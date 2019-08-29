@@ -38,6 +38,7 @@ pub use fastq::Record;
 use crate::read_pair_iter::{InputFastqs, ReadPairIter};
 use crate::sseq::SSeq;
 use failure::{format_err, Error};
+pub use read_pair::WhichRead;
 use serde::{Deserialize, Serialize};
 
 /// Represent a (possibly-corrected) 10x barcode sequence, and it's GEM group.
@@ -171,6 +172,12 @@ impl Umi {
     }
 }
 
+impl std::fmt::Display for Umi {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.sequence, f)
+    }
+}
+
 /// A trait for objects that carry a UMI sequence.
 pub trait HasUmi {
     /// Get a copy of the (possibly corrected) UMI on this read
@@ -219,11 +226,32 @@ pub trait FastqProcessor {
         FastqProcessorIter::new(self)
     }
 
+    fn iter_with_storage(
+        &self,
+        storage: read_pair::ReadPairStorage,
+    ) -> Result<FastqProcessorIter<'_, Self>, Error>
+    where
+        Self: Sized,
+    {
+        FastqProcessorIter::with_storage(self, storage)
+    }
+
     fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
         Self: Sized,
     {
         FastqProcessorIter::with_seed(self, seed)
+    }
+
+    fn seeded_iter_with_storage(
+        &self,
+        seed: [u8; 16],
+        storage: read_pair::ReadPairStorage,
+    ) -> Result<FastqProcessorIter<'_, Self>, Error>
+    where
+        Self: Sized,
+    {
+        FastqProcessorIter::with_seed_and_storage(self, seed, storage)
     }
 
     fn gem_group(&self) -> u16;
@@ -243,7 +271,20 @@ where
 {
     pub fn new(processor: &'a Processor) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
-            .with_subsample_rate(processor.read_subsample_rate());
+            .subsample_rate(processor.read_subsample_rate());
+        Ok(FastqProcessorIter {
+            read_pair_iter,
+            processor,
+        })
+    }
+
+    pub fn with_storage(
+        processor: &'a Processor,
+        storage: read_pair::ReadPairStorage,
+    ) -> Result<Self, Error> {
+        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+            .subsample_rate(processor.read_subsample_rate())
+            .storage(storage);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,
@@ -252,8 +293,23 @@ where
 
     pub fn with_seed(processor: &'a Processor, seed: [u8; 16]) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
-            .with_subsample_rate(processor.read_subsample_rate())
-            .with_seed(seed);
+            .subsample_rate(processor.read_subsample_rate())
+            .seed(seed);
+        Ok(FastqProcessorIter {
+            read_pair_iter,
+            processor,
+        })
+    }
+
+    pub fn with_seed_and_storage(
+        processor: &'a Processor,
+        seed: [u8; 16],
+        storage: read_pair::ReadPairStorage,
+    ) -> Result<Self, Error> {
+        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+            .subsample_rate(processor.read_subsample_rate())
+            .seed(seed)
+            .storage(storage);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,

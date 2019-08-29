@@ -445,6 +445,34 @@ impl RpRange {
     }
 }
 
+/// Storage patterns for a read pair. There are two
+/// options which is a compromise between performance
+/// and memory usage.
+#[derive(Copy, Clone)]
+pub enum ReadPairStorage {
+    /// Multiple `ReadPair` objects will be backed slices into
+    /// the same buffer. This reductes the allocation overhead.
+    /// However, a buffer is only dropped when all the read
+    /// pairs associated with it is dropped. This could lead to
+    /// higher than expected memory usage when you filter the reads
+    /// and store only a subset of reads in memory, because the memory
+    /// associated with other reads are not necessarily freed.
+    SharedBuffer,
+    /// Perform an allocation per read, so that each read has its
+    /// own memory which will be freed when the read is dropped. This
+    /// has a deterministic memory usage particularly when you are
+    /// filtering reads. However this will have inferior performance
+    /// compared to `ReadPairStorage::SharedBuffer` due to higher
+    /// [de]allocation overhead
+    PerReadAllocation,
+}
+
+impl Default for ReadPairStorage {
+    fn default() -> Self {
+        ReadPairStorage::PerReadAllocation
+    }
+}
+
 /// Helper struct used during construction of a ReadPair. The data for the ReadPair is
 /// accumulated in the buffer bytes::BytesMut. When all the data has been added, call
 /// `freeze()` to convert this into an immutable `ReadPair` object. Multiple `ReadPair` objects
@@ -452,6 +480,7 @@ impl RpRange {
 pub(crate) struct MutReadPair<'a> {
     offsets: [ReadOffset; 4],
     data: &'a mut BytesMut,
+    storage: ReadPairStorage,
 }
 
 impl<'a> MutReadPair<'a> {
@@ -460,6 +489,7 @@ impl<'a> MutReadPair<'a> {
         MutReadPair {
             offsets,
             data: buffer,
+            storage: ReadPairStorage::default(),
         }
     }
 
@@ -474,6 +504,11 @@ impl<'a> MutReadPair<'a> {
         }
 
         rp
+    }
+
+    pub(super) fn storage(mut self, storage: ReadPairStorage) -> Self {
+        self.storage = storage;
+        self
     }
 
     // FIXME: Should we check that the length of seq and qual agree?
@@ -502,7 +537,12 @@ impl<'a> MutReadPair<'a> {
     pub fn freeze(self) -> ReadPair {
         ReadPair {
             offsets: self.offsets,
-            data: self.data.take().freeze(),
+            data: match self.storage {
+                ReadPairStorage::SharedBuffer => self.data.take().freeze(),
+                ReadPairStorage::PerReadAllocation => {
+                    Bytes::from(self.data.take().freeze().to_vec()) // Allocate a vector and then make Bytes
+                }
+            },
         }
     }
 }
