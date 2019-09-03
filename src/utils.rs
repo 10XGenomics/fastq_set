@@ -7,7 +7,7 @@ use std::boxed::Box;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use std::fmt::Debug;
@@ -48,8 +48,7 @@ pub fn write_obj<T: Any + Serialize, P: AsRef<Path> + Debug>(
     filename: P,
 ) -> Result<(), Error> {
     let f = File::create(&filename)?;
-    let lz4_writer = lz4::EncoderBuilder::new().build(f)?;
-    let mut writer = BufWriter::new(lz4_writer);
+    let mut writer = lz4::EncoderBuilder::new().build(f)?;
 
     let typeid = TypeId::of::<T>();
     let mut hasher = DefaultHasher::new();
@@ -59,7 +58,8 @@ pub fn write_obj<T: Any + Serialize, P: AsRef<Path> + Debug>(
     serialize_into(&mut writer, &type_hash)?;
     serialize_into(&mut writer, &obj)?;
 
-    std::io::Write::flush(&mut writer)?;
+    let (_, result) = writer.finish();
+    result?;
     Ok(())
 }
 
@@ -93,6 +93,7 @@ pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path> + Debug>(
 #[cfg(test)]
 mod test {
     use crate::utils::*;
+    use serde::{Serialize, Deserialize};
 
     #[test]
     fn test_write_obj_read_obj() -> Result<(), Error> {
@@ -113,4 +114,42 @@ mod test {
 
         Ok(())
     }
+
+    #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+    struct T1 {
+        arr1: Vec<(u16, u64, String)>,
+        arr2: Vec<(String, u32, u8)>,
+    }
+
+
+    #[test]
+    fn test_big_roundtrip() -> Result<(), Error> {
+        let fn1 = "test1.bin";
+
+        let mut arr1 = Vec::new();
+        let mut arr2 = Vec::new();
+
+        for i in 0 .. 30000 {
+            let v1 = (i % 5000) as u16;
+            let v2 = i * 100;
+            let v3 = "werqwer".to_string();
+            arr1.push((v1, v2, v3));
+        }
+
+        for i in 0 .. 50000 {
+            let v1 = "eqwrdv".to_string();
+            let v2 = (i * 100) as u32;
+            let v3 = (i % 100) as u8;
+            arr2.push((v1, v2, v3));
+        }
+
+        let obj = T1 { arr1, arr2 };
+
+        write_obj(&obj, fn1)?;
+        let read_obj: T1 = read_obj(fn1)?;
+
+        assert_eq!(obj, read_obj);
+        Ok(())
+    }
+
 }
