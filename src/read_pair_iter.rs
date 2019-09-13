@@ -207,6 +207,7 @@ impl Iterator for ReadPairIter {
 mod test_read_pair_iter {
     use super::*;
     use file_diff::diff_files;
+    use itertools::Itertools;
     use std::fs::File;
     use std::io::Write;
 
