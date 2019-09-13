@@ -352,6 +352,7 @@ impl<'a> AdapterTrimmer<'a> {
                                 WhichEnd::ThreePrime => (0..alignment.xstart),
                                 WhichEnd::FivePrime => (alignment.xend..alignment.xlen),
                             },
+                            score: alignment.score,
                         })
                     } else {
                         None
@@ -422,6 +423,7 @@ impl<'a> AdapterTrimmer<'a> {
                         adapter_range: p..min(p + self.seq.len(), read.len()),
                         trim_range: p..read.len(),
                         retain_range: 0..p,
+                        score: MATCH_SCORE * best_num_matches as i32 + EDIT_SCORE * best_err as i32,
                     }),
                     None => None,
                 }
@@ -449,6 +451,7 @@ impl<'a> AdapterTrimmer<'a> {
                         adapter_range: p.saturating_sub(self.seq.len())..p,
                         trim_range: 0..p,
                         retain_range: p..read.len(),
+                        score: MATCH_SCORE * best_num_matches as i32 + EDIT_SCORE * best_err as i32,
                     }),
                     None => None,
                 }
@@ -474,6 +477,8 @@ pub struct TrimResult {
     pub trim_range: Range<usize>,
     /// `Range` in the read sequence after trimming the adapter
     pub retain_range: Range<usize>,
+    /// The alignment score
+    pub score: i32,
 }
 
 /// A function to compute the intersection of two `Range<usize>`. I would
