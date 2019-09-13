@@ -93,7 +93,7 @@ pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path> + Debug>(
 #[cfg(test)]
 mod test {
     use crate::utils::*;
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[test]
     fn test_write_obj_read_obj() -> Result<(), Error> {
@@ -121,7 +121,6 @@ mod test {
         arr2: Vec<(String, u32, u8)>,
     }
 
-
     #[test]
     fn test_big_roundtrip() -> Result<(), Error> {
         let fn1 = "test1.bin";
@@ -129,14 +128,14 @@ mod test {
         let mut arr1 = Vec::new();
         let mut arr2 = Vec::new();
 
-        for i in 0 .. 30000 {
+        for i in 0..30000 {
             let v1 = (i % 5000) as u16;
             let v2 = i * 100;
             let v3 = "werqwer".to_string();
             arr1.push((v1, v2, v3));
         }
 
-        for i in 0 .. 50000 {
+        for i in 0..50000 {
             let v1 = "eqwrdv".to_string();
             let v2 = (i * 100) as u32;
             let v3 = (i % 100) as u8;
