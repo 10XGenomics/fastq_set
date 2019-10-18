@@ -132,7 +132,7 @@ impl Barcode {
         self.gem_group
     }
 
-    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> Result<SSeqOneHammingIter, Error> {
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter {
         self.sequence.one_hamming_iter(opt)
     }
 }
@@ -192,10 +192,10 @@ impl Umi {
         !(is_homopolymer || has_n)
     }
 
-    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> Result<UmiOneHammingIter, Error> {
-        Ok(UmiOneHammingIter {
-            inner: self.sequence.one_hamming_iter(opt)?,
-        })
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> UmiOneHammingIter {
+        UmiOneHammingIter {
+            inner: self.sequence.one_hamming_iter(opt),
+        }
     }
 }
 

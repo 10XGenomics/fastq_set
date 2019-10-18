@@ -3,7 +3,7 @@
 //! Read input FASTQ data into assay specific read objects that wrap ReadPairs,
 //! and sort reads by GEM barcode. Wrappers provide methods to access technical
 //! read components, such as barcodes and UMIs.
-
+#![allow(clippy::all)]
 use std::path::Path;
 
 use failure::Error;
