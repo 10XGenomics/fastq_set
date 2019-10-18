@@ -2,13 +2,14 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
-use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
-use std::ops::{Index, IndexMut};
-use std::str;
-
+use failure::{format_err, Error};
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Borrow;
+use std::hash::{Hash, Hasher};
+use std::iter::Iterator;
+use std::ops::{Index, IndexMut};
+use std::str;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
@@ -38,15 +39,15 @@ impl SSeq {
     }
 
     /// The length of the sequence
-    pub fn len(&self) -> usize {
+    pub fn len(self) -> usize {
         self.length as usize
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.length == 0
     }
 
-    pub fn encode_2bit_u32(&self) -> u32 {
+    pub fn encode_2bit_u32(self) -> u32 {
         let mut res: u32 = 0;
         assert!(self.length < 16);
 
@@ -65,10 +66,96 @@ impl SSeq {
 
             let v = byte << (bit_pos * 2);
 
-            res = res | v;
+            res |= v;
         }
 
         res
+    }
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> Result<SSeqOneHammingIter, Error> {
+        SSeqOneHammingIter::new(self, opt)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum HammingIterOpt {
+    MutateNBase,
+    SkipNBase,
+}
+
+/// An iterator over sequences which are one hamming distance away
+/// from an `SSeq`. Valid alphabets for `SSeq` are "ACGTN" and
+/// "acgtn". Positions containing "N" or "n" are mutated or skipped
+/// depending on the `HammingIterOpt`
+pub struct SSeqOneHammingIter {
+    source: SSeq,            // Original SSeq from which we need to generate values
+    chars: &'static [u8; 5], // Whether it's ACGTN or acgtn
+    position: usize,         // Index into SSeq where last base was mutated
+    chars_index: usize,      // The last base which was used
+    skip_n: bool,            // Whether to skip N bases or mutate them
+}
+
+const LOWER_ACGTN: &[u8; 5] = b"acgtn";
+const UPPER_ACGTN: &[u8; 5] = b"ACGTN";
+const N_BASE_INDEX: usize = 4;
+impl SSeqOneHammingIter {
+    fn new(sseq: SSeq, opt: HammingIterOpt) -> Result<Self, Error> {
+        let mut is_upper = None;
+        for (i, &s) in sseq.seq().iter().enumerate() {
+            let this_upper = if LOWER_ACGTN.iter().any(|&c| c == s) {
+                false
+            } else if UPPER_ACGTN.iter().any(|&c| c == s) {
+                true
+            } else {
+                return Err(format_err!("Non ACGTN character {} at position {}", s, i));
+            };
+            if is_upper.is_none() {
+                is_upper = Some(this_upper);
+            }
+            if is_upper != Some(this_upper) {
+                return Err(format_err!(
+                    "Found both capital and lowercase bases, which is not supported!"
+                ));
+            }
+        }
+        let is_upper = is_upper.unwrap_or(true); // unwrap() can fail for empty SSeq
+        let chars = if is_upper { UPPER_ACGTN } else { LOWER_ACGTN };
+        Ok(SSeqOneHammingIter {
+            source: sseq,
+            chars,
+            position: 0,
+            chars_index: 0,
+            skip_n: match opt {
+                HammingIterOpt::SkipNBase => true,
+                HammingIterOpt::MutateNBase => false,
+            },
+        })
+    }
+}
+
+impl Iterator for SSeqOneHammingIter {
+    type Item = SSeq;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position >= self.source.len() {
+            return None;
+        }
+        let base_at_pos = self.source[self.position];
+        if (self.skip_n && base_at_pos == self.chars[N_BASE_INDEX])
+            || (self.chars_index >= N_BASE_INDEX)
+        {
+            // this is an "N" or we went through the ACGT bases already at this position
+            self.position += 1;
+            self.chars_index = 0;
+            self.next()
+        } else if base_at_pos == self.chars[self.chars_index] {
+            self.chars_index += 1;
+            self.next()
+        } else {
+            let mut next_sseq = self.source;
+            next_sseq[self.position] = self.chars[self.chars_index];
+            self.chars_index += 1;
+            Some(next_sseq)
+        }
     }
 }
 
@@ -178,9 +265,13 @@ impl<'de> Visitor<'de> for SSeqVisitor {
 
 #[cfg(test)]
 mod sseq_test {
-    use crate::sseq::SSeq;
+    use super::*;
     use bincode;
+    use itertools::{assert_equal, Itertools};
+    use proptest::arbitrary::any;
+    use proptest::collection::vec;
     use proptest::{prop_assert_eq, proptest};
+    use std::collections::HashSet;
 
     #[test]
     fn sort_test() {
@@ -240,7 +331,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_serde_sseq(
-            ref seq in proptest::collection::vec(proptest::arbitrary::any::<u8>(), 0usize..=23usize),
+            ref seq in vec(any::<u8>(), 0usize..=23usize),
         ) {
             let target = SSeq::new(&seq);
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
@@ -248,4 +339,93 @@ mod sseq_test {
             prop_assert_eq!(target, decoded);
         }
     }
+
+    fn test_hamming_helper(seq: &String, opt: HammingIterOpt, n: u8) {
+        let sseq = SSeq::new(seq.as_bytes());
+        // Make sure that the hamming distance is 1 for all elements
+        for neighbor in sseq.one_hamming_iter(opt).unwrap() {
+            assert_eq!(
+                sseq.seq()
+                    .iter()
+                    .zip_eq(neighbor.seq().iter())
+                    .filter(|(a, b)| a != b)
+                    .count(),
+                1
+            );
+        }
+        // Make sure that the total number of elements is equal to what we expect.
+        let non_n = sseq.seq().iter().filter(|&&s| s != n).count();
+        let n_bases = sseq.len() - non_n;
+        assert_eq!(
+            sseq.one_hamming_iter(opt)
+                .unwrap()
+                .collect::<HashSet<_>>()
+                .len(),
+            match opt {
+                HammingIterOpt::SkipNBase => 3 * non_n,
+                HammingIterOpt::MutateNBase => 3 * non_n + 4 * n_bases,
+            }
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn prop_test_one_hamming_upper(
+            seq in "[ACGTN]{0, 23}", // 0 nad 23 are inclusive bounds
+        ) {
+            test_hamming_helper(&seq, HammingIterOpt::SkipNBase, b'N');
+            test_hamming_helper(&seq, HammingIterOpt::MutateNBase, b'N');
+        }
+        #[test]
+        fn prop_test_one_hamming_lower(
+            seq in "[acgtn]{0, 23}", // 0 nad 23 are inclusive bounds
+        ) {
+            test_hamming_helper(&seq, HammingIterOpt::SkipNBase, b'n');
+            test_hamming_helper(&seq, HammingIterOpt::MutateNBase, b'n');
+        }
+    }
+
+    #[test]
+    fn test_one_hamming_invalid() {
+        let sseq = SSeq::new(b"ASDF");
+        assert!(sseq.one_hamming_iter(HammingIterOpt::SkipNBase).is_err());
+        let sseq = SSeq::new(b"AaGg");
+        assert!(sseq.one_hamming_iter(HammingIterOpt::SkipNBase).is_err());
+    }
+
+    #[test]
+    fn test_one_hamming_simple() {
+        assert_equal(
+            SSeq::new(b"GAT")
+                .one_hamming_iter(HammingIterOpt::SkipNBase)
+                .unwrap()
+                .collect_vec(),
+            vec![
+                b"AAT", b"CAT", b"TAT", b"GCT", b"GGT", b"GTT", b"GAA", b"GAC", b"GAG",
+            ]
+            .into_iter()
+            .map(|x| SSeq::new(x)),
+        );
+
+        assert_equal(
+            SSeq::new(b"GNT")
+                .one_hamming_iter(HammingIterOpt::SkipNBase)
+                .unwrap()
+                .collect_vec(),
+            vec![b"ANT", b"CNT", b"TNT", b"GNA", b"GNC", b"GNG"]
+                .into_iter()
+                .map(|x| SSeq::new(x)),
+        );
+
+        assert_equal(
+            SSeq::new(b"ac")
+                .one_hamming_iter(HammingIterOpt::SkipNBase)
+                .unwrap()
+                .collect_vec(),
+            vec![b"cc", b"gc", b"tc", b"aa", b"ag", b"at"]
+                .into_iter()
+                .map(|x| SSeq::new(x)),
+        );
+    }
+
 }

@@ -36,8 +36,9 @@ pub use fastq::OwnedRecord;
 pub use fastq::Record;
 
 use crate::read_pair_iter::{InputFastqs, ReadPairIter};
-use crate::sseq::SSeq;
+use crate::sseq::{HammingIterOpt, SSeq, SSeqOneHammingIter};
 use failure::{format_err, Error};
+use itertools::Itertools;
 pub use read_pair::WhichRead;
 use serde::{Deserialize, Serialize};
 
@@ -62,7 +63,7 @@ impl Barcode {
     pub fn from_sequence(seq: &[u8]) -> Result<Barcode, Error> {
         let ss = std::str::from_utf8(seq)?;
 
-        let mut parts = ss.split("-");
+        let mut parts = ss.split('-');
         let bc = parts
             .next()
             .ok_or_else(|| format_err!("invalid 10x processed barcode: '{}'", ss))?;
@@ -103,7 +104,7 @@ impl Barcode {
     }
 
     /// Does this represent a valid whitelist barcode
-    pub fn is_valid(&self) -> bool {
+    pub fn is_valid(self) -> bool {
         self.valid
     }
 
@@ -112,10 +113,14 @@ impl Barcode {
         self.sequence.seq()
     }
 
+    pub fn sseq(self) -> SSeq {
+        self.sequence
+    }
+
     /// ASCII string of corrected, GEM group appended form of
     /// barcode, suitable for use in BAM files (CB or BX tags)
     /// For example: "AGCCGATA-1"
-    pub fn to_corrected_bytes(&self) -> Vec<u8> {
+    pub fn to_corrected_bytes(self) -> Vec<u8> {
         let mut v = Vec::with_capacity(self.sequence.len() + 2);
         v.extend(self.sequence());
         v.push(b'-');
@@ -123,8 +128,12 @@ impl Barcode {
         v
     }
 
-    pub fn gem_group(&self) -> u16 {
+    pub fn gem_group(self) -> u16 {
         self.gem_group
+    }
+
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> Result<SSeqOneHammingIter, Error> {
+        self.sequence.one_hamming_iter(opt)
     }
 }
 
@@ -170,6 +179,35 @@ impl Umi {
     pub fn sequence(&self) -> &[u8] {
         self.sequence.seq()
     }
+
+    pub fn sseq(self) -> SSeq {
+        self.sequence
+    }
+
+    // No N's and not a homopolymer
+    pub fn is_valid(self) -> bool {
+        let seq = self.sequence.seq();
+        let is_homopolymer = seq.iter().tuple_windows().all(|(a, b)| a == b);
+        let has_n = seq.iter().any(|&s| s == b'N' || s == b'n');
+        !(is_homopolymer || has_n)
+    }
+
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> Result<UmiOneHammingIter, Error> {
+        Ok(UmiOneHammingIter {
+            inner: self.sequence.one_hamming_iter(opt)?,
+        })
+    }
+}
+
+pub struct UmiOneHammingIter {
+    inner: SSeqOneHammingIter,
+}
+impl Iterator for UmiOneHammingIter {
+    type Item = Umi;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|s| Umi { sequence: s })
+    }
 }
 
 impl std::fmt::Display for Umi {
@@ -182,6 +220,7 @@ impl std::fmt::Display for Umi {
 pub trait HasUmi {
     /// Get a copy of the (possibly corrected) UMI on this read
     fn umi(&self) -> Umi;
+    fn raw_umi(&self) -> Umi;
     fn correct_umi(&mut self, corrected_umi: &[u8]);
 }
 

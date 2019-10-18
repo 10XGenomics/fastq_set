@@ -371,8 +371,11 @@ impl HasUmi for RnaRead {
     fn umi(&self) -> Umi {
         self.umi
     }
-    fn correct_umi(&mut self, _: &[u8]) {
-        unimplemented!()
+    fn raw_umi(&self) -> Umi {
+        Umi::new(self.raw_umi_seq())
+    }
+    fn correct_umi(&mut self, corrected: &[u8]) {
+        self.umi = Umi::new(corrected);
     }
 }
 
