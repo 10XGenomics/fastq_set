@@ -427,5 +427,4 @@ mod sseq_test {
                 .map(|x| SSeq::new(x)),
         );
     }
-
 }
