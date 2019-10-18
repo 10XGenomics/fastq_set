@@ -6,12 +6,12 @@ use failure::Error;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, WhichRead};
+use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
 use fastq::{self, RecordRefIter};
 
 use crate::utils;
 use bytes::{BufMut, BytesMut};
-use failure::format_err;
+use failure::{format_err, ResultExt};
 use rand::distributions::{Distribution, Range};
 use rand::{SeedableRng, XorShiftRng};
 use std::io::BufRead;
@@ -46,6 +46,7 @@ pub struct ReadPairIter {
     range: Range<f64>,
     subsample_rate: f64,
     storage: ReadPairStorage,
+    records_read: [usize; 4],
 }
 
 impl ReadPairIter {
@@ -76,7 +77,8 @@ impl ReadPairIter {
 
         for (idx, r) in [r1, r2, i1, i2].iter().enumerate() {
             if let Some(ref p) = *r {
-                let rdr = utils::open_with_gz(p)?;
+                let rdr =
+                    utils::open_with_gz(p).context(format!("Error opening {:?}", p.as_ref()))?;
                 let parser = fastq::Parser::new(rdr);
                 iters[idx] = Some(parser.ref_iter());
                 paths[idx] = Some(p.as_ref().to_path_buf());
@@ -94,6 +96,7 @@ impl ReadPairIter {
             range: Range::new(0.0, 1.0),
             subsample_rate: 1.0,
             storage: ReadPairStorage::default(),
+            records_read: [0; 4],
         })
     }
 
@@ -118,6 +121,10 @@ impl ReadPairIter {
             self.buffer = BytesMut::with_capacity(BUF_SIZE)
         }
 
+        // need these local reference to avoid borrow checker problem
+        let paths = &self.paths;
+        let rec_num = &mut self.records_read;
+
         let mut rp = MutReadPair::empty(&mut self.buffer).storage(self.storage);
 
         loop {
@@ -128,17 +135,37 @@ impl ReadPairIter {
 
             for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
                 if let Some(ref mut iter) = *iter_opt {
-                    iter.advance()?;
+                    iter.advance().with_context(|_| {
+                        format!(
+                            "FASTQ format error in file {:?} in record starting a line {}",
+                            paths[idx].as_ref().unwrap(),
+                            rec_num[idx] * 4
+                        )
+                    })?;
+
                     {
                         let record = iter.get();
                         // track which reader finished
                         if record.is_none() {
                             iter_ended[idx] = true;
                         }
+
+                        // Check for non-ACGTN characters
+                        if let Some(ref rec) = record {
+                            if !fastq::Record::validate_dnan(rec) {
+                                let msg = format_err!(
+                                    "FASTQ contains sequence base with character other than [ACGTN] in file {:?} in record starting on line {}", 
+                                    paths[idx].as_ref().unwrap(), rec_num[idx] * 4);
+                                return Err(msg);
+                            }
+                        }
+
                         if sample {
                             let which = WhichRead::read_types()[idx];
                             record.map(|r| rp.push_read(&r, which));
                         }
+
+                        rec_num[idx] = rec_num[idx] + 1;
                     }
 
                     // If R1 is interleaved, read another entry
@@ -149,13 +176,50 @@ impl ReadPairIter {
                         if record.is_none() {
                             // We should only hit this if the FASTQ has an odd
                             // number of records. Throw an error
-                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths.get(idx).unwrap());
+                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths[idx].as_ref().unwrap());
                             return Err(msg);
                         }
+
+                        // Check for non-ACGTN characters
+                        if let Some(ref rec) = record {
+                            if !fastq::Record::validate_dnan(rec) {
+                                let msg = format_err!(
+                                    "FASTQ contains sequence base with character other than [ACGTN] in file {:?} in record starting at line {}", 
+                                    paths[idx].as_ref().unwrap(), rec_num[idx] * 4);
+                                return Err(msg);
+                            }
+                        }
+
                         if sample {
                             let which = WhichRead::read_types()[idx + 1];
                             record.map(|r| rp.push_read(&r, which));
                         }
+
+                        rec_num[idx] = rec_num[idx] + 1;
+                    }
+                }
+            }
+
+            // check that headers of all reads match
+            let mut header_slices = Vec::with_capacity(4);
+
+            let which = [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2];
+            for w in 0..4 {
+                if let Some(header) = rp.get(which[w], ReadPart::Header) {
+                    let prefix = header.split(|x| *x == b' ').next();
+                    header_slices.push((w, prefix));
+                }
+            }
+
+            if header_slices.len() > 0 {
+                for i in 1..header_slices.len() {
+                    if header_slices[i].1 != header_slices[0].1 {
+                        let msg = format_err!("FASTQ header mismatch detected at line {} of input files {:?} and {:?} ",
+                                rec_num[0] * 4,
+                                self.paths[header_slices[0].0].as_ref().unwrap(),
+                                self.paths[header_slices[i].0].as_ref().unwrap()
+                            );
+                        return Err(msg);
                     }
                 }
             }
@@ -207,7 +271,6 @@ impl Iterator for ReadPairIter {
 mod test_read_pair_iter {
     use super::*;
     use file_diff::diff_files;
-    use itertools::Itertools;
     use std::fs::File;
     use std::io::Write;
 
@@ -306,6 +369,21 @@ mod test_read_pair_iter {
     }
 
     #[test]
+    fn test_bad_char_i1() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-RA.fastq"),
+            None,
+            Some("tests/read_pair_iter/bad-char-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        assert!(res.is_err());
+    }
+
+    #[test]
     fn test_short_i2() {
         let it = ReadPairIter::new(
             Some("tests/read_pair_iter/good-RA.fastq"),
@@ -319,6 +397,39 @@ mod test_read_pair_iter {
         let res: Result<Vec<ReadPair>, Error> = it.collect();
         assert!(res.is_err());
     }
+
+    #[test]
+    fn test_mismatched_header() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-RA.fastq"),
+            None,
+            Some("tests/read_pair_iter/bad-header-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_mismatched_fastq_error() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-RA.fastq"),
+            None,
+            Some("tests/read_pair_iter/bad-format-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        assert!(res.is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    use itertools::Itertools;
 
     #[cfg(target_os = "linux")]
     fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, Error> {

@@ -545,6 +545,21 @@ impl<'a> MutReadPair<'a> {
             },
         }
     }
+
+    #[inline]
+    /// Get a ReadPart `part` from a read `which` in this cluster
+    pub fn get(&self, which: WhichRead, part: ReadPart) -> Option<&[u8]> {
+        if self.offsets[which as usize].exists {
+            let w = self.offsets[which as usize];
+            match part {
+                ReadPart::Header => Some(&self.data[w.start as usize..w.head as usize]),
+                ReadPart::Seq => Some(&self.data[w.head as usize..w.seq as usize]),
+                ReadPart::Qual => Some(&self.data[w.seq as usize..w.qual as usize]),
+            }
+        } else {
+            None
+        }
+    }
 }
 
 /// Container for all read data from a single Illumina cluster. Faithfully represents
