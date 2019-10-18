@@ -150,5 +150,4 @@ mod test {
         assert_eq!(obj, read_obj);
         Ok(())
     }
-
 }
