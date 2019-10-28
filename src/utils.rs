@@ -123,7 +123,7 @@ mod test {
 
     #[test]
     fn test_big_roundtrip() -> Result<(), Error> {
-        let fn1 = "test1.bin";
+        let fn1 = "test_big_roundtrip.bin";
 
         let mut arr1 = Vec::new();
         let mut arr2 = Vec::new();

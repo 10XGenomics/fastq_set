@@ -18,21 +18,40 @@ use crate::{Barcode, SSeq};
 
 const BC_MAX_QV: u8 = 66; // This is the illumina quality value
 
-/// Load a (possibly gzipped) barcode whitelist file.
-/// Each line in the file is a single whitelist barcode.
-/// Barcodes are numbers starting at 1.
+/// Read the barcode whitelist and return a vector of SSeq.
+pub fn read_barcode_whitelist_vec(filename: impl AsRef<Path>) -> Result<Vec<SSeq>, Error> {
+    let barcodes = utils::open_with_gz(filename)?
+        .lines()
+        .map(|bc| bc.and_then(|bc| Ok(SSeq::new(bc.as_bytes()))))
+        .collect::<std::io::Result<_>>()?;
+    Ok(barcodes)
+}
+
+/// Read the barcode whitelist and return a set of SSeq.
+pub fn read_barcode_whitelist_set(filename: impl AsRef<Path>) -> Result<FxHashSet<SSeq>, Error> {
+    let barcodes: FxHashSet<SSeq> = read_barcode_whitelist_vec(filename)?
+        .iter()
+        .map(|bc| *bc)
+        .collect();
+    Ok(barcodes)
+}
+
+/// Read the barcode whitelist and return a map of SSeq to integers.
+pub fn read_barcode_whitelist_map(
+    filename: impl AsRef<Path>,
+) -> Result<FxHashMap<SSeq, u32>, Error> {
+    let barcodes: FxHashMap<SSeq, u32> = read_barcode_whitelist_vec(filename)?
+        .iter()
+        .enumerate()
+        .map(|(i, bc)| (*bc, i as u32))
+        .collect();
+    Ok(barcodes)
+}
+
+/// Read the barcode whitelist and return a map of SSeq to integers.
+#[deprecated = "Use read_barcode_whitelist_map instead"]
 pub fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
-    let reader = utils::open_with_gz(filename)?;
-    let mut bc_map = FxHashMap::default();
-
-    let mut i = 1u32;
-    for l in reader.lines() {
-        let seq = SSeq::new(&l?.into_bytes());
-        bc_map.insert(seq, i);
-        i += 1;
-    }
-
-    Ok(bc_map)
+    read_barcode_whitelist_map(filename)
 }
 
 pub(crate) fn reduce_counts<K: Hash + Eq>(
@@ -54,11 +73,9 @@ pub struct BarcodeChecker {
 
 impl BarcodeChecker {
     pub fn new(whitelist: impl AsRef<Path>) -> Result<BarcodeChecker, Error> {
-        let wl = load_barcode_whitelist(whitelist)?;
-
-        let mut whitelist = FxHashSet::default();
-        whitelist.extend(wl.keys());
-        Ok(BarcodeChecker { whitelist })
+        Ok(BarcodeChecker {
+            whitelist: read_barcode_whitelist_set(whitelist)?,
+        })
     }
 
     /// Convert `barcode` to be `is_valid() == true` if the
@@ -115,13 +132,8 @@ impl BarcodeCorrector {
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64,
     ) -> Result<BarcodeCorrector, Error> {
-        // load whitelist into Set
-        let wl = load_barcode_whitelist(whitelist)?;
-        let mut whitelist = FxHashSet::default();
-        whitelist.extend(wl.keys());
-
         Ok(BarcodeCorrector {
-            whitelist,
+            whitelist: read_barcode_whitelist_set(whitelist)?,
             bc_counts,
             max_expected_barcode_errors,
             bc_confidence_threshold,
