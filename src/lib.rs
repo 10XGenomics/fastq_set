@@ -25,6 +25,7 @@ pub mod barcode;
 pub mod barcode_sort;
 pub mod bc_sort;
 pub mod metric_utils;
+pub mod squality;
 pub mod sseq;
 pub mod utils;
 
@@ -32,11 +33,14 @@ pub mod adapter_trimmer;
 pub mod dna_read;
 pub mod rna_read;
 
+pub use crate::squality::SQuality;
+pub use crate::sseq::SSeq;
+
 pub use fastq::OwnedRecord;
 pub use fastq::Record;
 
 use crate::read_pair_iter::{InputFastqs, ReadPairIter};
-use crate::sseq::{HammingIterOpt, SSeq, SSeqOneHammingIter};
+use crate::sseq::{HammingIterOpt, SSeqOneHammingIter};
 use failure::{format_err, Error};
 use itertools::Itertools;
 pub use read_pair::WhichRead;
