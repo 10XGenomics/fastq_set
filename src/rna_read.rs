@@ -522,7 +522,7 @@ impl RnaRead {
     /// * `FxHashMap<String, RpRange>` - where the key is the name of the adapter
     /// and values is the `RpRange` where the adapter is found. Clearly, the adapters
     /// which are not present in the read will not be part of the output. The `ReadAdapterCatalog`
-    /// guarantees that no two adapters share the same name, so there is no confusion.ReadPart
+    /// guarantees that no two adapters share the same name, so there is no confusion.
     ///
     /// # Test
     /// * `test_rna_read_adapter_trim()`: Test that we can trim reads consistent with cutadapt.
