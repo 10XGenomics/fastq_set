@@ -31,7 +31,6 @@ pub mod utils;
 
 pub mod adapter_trimmer;
 pub mod dna_read;
-pub mod rna_read;
 
 pub use crate::squality::SQuality;
 pub use crate::sseq::SSeq;
