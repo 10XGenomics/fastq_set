@@ -225,7 +225,7 @@ impl Serialize for SSeq {
     where
         S: Serializer,
     {
-        serializer.serialize_bytes(self.seq())
+        serializer.serialize_str(unsafe { std::str::from_utf8_unchecked(self.seq()) })
     }
 }
 
@@ -234,7 +234,7 @@ impl<'de> Deserialize<'de> for SSeq {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_bytes(SSeqVisitor)
+        deserializer.deserialize_str(SSeqVisitor)
     }
 }
 
@@ -244,14 +244,14 @@ impl<'de> Visitor<'de> for SSeqVisitor {
     type Value = SSeq;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("an integer between -2^31 and 2^31")
+        formatter.write_str("An [ACGTN]* string")
     }
 
-    fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        Ok(SSeq::new(value))
+        Ok(SSeq::new(value.as_bytes()))
     }
 }
 
@@ -336,6 +336,13 @@ mod sseq_test {
         assert_eq!(sseqs, roundtrip);
     }
 
+    #[test]
+    fn test_serde_json() {
+        let seq = SSeq::new(b"AGCTAGTCAGTCAGTA");
+        let json_str = serde_json::to_string(&seq).unwrap();
+        assert_eq!(json_str, r#""AGCTAGTCAGTCAGTA""#);
+    }
+
     proptest! {
         #[test]
         fn prop_test_serde_sseq(
@@ -344,6 +351,15 @@ mod sseq_test {
             let target = SSeq::new(seq.as_bytes());
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
             let decoded: SSeq = bincode::deserialize(&encoded[..]).unwrap();
+            prop_assert_eq!(target, decoded);
+        }
+        #[test]
+        fn prop_test_serde_json_sseq(
+            ref seq in "[ACGTN]{0, 23}",
+        ) {
+            let target = SSeq::new(seq.as_bytes());
+            let encoded = serde_json::to_string_pretty(&target).unwrap();
+            let decoded: SSeq = serde_json::from_str(&encoded).unwrap();
             prop_assert_eq!(target, decoded);
         }
     }
