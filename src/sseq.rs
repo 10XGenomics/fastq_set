@@ -225,7 +225,7 @@ impl Serialize for SSeq {
     where
         S: Serializer,
     {
-        serializer.serialize_str(unsafe { std::str::from_utf8_unchecked(self.seq()) })
+        serializer.serialize_str(std::str::from_utf8(self.seq()).unwrap() })
     }
 }
 
