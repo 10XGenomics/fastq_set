@@ -7,7 +7,7 @@ use std::boxed::Box;
 use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
 use std::fmt::Debug;
@@ -18,6 +18,7 @@ use serde::Serialize;
 
 use failure::{format_err, Error};
 use flate2::read::MultiGzDecoder;
+use flate2::write::GzEncoder;
 use lz4;
 
 const GZ_BUF_SIZE: usize = 1 << 22;
@@ -39,6 +40,27 @@ pub fn open_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<dyn BufRead>, Error> {
     } else {
         let buf_reader = BufReader::with_capacity(32 * 1024, r);
         Ok(Box::new(buf_reader))
+    }
+}
+
+/// Open a (possibly gzipped) file into a BufReader.
+pub fn write_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<dyn Write>, Error> {
+    let w = File::create(p.as_ref())?;
+
+    let ext = p.as_ref().extension().unwrap();
+
+    if ext == "gz" {
+        let gz = GzEncoder::new(w, flate2::Compression::fast());
+        let buf_writer = BufWriter::with_capacity(GZ_BUF_SIZE, gz);
+        Ok(Box::new(buf_writer))
+    // disabling lz4 for now -- need to check on how to ensure all reads are flushed on drop.
+    // } else if ext == "lz4" {
+    //    let lz = lz4::Encoder::new(w)?;
+    //    let buf_writer = BufWriter::with_capacity(GZ_BUF_SIZE, lz);
+    //    Ok(Box::new(buf_writer))
+    } else {
+        let buf_writer = BufWriter::with_capacity(32 * 1024, w);
+        Ok(Box::new(buf_writer))
     }
 }
 

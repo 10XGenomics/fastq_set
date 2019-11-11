@@ -2,7 +2,6 @@
 
 //! Read a set of FASTQs, convert into an Iterator over ReadPairs.
 
-use failure::Error;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -11,7 +10,7 @@ use fastq::{self, RecordRefIter};
 
 use crate::utils;
 use bytes::{BufMut, BytesMut};
-use failure::{format_err, ResultExt};
+use failure::{format_err, Error, ResultExt};
 use rand::distributions::{Distribution, Range};
 use rand::{SeedableRng, XorShiftRng};
 use std::io::BufRead;
@@ -19,13 +18,35 @@ use std::io::BufRead;
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
 /// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field,
 /// and set `r1_interleaved = true`.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InputFastqs {
     pub r1: String,
     pub r2: Option<String>,
     pub i1: Option<String>,
     pub i2: Option<String>,
     pub r1_interleaved: bool,
+}
+
+impl InputFastqs {
+    /// Create a new `InputFastqs` with all paths moved to a new directory
+    pub fn change_dir(&self, new_dir: &Path) -> InputFastqs {
+        InputFastqs {
+            r1: InputFastqs::chng(&self.r1, new_dir),
+            r2: self.r2.as_ref().map(|r| InputFastqs::chng(&r, new_dir)),
+            i1: self.i1.as_ref().map(|r| InputFastqs::chng(&r, new_dir)),
+            i2: self.i2.as_ref().map(|r| InputFastqs::chng(&r, new_dir)),
+            r1_interleaved: self.r1_interleaved,
+        }
+    }
+
+    fn chng(old: &str, new_dir: &Path) -> String {
+        let p = Path::new(old);
+        let file_name = p.file_name().unwrap();
+
+        let mut new_path = new_dir.to_path_buf();
+        new_path.push(file_name);
+        new_path.to_string_lossy().to_string()
+    }
 }
 
 const BUF_SIZE: usize = 4096 * 4;
@@ -52,12 +73,12 @@ pub struct ReadPairIter {
 impl ReadPairIter {
     /// Open a `ReadPairIter` given a `InputFastqs` describing a set of FASTQ files
     /// for the available parts of a read.
-    pub fn from_fastq_files(input_fastqs: InputFastqs) -> Result<ReadPairIter, Error> {
+    pub fn from_fastq_files(input_fastqs: &InputFastqs) -> Result<ReadPairIter, Error> {
         Self::new(
-            Some(input_fastqs.r1),
-            input_fastqs.r2,
-            input_fastqs.i1,
-            input_fastqs.i2,
+            Some(&input_fastqs.r1),
+            input_fastqs.r2.as_ref(),
+            input_fastqs.i1.as_ref(),
+            input_fastqs.i2.as_ref(),
             input_fastqs.r1_interleaved,
         )
     }

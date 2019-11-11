@@ -132,7 +132,7 @@ where
         let read_subsample_rate = chunk.read_subsample_rate();
 
         let fastqs = chunk.fastq_files();
-        let iter = ReadPairIter::from_fastq_files(fastqs)?;
+        let iter = ReadPairIter::from_fastq_files(&fastqs)?;
 
         for _r in iter {
             let r = _r?;

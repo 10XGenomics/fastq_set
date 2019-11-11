@@ -1,8 +1,10 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and
+//! Utilities for working with FASTQ files. Includes:
+//! * Routines to find groups of FASTQs on the filesystem
+//! * High-speed FASTQ I/O (via the `fastq` crate)
+//! * Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and
 //! UMI sequences.
-//!
 
 #![deny(warnings)]
 // Allowed clippy lints
@@ -16,8 +18,11 @@ use fastq;
 
 pub mod read_pair;
 pub mod read_pair_iter;
+pub mod read_pair_writer;
 pub mod sample_def;
 pub mod sample_index_map;
+
+pub mod filenames;
 
 pub mod barcode;
 // bc_sort is an older bc sorting workflow -- it's used in perf tests.
@@ -312,7 +317,7 @@ where
     Processor: FastqProcessor,
 {
     pub fn new(processor: &'a Processor) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .subsample_rate(processor.read_subsample_rate());
         Ok(FastqProcessorIter {
             read_pair_iter,
@@ -324,7 +329,7 @@ where
         processor: &'a Processor,
         storage: read_pair::ReadPairStorage,
     ) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .subsample_rate(processor.read_subsample_rate())
             .storage(storage);
         Ok(FastqProcessorIter {
@@ -334,7 +339,7 @@ where
     }
 
     pub fn with_seed(processor: &'a Processor, seed: [u8; 16]) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed);
         Ok(FastqProcessorIter {
@@ -348,7 +353,7 @@ where
         seed: [u8; 16],
         storage: read_pair::ReadPairStorage,
     ) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(processor.fastq_files())?
+        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed)
             .storage(storage);
