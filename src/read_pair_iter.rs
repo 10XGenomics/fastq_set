@@ -8,12 +8,14 @@ use std::path::{Path, PathBuf};
 use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
 use fastq::{self, RecordRefIter};
 
-use crate::utils;
 use bytes::{BufMut, BytesMut};
 use failure::{format_err, Error, ResultExt};
 use rand::distributions::{Distribution, Range};
 use rand::{SeedableRng, XorShiftRng};
-use std::io::BufRead;
+use std::io::{Read,BufRead, BufReader};
+use std::io::Seek;
+
+const GZ_BUF_SIZE: usize = 1 << 16;
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
 /// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field,
@@ -83,6 +85,63 @@ impl ReadPairIter {
         )
     }
 
+
+    /// Open a FASTQ file that is uncompressed, gzipped compressed, or lz4 compressed.
+    /// The extension of the file is ignored & the filetype is determined by looking
+    /// for magic bytes at the of the file
+    fn open_fastq(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, Error> {
+        let p = p.as_ref();
+
+        let mut file = std::fs::File::open(p).context(format!("Error opening FASTQ file {:?}", p))?;
+        
+        let mut buf = vec![0u8; 4];
+        file.read_exact(&mut buf[..])?;
+        file.seek(std::io::SeekFrom::Start(0))?;
+
+        if &buf[0..2] == &[0x1F, 0x8B] {
+            let gz = flate2::read::MultiGzDecoder::new(file);
+            let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, gz);
+            Ok(Box::new(buf_reader))
+        } else if &buf[0..4] == &[0x04, 0x22, 0x4D, 0x18] {
+            let lz = lz4::Decoder::new(file)?;
+            let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, lz);
+            Ok(Box::new(buf_reader))
+        } else if buf[0] == b'@' {
+            let buf_reader = BufReader::with_capacity(32 * 1024, file);
+            Ok(Box::new(buf_reader))
+        } else {
+            let msg = format_err!("FASTQ error: '{:?}' is not appear to be a valid FASTQ. 
+            Input FASTQ file must be gzip or lz4 compressed, or must begin with the '@' symbol", p);
+            Err(msg)
+        }
+    }
+
+    /// Open a (possibly gzip or lz4 compressed) FASTQ file & read some records to confirm the format looks good.
+    fn open_fastq_confirm_fmt(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, Error> {
+
+        let p = p.as_ref();
+        let reader = Self::open_fastq(p)?;
+        let parser = fastq::Parser::new(reader);
+
+         // make sure we can successfully read some records
+         // try and give a useful message if we can't
+        let mut iter = parser.ref_iter();
+
+        for _ in 0 .. 10 {
+            let read_res = iter.advance();
+            read_res.context(format!("Error reading data from FASTQ file '{:?}' - is it corrupted?", p))?;
+
+            let rec = iter.get();
+            if rec.is_none() {
+                break;
+            }
+        }
+
+        // re-open file so we re-read the initial records
+        Self::open_fastq(p)
+    }
+
+
     /// Open a `ReadPairIter` given of FASTQ files.
     /// For interleaved R1/R2 files, set `r2 = None`, and set
     /// `r1_interleaved = true`.
@@ -98,8 +157,7 @@ impl ReadPairIter {
 
         for (idx, r) in [r1, r2, i1, i2].iter().enumerate() {
             if let Some(ref p) = *r {
-                let rdr =
-                    utils::open_with_gz(p).context(format!("Error opening {:?}", p.as_ref()))?;
+                let rdr = Self::open_fastq_confirm_fmt(p)?;
                 let parser = fastq::Parser::new(rdr);
                 iters[idx] = Some(parser.ref_iter());
                 paths[idx] = Some(p.as_ref().to_path_buf());
@@ -345,6 +403,50 @@ mod test_read_pair_iter {
     }
 
     #[test]
+    fn test_not_gzipped() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/not-gzipped-RA.fastq.gz"),
+            None,
+            Some("tests/read_pair_iter/good-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true,
+        ).unwrap();
+
+
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_gzipped() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-gzipped-RA.fastq.gz"),
+            None,
+            Some("tests/read_pair_iter/good-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true,
+        ).unwrap();
+
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_lz4() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-lz4-RA.fastq.lz4"),
+            None,
+            Some("tests/read_pair_iter/good-I1.fastq"),
+            Some("tests/read_pair_iter/good-I2.fastq"),
+            true,
+        ).unwrap();
+
+        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        assert!(res.is_ok());
+    }
+
+
+    #[test]
     fn test_missing_pair() {
         let it = ReadPairIter::new(
             Some("tests/read_pair_iter/short-RA.fastq"),
@@ -442,11 +544,10 @@ mod test_read_pair_iter {
             Some("tests/read_pair_iter/bad-format-I1.fastq"),
             Some("tests/read_pair_iter/good-I2.fastq"),
             true,
-        )
-        .unwrap();
+        );
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
-        assert!(res.is_err());
+        // this error gets caught in the opening pre-check
+        assert!(it.is_err());
     }
 
     #[cfg(target_os = "linux")]
