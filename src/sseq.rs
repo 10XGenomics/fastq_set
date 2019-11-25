@@ -51,20 +51,54 @@ impl SSeq {
         }
     }
 
-    /// Access the sequence data
-    pub fn seq(&self) -> &[u8] {
+    /// Returns a byte slice of this SSeq's contents.
+    pub fn as_bytes(&self) -> &[u8] {
         &self.sequence[0..self.length as usize]
     }
 
-    /// The length of the sequence
+    /// Returns a byte slice of this sequence's contents.
+    /// A synonym for as_bytes().
+    pub fn seq(&self) -> &[u8] {
+        self.as_bytes()
+    }
+
+    /// Returns the length of this sequence, in bytes.
     pub fn len(self) -> usize {
         self.length as usize
     }
 
+    /// Returns true if this sequence has a length of zero, and false otherwise.
     pub fn is_empty(self) -> bool {
         self.length == 0
     }
 
+    /// Returns an iterator over this sequence.
+    pub fn iter(&self) -> std::slice::Iter<u8> {
+        self.sequence[..self.length as usize].iter()
+    }
+
+    /// Returns true if this sequence contains an N.
+    pub fn has_n(&self) -> bool {
+        self.iter().any(|&c| c == b'N' || c == b'n')
+    }
+
+    /// Returns true if this sequence is a homopolymer.
+    pub fn is_homopolymer(&self) -> bool {
+        assert!(!self.is_empty());
+        self.iter().all(|&c| c == self.sequence[0])
+    }
+
+    /// Returns true if the last n characters of this sequence are the specified homopolymer.
+    pub fn has_homopolymer_suffix(&self, c: u8, n: usize) -> bool {
+        self.length as usize >= n && self.iter().rev().take(n).all(|&x| x == c)
+    }
+
+    /// Returns true if the last n characters of this sequence are T.
+    pub fn has_polyt_suffix(&self, n: usize) -> bool {
+        self.has_homopolymer_suffix(b'T', n)
+    }
+
+    /// Returns a 2-bit encoding of this sequence.
     pub fn encode_2bit_u32(self) -> u32 {
         let mut res: u32 = 0;
         assert!(self.length < 16);
@@ -85,6 +119,7 @@ impl SSeq {
 
         res
     }
+
     pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter {
         SSeqOneHammingIter::new(self, opt)
     }
@@ -409,6 +444,37 @@ mod sseq_test {
     #[should_panic]
     fn test_sseq_invalid_2() {
         let _ = SSeq::new(b"ag");
+    }
+
+    #[test]
+    fn test_as_bytes() {
+        assert_eq!(SSeq::new(b"ACGT").as_bytes(), b"ACGT");
+    }
+
+    #[test]
+    fn test_has_n() {
+        assert!(SSeq::new(b"ACGTN").has_n());
+        assert!(!SSeq::new(b"ACGT").has_n());
+    }
+
+    #[test]
+    fn test_is_homopolymer() {
+        assert!(SSeq::new(b"AAAA").is_homopolymer());
+        assert!(!SSeq::new(b"ACGT").is_homopolymer());
+    }
+
+    #[test]
+    fn test_has_homopolymer_suffix() {
+        assert!(SSeq::new(b"ACGTAAAAA").has_homopolymer_suffix(b'A', 5));
+        assert!(!SSeq::new(b"ACGTTAAAA").has_homopolymer_suffix(b'A', 5));
+        assert!(SSeq::new(b"CCCCC").has_homopolymer_suffix(b'C', 5));
+        assert!(!SSeq::new(b"GGGG").has_homopolymer_suffix(b'G', 5));
+    }
+
+    #[test]
+    fn test_has_polyt_suffix() {
+        assert!(SSeq::new(b"CGCGTTTTT").has_polyt_suffix(5));
+        assert!(!SSeq::new(b"CGCGAAAAA").has_polyt_suffix(5));
     }
 
     #[test]
