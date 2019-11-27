@@ -13,8 +13,12 @@ use std::str;
 /// Ensure that the input byte slice contains only valid quality characters, and panic otherwise.
 pub fn ensure_valid_quality(seq: &[u8]) {
     for (i, &c) in seq.iter().enumerate() {
-        if c < 33 || c >= 74 {
-            panic!("Invalid quality character ASCII {} at position {}", c, i);
+        let q = c as i16 - 33;
+        if q < 0 || q >= 42 {
+            panic!(
+                "Invalid quality value {} ASCII character {} at position {}",
+                q, c, i
+            );
         }
     }
 }
@@ -166,12 +170,12 @@ mod squality_test {
     use bincode;
     use proptest::{prop_assert_eq, proptest};
 
-    const VALID_CHARS: &[u8; 41] = br##"!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHI"##;
+    const VALID_CHARS: &[u8; 42] = br##"!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJ"##;
 
     #[test]
     fn test_sseq_valid_quality() {
         assert_eq!(SQuality::new(&VALID_CHARS[0..23]).len(), 23);
-        assert_eq!(SQuality::new(&VALID_CHARS[23..41]).len(), 18);
+        assert_eq!(SQuality::new(&VALID_CHARS[23..42]).len(), 19);
         assert_eq!(
             SQuality::new(&VALID_CHARS[0..23]).to_string(),
             str::from_utf8(&VALID_CHARS[0..23]).unwrap()
@@ -181,13 +185,13 @@ mod squality_test {
     #[test]
     #[should_panic]
     fn test_sseq_invalid_quality_1() {
-        let _ = SQuality::new(b"GHI ");
+        let _ = SQuality::new(b"GHIJ ");
     }
 
     #[test]
     #[should_panic]
     fn test_sseq_invalid_quality_2() {
-        let _ = SQuality::new(b"GHIJ");
+        let _ = SQuality::new(b"GHIJK");
     }
 
     #[test]
@@ -205,7 +209,7 @@ mod squality_test {
     proptest! {
         #[test]
         fn prop_test_serde_squality(
-            ref seq in "[!FGHI]{0, 23}",
+            ref seq in "[!FGHIJ]{0, 23}",
         ) {
             let target = SQuality::new(seq.as_bytes());
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
