@@ -5,7 +5,6 @@
 
 use failure::Error;
 use ordered_float::NotNan;
-use std::cmp::{max, min};
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
@@ -170,8 +169,9 @@ impl BarcodeCorrector {
                 };
 
                 if self.whitelist.contains(&a) {
-                    let bc_count = max(self.bc_counts.get(&trial_bc), 1); // Include pseudo count
-                    let prob_edit = Of64::from(probability(min(qv, BC_MAX_QV)));
+                    // Apply additive (Laplace) smoothing.
+                    let bc_count = 1 + self.bc_counts.get(&trial_bc);
+                    let prob_edit = Of64::from(probability(qv.min(BC_MAX_QV)));
                     let likelihood = prob_edit * Of64::from(bc_count as f64);
                     candidates.push((likelihood, trial_bc));
                     total_likelihood += likelihood;
