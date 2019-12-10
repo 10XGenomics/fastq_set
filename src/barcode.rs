@@ -187,7 +187,7 @@ impl BarcodeCorrector {
 
         if let Some((best_like, best_bc)) = best_option {
             if expected_errors < self.max_expected_barcode_errors
-                && best_like / total_likelihood > thresh
+                && best_like / total_likelihood >= thresh
             {
                 return Some(best_bc);
             }
