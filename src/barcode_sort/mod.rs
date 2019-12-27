@@ -3,11 +3,13 @@ use crate::Barcode;
 use crate::FastqProcessor;
 use crate::HasBarcode;
 use failure::Error;
+use fxhash::FxHashMap;
 use metric::{Metric, SerdeFormat, SimpleHistogram};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use shardio::*;
 use std;
 use std::borrow::Cow;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::path::Path;
 
@@ -35,6 +37,8 @@ pub struct BarcodeSortWorkflow<Processor, SortOrder = BarcodeOrder>
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
+    <<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType:
+        Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     SortOrder: SortKey<<Processor as FastqProcessor>::ReadType>,
     <SortOrder as SortKey<<Processor as FastqProcessor>::ReadType>>::Key:
         'static + Send + Ord + Serialize + Clone,
@@ -48,6 +52,8 @@ impl<Processor, SortOrder> BarcodeSortWorkflow<Processor, SortOrder>
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
+    <<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType:
+        Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     SortOrder: SortKey<<Processor as FastqProcessor>::ReadType>,
     <SortOrder as SortKey<<Processor as FastqProcessor>::ReadType>>::Key:
         'static + Send + Ord + Serialize + Clone,
@@ -71,16 +77,21 @@ where
         let mut v = DefaultVisitor {
             phantom: PhantomData,
         };
-        self.execute_workflow_with_visitor(max_iters, &mut v)
+        // FIXME: hoist to caller?
+        let f = |_: &<Processor as FastqProcessor>::ReadType| false;
+        self.execute_workflow_with_visitor(max_iters, &mut v, f)
     }
 
-    pub fn execute_workflow_with_visitor<
-        Visitor: ReadVisitor<ReadType = <Processor as FastqProcessor>::ReadType>,
-    >(
+    pub fn execute_workflow_with_visitor<V, F>(
         &mut self,
         max_iters: Option<usize>,
-        visitor: &mut Visitor,
-    ) -> Result<(), Error> {
+        visitor: &mut V,
+        translate_barcode: F,
+    ) -> Result<(), Error>
+    where
+        V: ReadVisitor<ReadType = <Processor as FastqProcessor>::ReadType>,
+        F: Fn(&<Processor as FastqProcessor>::ReadType) -> bool,
+    {
         let mut nreads = 0;
         for read_result in self
             .processor
@@ -90,7 +101,7 @@ where
             nreads += 1;
             let mut read = read_result?;
             let mut bc = *read.barcode();
-            self.checker.check(&mut bc);
+            self.checker.check(&mut bc, translate_barcode(&read));
             read.set_barcode(bc);
             visitor.visit_read(&mut read)?;
             self.sorter.process(read)?;
@@ -126,13 +137,14 @@ where
 struct BarcodeAwareSorter<T, Order = BarcodeOrder>
 where
     T: 'static + HasBarcode + Send + Serialize,
+    <T as HasBarcode>::LibraryType: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     Order: SortKey<T>,
 {
     valid_writer: ShardWriter<T, Order>,
     valid_sender: ShardSender<T>,
     invalid_writer: ShardWriter<T, Order>,
     invalid_sender: ShardSender<T>,
-    valid_bc_distribution: SimpleHistogram<Barcode>,
+    valid_bc_distribution: FxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
     valid_items: i64,
     invalid_items: i64,
 }
@@ -140,6 +152,7 @@ where
 impl<T, Order> BarcodeAwareSorter<T, Order>
 where
     T: 'static + HasBarcode + Send + Serialize,
+    <T as HasBarcode>::LibraryType: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     Order: SortKey<T>,
     <Order as SortKey<T>>::Key: 'static + Send + Ord + Serialize + Clone,
 {
@@ -157,7 +170,7 @@ where
             valid_sender,
             invalid_writer,
             invalid_sender,
-            valid_bc_distribution: SimpleHistogram::new(),
+            valid_bc_distribution: FxHashMap::default(),
             valid_items: 0,
             invalid_items: 0,
         })
@@ -165,7 +178,10 @@ where
 
     fn process(&mut self, read: T) -> Result<(), Error> {
         if read.barcode().is_valid() {
-            self.valid_bc_distribution.observe(read.barcode());
+            self.valid_bc_distribution
+                .entry(read.barcode_type())
+                .or_insert(SimpleHistogram::new())
+                .observe(read.barcode());
             self.valid_sender.send(read)?;
             self.valid_items += 1;
         } else {
@@ -189,11 +205,24 @@ where
     }
 }
 
-pub fn write_merged_barcode_counts<P: AsRef<Path>, Q: AsRef<Path>>(
-    shard_counts: &[P],
-    merged_file: Q,
-) -> Result<(), Error> {
-    let bc_counts: SimpleHistogram<Barcode> =
-        SimpleHistogram::from_files(shard_counts, SerdeFormat::Binary);
-    bc_counts.to_file(merged_file, SerdeFormat::Binary)
+pub fn write_merged_barcode_counts<P, Q, R>(shard_counts: &[P], merged_file: Q) -> Result<(), Error>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+    R: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
+{
+    let bc_counts: FxHashMap<R, SimpleHistogram<Barcode>> = {
+        let mut res = FxHashMap::default();
+        for x in shard_counts {
+            let y = std::io::BufReader::new(std::fs::File::open(x)?);
+            let mut z: FxHashMap<R, SimpleHistogram<Barcode>> = bincode::deserialize_from(y)?;
+            for (typ, hist) in z.drain() {
+                res.entry(typ).or_insert(SimpleHistogram::new()).merge(hist)
+            }
+        }
+        res
+    };
+    let handle = std::io::BufWriter::new(std::fs::File::create(merged_file)?);
+    bincode::serialize_into(handle, &bc_counts)?;
+    Ok(())
 }

@@ -4,6 +4,8 @@
 //! and sort reads by GEM barcode. Wrappers provide methods to access technical
 //! read components, such as barcodes and UMIs.
 #![allow(clippy::all)]
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::path::Path;
 
 use failure::Error;
@@ -17,7 +19,7 @@ use rayon::prelude::*;
 use rand::{Rng, SeedableRng, XorShiftRng};
 
 use serde::de::DeserializeOwned;
-use serde::ser::Serialize;
+use serde::{Deserialize, Serialize};
 use shardio;
 
 use crate::barcode::{BarcodeChecker, BarcodeCorrector};
@@ -44,23 +46,25 @@ where
     }
 }
 
-/// Ingest raw FASTQ using the input data and setting encapsulated in `ProcType`, to generate
+/// Ingest raw FASTQ using the input data and setting encapsulated in `P`, to generate
 /// a stream of 'interpreted' reads of type `ReadType`.  Check the barcodes of each object
 /// against that whitelist to mark them as correct. Send the `ReadType` objects to a shardio
 /// output file.
-pub struct SortByBc<ProcType> {
-    fastq_inputs: Vec<ProcType>,
+pub struct SortByBc<P> {
+    fastq_inputs: Vec<P>,
     barcode_checker: BarcodeChecker,
 }
 
-impl<ProcType> SortByBc<ProcType>
+impl<P> SortByBc<P>
 where
-    ProcType: FastqProcessor + Send + Sync + Clone,
-    <ProcType as FastqProcessor>::ReadType:
+    P: FastqProcessor + Send + Sync + Clone,
+    <P as FastqProcessor>::ReadType:
         'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    <<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType:
+        Eq + Hash + Clone + Send + Sync + Serialize + for<'de> Deserialize<'de>,
 {
     /// Check a new SortByBc object.
-    pub fn new(fastq_inputs: Vec<ProcType>, barcode_checker: BarcodeChecker) -> SortByBc<ProcType> {
+    pub fn new(fastq_inputs: Vec<P>, barcode_checker: BarcodeChecker) -> SortByBc<P> {
         SortByBc {
             fastq_inputs,
             barcode_checker,
@@ -73,8 +77,18 @@ where
     pub fn sort_bcs(
         &self,
         read_path: impl AsRef<Path>,
-    ) -> Result<(u64, u64, SimpleHistogram<Barcode>), Error> {
-        let mut writer = ShardWriter::<<ProcType as FastqProcessor>::ReadType, BcSortOrder>::new(
+    ) -> Result<
+        (
+            FxHashMap<<<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType, u64>,
+            FxHashMap<<<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType, u64>,
+            FxHashMap<
+                <<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType,
+                SimpleHistogram<Barcode>,
+            >,
+        ),
+        Error,
+    > {
+        let mut writer = ShardWriter::<<P as FastqProcessor>::ReadType, BcSortOrder>::new(
             read_path,
             16,
             128,
@@ -82,10 +96,7 @@ where
         )?;
 
         // FIXME - configure thread consumption
-        let fq_w_senders: Vec<(
-            ProcType,
-            ShardSender<<ProcType as FastqProcessor>::ReadType>,
-        )> = self
+        let fq_w_senders: Vec<(P, ShardSender<<P as FastqProcessor>::ReadType>)> = self
             .fastq_inputs
             .iter()
             .cloned()
@@ -96,7 +107,7 @@ where
             .into_par_iter()
             .map(|(fq, sender)| self.process_fastq(fq, sender))
             .reduce(
-                || Ok(SimpleHistogram::new()),
+                || Ok(FxHashMap::default()),
                 |v1, v2| match (v1, v2) {
                     (Ok(mut h1), Ok(h2)) => {
                         h1.merge(h2);
@@ -118,11 +129,17 @@ where
 
     fn process_fastq<'a>(
         &self,
-        chunk: ProcType,
-        mut bc_sender: ShardSender<<ProcType as FastqProcessor>::ReadType>,
-    ) -> Result<SimpleHistogram<Barcode>, Error> {
+        chunk: P,
+        mut bc_sender: ShardSender<<P as FastqProcessor>::ReadType>,
+    ) -> Result<
+        FxHashMap<
+            <<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType,
+            SimpleHistogram<Barcode>,
+        >,
+        Error,
+    > {
         // Counter for BCs
-        let mut counts = SimpleHistogram::new();
+        let mut counts = FxHashMap::default();
 
         // Always subsample deterministically
         let mut rand = XorShiftRng::from_seed([0; 16]);
@@ -144,11 +161,15 @@ where
                     Some(mut read_pair) => {
                         // Check barcode against whitelist & mark correct if it matches.
                         let mut bc = read_pair.barcode().clone();
-                        self.barcode_checker.check(&mut bc);
+                        // FIXME: change this false to a proper check to translate
+                        self.barcode_checker.check(&mut bc, false);
                         read_pair.set_barcode(bc);
 
                         // count reads on each barcode state
-                        counts.observe(read_pair.barcode());
+                        counts
+                            .entry(read_pair.barcode_type())
+                            .or_insert(SimpleHistogram::new())
+                            .observe(read_pair.barcode());
 
                         match read_pair.barcode().is_valid() {
                             true => {
@@ -172,30 +193,45 @@ where
     }
 }
 
-fn count_reads(bc_counts: &SimpleHistogram<Barcode>, valid: bool) -> u64 {
+fn count_reads<C: Clone + Eq + Hash>(
+    bc_counts: &FxHashMap<C, SimpleHistogram<Barcode>>,
+    valid: bool,
+) -> FxHashMap<C, u64> {
     bc_counts
-        .distribution()
         .iter()
-        .filter(|(k, _)| k.is_valid() == valid)
-        .map(|v| v.1.count() as u64)
-        .fold(0u64, |x, y| x + y)
+        .map(|(i, hist)| {
+            let count = hist
+                .distribution()
+                .iter()
+                .filter(|(k, _)| k.is_valid() == valid)
+                .map(|v| v.1.count() as u64)
+                .fold(0u64, |x, y| x + y);
+            (i.clone(), count)
+        })
+        .collect::<_>()
 }
 
 /// Iterate over barcodes with initially incorrect barcodes, and attempt to correct them
 /// using `corrector`.
-pub struct CorrectBcs<ReadType: HasBarcode> {
+pub struct CorrectBcs<ReadType>
+where
+    ReadType: HasBarcode,
+    <ReadType as HasBarcode>::LibraryType: Eq + Hash + Send + Sync,
+{
     reader: ShardReader<ReadType, BcSortOrder>,
-    corrector: BarcodeCorrector,
+    corrector: BarcodeCorrector<<ReadType as HasBarcode>::LibraryType>,
     phantom: PhantomData<ReadType>,
 }
 
 impl<ReadType> CorrectBcs<ReadType>
 where
     ReadType: 'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    <ReadType as HasBarcode>::LibraryType:
+        Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de> + Send + Sync,
 {
     pub fn new(
         reader: ShardReader<ReadType, BcSortOrder>,
-        corrector: BarcodeCorrector,
+        corrector: BarcodeCorrector<<ReadType as HasBarcode>::LibraryType>,
     ) -> CorrectBcs<ReadType> {
         CorrectBcs {
             reader,
@@ -207,7 +243,14 @@ where
     pub fn process_unbarcoded(
         &mut self,
         corrected_reads_fn: impl AsRef<Path>,
-    ) -> Result<(u64, u64, SimpleHistogram<Barcode>), Error> {
+    ) -> Result<
+        (
+            FxHashMap<<ReadType as HasBarcode>::LibraryType, u64>,
+            FxHashMap<<ReadType as HasBarcode>::LibraryType, u64>,
+            FxHashMap<<ReadType as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
+        ),
+        Error,
+    > {
         let mut writer: ShardWriter<ReadType, BcSortOrder> =
             ShardWriter::new(corrected_reads_fn.as_ref(), 16, 1 << 12, 1 << 21)?;
 
@@ -221,21 +264,28 @@ where
             .into_par_iter()
             .map(|(range, mut read_sender)| {
                 // Counter for BCs
-                let mut counts = SimpleHistogram::new();
+                let mut counts = FxHashMap::default();
 
                 for _read_pair in self.reader.iter_range(&range)? {
                     let mut read_pair = _read_pair?;
                     // Correct the BC, if possible
-                    match self
-                        .corrector
-                        .correct_barcode(&read_pair.barcode(), read_pair.barcode_qual())
-                    {
+                    // FIXME: pass in do_translate properly
+                    let do_translate = false;
+                    match self.corrector.correct_barcode(
+                        &read_pair.barcode(),
+                        read_pair.barcode_qual(),
+                        read_pair.barcode_type(),
+                        do_translate,
+                    ) {
                         Some(new_barcode) => read_pair.set_barcode(new_barcode),
                         _ => (),
                     }
 
                     // count reads on each (gem_group, bc)
-                    counts.observe(read_pair.barcode());
+                    counts
+                        .entry(read_pair.barcode_type())
+                        .or_insert(SimpleHistogram::new())
+                        .observe(read_pair.barcode());
                     read_sender.send(read_pair)?;
                 }
 
@@ -244,7 +294,7 @@ where
 
         // Deal with errors
         let bc_counts = chunk_results.reduce(
-            || Ok(SimpleHistogram::new()),
+            || Ok(FxHashMap::default()),
             |x: Result<_, Error>, y| match (x, y) {
                 (Ok(mut x1), Ok(y1)) => {
                     x1.merge(y1);
@@ -266,14 +316,18 @@ where
 }
 
 /// Encapsulates the results from the barcode sorting step.
-pub struct BcSortResults {
+pub struct BcSortResults<ReadType>
+where
+    ReadType: HasBarcode,
+    <ReadType as HasBarcode>::LibraryType: Eq + Hash + Send + Sync,
+{
     pub init_correct_data: PathBuf,
     pub corrected_data: PathBuf,
-    pub total_read_pairs: u64,
-    pub init_correct_barcodes: u64,
-    pub corrected_barcodes: u64,
-    pub incorrect_barcodes: u64,
-    pub counts: FxHashMap<Barcode, i64>,
+    pub total_read_pairs: FxHashMap<<ReadType as HasBarcode>::LibraryType, u64>,
+    pub init_correct_barcodes: FxHashMap<<ReadType as HasBarcode>::LibraryType, u64>,
+    pub corrected_barcodes: FxHashMap<<ReadType as HasBarcode>::LibraryType, u64>,
+    pub incorrect_barcodes: FxHashMap<<ReadType as HasBarcode>::LibraryType, u64>,
+    pub counts: FxHashMap<<ReadType as HasBarcode>::LibraryType, FxHashMap<Barcode, i64>>,
     pub tmp_dir: TempDir,
 }
 
@@ -283,11 +337,13 @@ pub fn barcode_sort_workflow<P>(
     chunks: Vec<P>,
     path: impl AsRef<Path>,
     barcode_whitelist: impl AsRef<Path>,
-) -> Result<BcSortResults, Error>
+) -> Result<BcSortResults<<P as FastqProcessor>::ReadType>, Error>
 where
     P: FastqProcessor + Send + Sync + Clone,
     <P as FastqProcessor>::ReadType:
         'static + HasBarcode + Serialize + DeserializeOwned + Send + Sync,
+    <<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType:
+        Debug + Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de> + Send + Sync,
 {
     let tmp_dir = TempDir::new_in(path)?;
     let pass1_fn = tmp_dir.path().join("pass1_data.shardio");
@@ -307,25 +363,47 @@ where
     let mut correct = CorrectBcs::new(reader, corrector);
 
     let (corrected, still_incorrect, corrected_counts) = correct.process_unbarcoded(&pass2_fn)?;
-    assert_eq!(init_incorrect, corrected + still_incorrect);
+    assert_eq!(init_incorrect, {
+        let mut rhs = corrected.clone();
+        for (t, hist) in still_incorrect.iter() {
+            *rhs.entry(t.clone()).or_insert(0) += hist;
+        }
+        rhs
+    });
+
+    let mut total_read_pairs = init_correct.clone();
+    for (typ, count) in init_incorrect.iter() {
+        *total_read_pairs.entry(typ.clone()).or_insert(0) += count;
+    }
 
     // Combine counts
     let mut final_counts = FxHashMap::default();
-    for (k, v) in init_counts.distribution() {
-        // initially incorrect reads are handled on the 2nd pass
-        if k.is_valid() {
-            final_counts.insert(k.clone(), v.count());
+    for (typ, hist) in init_counts.iter() {
+        for (k, v) in hist.distribution() {
+            // initially incorrect reads are handled on the 2nd pass
+            if k.is_valid() {
+                final_counts
+                    .entry(typ.clone())
+                    .or_insert(FxHashMap::default())
+                    .insert(k.clone(), v.count());
+            }
         }
     }
 
     // update counts with results from 2nd pass
-    for (k, v) in corrected_counts.distribution() {
-        let e = final_counts.entry(k.clone()).or_insert(0);
-        *e += v.count();
+    for (typ, hist) in corrected_counts.iter() {
+        for (k, v) in hist.distribution() {
+            let e = final_counts
+                .entry(typ.clone())
+                .or_insert(FxHashMap::default())
+                .entry(k.clone())
+                .or_insert(0);
+            *e += v.count();
+        }
     }
 
     Ok(BcSortResults {
-        total_read_pairs: init_correct + init_incorrect,
+        total_read_pairs,
         init_correct_barcodes: init_correct,
         corrected_barcodes: corrected,
         incorrect_barcodes: still_incorrect,

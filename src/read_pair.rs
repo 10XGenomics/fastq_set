@@ -5,7 +5,7 @@
 
 use crate::WhichEnd;
 use bytes::{Bytes, BytesMut};
-use failure::Error;
+use failure::{format_err, Error};
 use fastq::{OwnedRecord, Record};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -75,16 +75,26 @@ impl WhichRead {
 
 impl fmt::Display for WhichRead {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                WhichRead::R1 => "read1",
-                WhichRead::R2 => "read2",
-                WhichRead::I1 => "index1",
-                WhichRead::I2 => "index2",
-            }
-        )
+        f.write_str(match self {
+            WhichRead::R1 => "read1",
+            WhichRead::R2 => "read2",
+            WhichRead::I1 => "index1",
+            WhichRead::I2 => "index2",
+        })
+    }
+}
+
+impl std::str::FromStr for WhichRead {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "R1" => Ok(WhichRead::R1),
+            "R2" => Ok(WhichRead::R2),
+            "I1" => Ok(WhichRead::I1),
+            "I2" => Ok(WhichRead::I2),
+            _ => Err(format_err!("could not parse WhichRead from '{}'", s)),
+        }
     }
 }
 

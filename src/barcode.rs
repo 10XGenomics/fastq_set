@@ -3,35 +3,49 @@
 //! Tools for dealing with 10x barcodes. Loading barcode whitelists, check barcodes against the whitelist
 //! and correcting incorrect barcodes.
 
-use failure::Error;
-use ordered_float::NotNan;
-use std::path::Path;
-
+use failure::{format_err, Error};
 use fxhash::{FxHashMap, FxHashSet};
 use metric::SimpleHistogram;
+use ordered_float::NotNan;
+use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::io::BufRead;
+use std::path::Path;
 
 use crate::utils;
 use crate::{Barcode, SSeq};
 
 const BC_MAX_QV: u8 = 66; // This is the illumina quality value
 
+/// Return an iterator over the barcode whitelist
+fn read_barcode_whitelist_iter(
+    filename: impl AsRef<Path>,
+) -> Result<impl Iterator<Item = std::io::Result<(SSeq, Option<SSeq>)>>, Error> {
+    let barcodes = utils::open_with_gz(filename)?.lines().map(|line| {
+        line.and_then(|line| {
+            // could be a translation whitelist, take left only
+            let mut iter = line.split_whitespace();
+            let lhs = SSeq::new(iter.next().unwrap().as_bytes());
+            let rhs = iter.next().map(|x| SSeq::new(x.as_bytes()));
+            Ok((lhs, rhs))
+        })
+    });
+    Ok(barcodes)
+}
+
 /// Read the barcode whitelist and return a vector of SSeq.
 pub fn read_barcode_whitelist_vec(filename: impl AsRef<Path>) -> Result<Vec<SSeq>, Error> {
-    let barcodes = utils::open_with_gz(filename)?
-        .lines()
-        .map(|bc| bc.and_then(|bc| Ok(SSeq::new(bc.as_bytes()))))
+    let barcodes = read_barcode_whitelist_iter(filename)?
+        .map(|x| x.map(|x| x.0))
         .collect::<std::io::Result<_>>()?;
     Ok(barcodes)
 }
 
 /// Read the barcode whitelist and return a set of SSeq.
 pub fn read_barcode_whitelist_set(filename: impl AsRef<Path>) -> Result<FxHashSet<SSeq>, Error> {
-    let barcodes: FxHashSet<SSeq> = read_barcode_whitelist_vec(filename)?
-        .iter()
-        .map(|bc| *bc)
-        .collect();
+    let barcodes = read_barcode_whitelist_iter(filename)?
+        .map(|x| x.map(|x| x.0))
+        .collect::<std::io::Result<_>>()?;
     Ok(barcodes)
 }
 
@@ -39,11 +53,29 @@ pub fn read_barcode_whitelist_set(filename: impl AsRef<Path>) -> Result<FxHashSe
 pub fn read_barcode_whitelist_map(
     filename: impl AsRef<Path>,
 ) -> Result<FxHashMap<SSeq, u32>, Error> {
-    let barcodes: FxHashMap<SSeq, u32> = read_barcode_whitelist_vec(filename)?
-        .iter()
+    let barcodes = read_barcode_whitelist_iter(filename)?
         .enumerate()
-        .map(|(i, bc)| (*bc, i as u32))
-        .collect();
+        .map(|(i, x)| x.map(|x| (x.0, i as u32)))
+        .collect::<std::io::Result<_>>()?;
+    Ok(barcodes)
+}
+
+/// Read the barcode (translation) whitelist and return a map of SSeq to SSeq.
+pub fn read_barcode_whitelist_trans(
+    filename: impl AsRef<Path>,
+) -> Result<FxHashMap<SSeq, SSeq>, Error> {
+    let barcodes = read_barcode_whitelist_iter(filename.as_ref())?
+        .map(|x| {
+            let x = x?;
+            Ok((
+                x.0,
+                x.1.ok_or(format_err!(
+                    "not a translation whitelist: {:?}",
+                    filename.as_ref()
+                ))?,
+            ))
+        })
+        .collect::<Result<_, Error>>()?;
     Ok(barcodes)
 }
 
@@ -65,26 +97,70 @@ pub(crate) fn reduce_counts<K: Hash + Eq>(
     v1
 }
 
+#[derive(Serialize, Deserialize)]
+pub enum Whitelist {
+    Plain(FxHashSet<SSeq>),
+    Trans(FxHashMap<SSeq, SSeq>),
+}
+
+impl Whitelist {
+    pub fn new(p: impl AsRef<Path>) -> Result<Self, Error> {
+        // attempt first to deserialize
+        if let Ok(wl) = utils::read_obj(p.as_ref()) {
+            return Ok(wl);
+        }
+        // if the parent directory is "translation", we're
+        if p.as_ref()
+            .parent()
+            .and_then(|p| p.file_name().map(|d| d == "translation"))
+            .unwrap_or(false)
+        {
+            Ok(Whitelist::Trans(read_barcode_whitelist_trans(p)?))
+        } else {
+            Ok(Whitelist::Plain(read_barcode_whitelist_set(p)?))
+        }
+    }
+
+    fn check(&self, barcode: &mut Barcode, do_translate: bool) -> bool {
+        match self {
+            Whitelist::Plain(ref whitelist) => {
+                if whitelist.contains(&barcode.sequence) {
+                    barcode.valid = true;
+                } else {
+                    barcode.valid = false;
+                }
+            }
+            Whitelist::Trans(ref whitelist) => {
+                if let Some(translation) = whitelist.get(&barcode.sequence) {
+                    barcode.valid = true;
+                    if do_translate {
+                        barcode.sequence = *translation;
+                    }
+                } else {
+                    barcode.valid = false;
+                }
+            }
+        }
+        barcode.valid
+    }
+}
+
 /// Check an observed barcode sequence against a whitelist of barcodes
 pub struct BarcodeChecker {
-    whitelist: FxHashSet<SSeq>,
+    whitelist: Whitelist,
 }
 
 impl BarcodeChecker {
     pub fn new(whitelist: impl AsRef<Path>) -> Result<BarcodeChecker, Error> {
         Ok(BarcodeChecker {
-            whitelist: read_barcode_whitelist_set(whitelist)?,
+            whitelist: Whitelist::new(whitelist)?,
         })
     }
 
     /// Convert `barcode` to be `is_valid() == true` if the
     /// barcode sequence exactly matches a whitelist sequence.
-    pub fn check(&self, barcode: &mut Barcode) {
-        if self.whitelist.contains(&barcode.sequence) {
-            barcode.valid = true;
-        } else {
-            barcode.valid = false;
-        }
+    pub fn check(&self, barcode: &mut Barcode, do_translate: bool) -> bool {
+        self.whitelist.check(barcode, do_translate)
     }
 }
 
@@ -107,14 +183,20 @@ type Of64 = NotNan<f64>;
 /// Implement the standard 10x barcode correction algorithm.
 /// Requires the barcode whitelist (`whitelist`), and the observed counts
 /// of each whitelist barcode, prior to correction (`bc_counts`).
-pub struct BarcodeCorrector {
-    whitelist: FxHashSet<SSeq>,
-    bc_counts: SimpleHistogram<Barcode>,
+pub struct BarcodeCorrector<LibraryType>
+where
+    LibraryType: Eq + Hash,
+{
+    whitelist: Whitelist,
+    bc_counts: FxHashMap<LibraryType, SimpleHistogram<Barcode>>,
     max_expected_barcode_errors: f64,
     bc_confidence_threshold: f64,
 }
 
-impl BarcodeCorrector {
+impl<LibraryType> BarcodeCorrector<LibraryType>
+where
+    LibraryType: Eq + Hash,
+{
     /// Load a barcode corrector from a whitelist path
     /// and a set of barcode count files.
     /// # Arguments
@@ -127,12 +209,12 @@ impl BarcodeCorrector {
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
         whitelist: impl AsRef<Path>,
-        bc_counts: SimpleHistogram<Barcode>,
+        bc_counts: FxHashMap<LibraryType, SimpleHistogram<Barcode>>,
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64,
-    ) -> Result<BarcodeCorrector, Error> {
+    ) -> Result<BarcodeCorrector<LibraryType>, Error> {
         Ok(BarcodeCorrector {
-            whitelist: read_barcode_whitelist_set(whitelist)?,
+            whitelist: Whitelist::new(whitelist)?,
             bc_counts,
             max_expected_barcode_errors,
             bc_confidence_threshold,
@@ -148,7 +230,13 @@ impl BarcodeCorrector {
     /// the barcode if there's a whitelist barcode with posterior probability greater than
     /// self.bc_confidence_threshold
     #[allow(clippy::needless_range_loop)]
-    pub fn correct_barcode(&self, observed_barcode: &Barcode, qual: &[u8]) -> Option<Barcode> {
+    pub fn correct_barcode(
+        &self,
+        observed_barcode: &Barcode,
+        qual: &[u8],
+        library_type: LibraryType,
+        do_translate: bool,
+    ) -> Option<Barcode> {
         let mut a = observed_barcode.sequence; // Create a copy
 
         let mut candidates: Vec<(Of64, Barcode)> = Vec::new();
@@ -162,15 +250,15 @@ impl BarcodeCorrector {
                     continue;
                 }
                 a.sequence[pos] = *val;
-                let trial_bc = Barcode {
-                    valid: true,
+                let mut trial_bc = Barcode {
+                    valid: false,
                     sequence: a,
                     gem_group: observed_barcode.gem_group,
                 };
 
-                if self.whitelist.contains(&a) {
+                if self.whitelist.check(&mut trial_bc, do_translate) {
                     // Apply additive (Laplace) smoothing.
-                    let bc_count = 1 + self.bc_counts.get(&trial_bc);
+                    let bc_count = 1 + self.bc_counts.get(&library_type).unwrap().get(&trial_bc);
                     let prob_edit = Of64::from(probability(qv.min(BC_MAX_QV)));
                     let likelihood = prob_edit * Of64::from(bc_count as f64);
                     candidates.push((likelihood, trial_bc));
@@ -227,11 +315,14 @@ mod test {
         counts.insert(b2, 11);
         counts.insert(b3, 2);
 
+        let mut bc_counts = FxHashMap::default();
+        bc_counts.insert((), counts);
+
         let val = BarcodeCorrector {
             max_expected_barcode_errors: 1.0,
             bc_confidence_threshold: 0.95,
-            whitelist: wl,
-            bc_counts: counts,
+            whitelist: Whitelist::Plain(wl),
+            bc_counts,
         };
 
         // Easy
@@ -239,30 +330,36 @@ mod test {
         //assert_eq!(val.correct_barcode(&t1, &vec![66,66,66,66,66]), Some(Barcode::test_valid(b"AAAAA")));
 
         // Low quality
-        assert_eq!(val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66]), None);
+        assert_eq!(
+            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], (), false),
+            None
+        );
 
         // Trivial correction
         let t2 = Barcode::test_invalid(b"AAAAT");
         assert_eq!(
-            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40]),
+            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], (), false),
             Some(b1)
         );
 
         // Pseudo-count kills you
         let t3 = Barcode::test_invalid(b"ACGAT");
-        assert_eq!(val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66]), None);
+        assert_eq!(
+            val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66], (), false),
+            None
+        );
 
         // Quality help you
         let t4 = Barcode::test_invalid(b"ACGAT");
         assert_eq!(
-            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40]),
+            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40], (), false),
             Some(b3)
         );
 
         // Counts help you
         let t5 = Barcode::test_invalid(b"ACAAA");
         assert_eq!(
-            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40]),
+            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40], (), false),
             Some(b1)
         );
     }
@@ -275,11 +372,12 @@ mod test {
             let mut wl = FxHashSet::default();
             let bc = Barcode::test_valid(b"GCGATTGACCCAAAGG");
             wl.insert(bc.sequence);
-            let counts = SimpleHistogram::new();
+            let mut counts = FxHashMap::default();
+            counts.insert(0, SimpleHistogram::new());
             let corrector = BarcodeCorrector {
                 max_expected_barcode_errors: 1.0,
                 bc_confidence_threshold: 0.975,
-                whitelist: wl,
+                whitelist: Whitelist::Plain(wl),
                 bc_counts: counts,
             };
 
@@ -290,7 +388,7 @@ mod test {
             let bc_with_n = Barcode::test_invalid(&bc_seq_with_n);
 
             assert_eq!(
-                corrector.correct_barcode(&bc_with_n, &qual),
+                corrector.correct_barcode(&bc_with_n, &qual, 0, false),
                 Some(bc)
             );
 

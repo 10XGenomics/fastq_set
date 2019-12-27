@@ -86,9 +86,7 @@ pub fn write_obj<T: Any + Serialize, P: AsRef<Path> + Debug>(
 }
 
 /// Serialize an object  of type `T` from the file `filename`
-pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path> + Debug>(
-    filename: P,
-) -> Result<T, Error> {
+pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path>>(filename: P) -> Result<T, Error> {
     let f = File::open(&filename)?;
     let lz4_reader = lz4::Decoder::new(f)?;
     let mut reader = BufReader::new(lz4_reader);
