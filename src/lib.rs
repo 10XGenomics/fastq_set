@@ -164,7 +164,7 @@ pub trait HasBarcode {
     fn set_barcode(&mut self, barcode: Barcode);
     fn raw_bc_seq(&self) -> &[u8];
     fn raw_bc_qual(&self) -> &[u8];
-    fn barcode_type(&self) -> Self::LibraryType;
+    fn library_type(&self) -> Self::LibraryType;
 }
 
 /// A trait for reads that may have a sample index.

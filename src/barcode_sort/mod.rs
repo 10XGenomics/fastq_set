@@ -179,7 +179,7 @@ where
     fn process(&mut self, read: T) -> Result<(), Error> {
         if read.barcode().is_valid() {
             self.valid_bc_distribution
-                .entry(read.barcode_type())
+                .entry(read.library_type())
                 .or_insert(SimpleHistogram::new())
                 .observe(read.barcode());
             self.valid_sender.send(read)?;

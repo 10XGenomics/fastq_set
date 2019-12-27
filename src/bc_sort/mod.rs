@@ -167,7 +167,7 @@ where
 
                         // count reads on each barcode state
                         counts
-                            .entry(read_pair.barcode_type())
+                            .entry(read_pair.library_type())
                             .or_insert(SimpleHistogram::new())
                             .observe(read_pair.barcode());
 
@@ -274,7 +274,7 @@ where
                     match self.corrector.correct_barcode(
                         &read_pair.barcode(),
                         read_pair.barcode_qual(),
-                        read_pair.barcode_type(),
+                        read_pair.library_type(),
                         do_translate,
                     ) {
                         Some(new_barcode) => read_pair.set_barcode(new_barcode),
@@ -283,7 +283,7 @@ where
 
                     // count reads on each (gem_group, bc)
                     counts
-                        .entry(read_pair.barcode_type())
+                        .entry(read_pair.library_type())
                         .or_insert(SimpleHistogram::new())
                         .observe(read_pair.barcode());
                     read_sender.send(read_pair)?;

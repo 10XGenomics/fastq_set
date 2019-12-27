@@ -155,7 +155,7 @@ impl HasBarcode for DnaRead {
         self.data.get_range(self.bc_range, ReadPart::Qual).unwrap()
     }
 
-    fn barcode_type(&self) -> Self::LibraryType {
+    fn library_type(&self) -> Self::LibraryType {
         ()
     }
 }
