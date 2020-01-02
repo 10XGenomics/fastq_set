@@ -114,12 +114,16 @@ where
         self.sorter.write_barcode_counts(path)
     }
 
-    pub fn num_valid_items(&self) -> i64 {
-        self.sorter.valid_items
+    pub fn num_valid_items(
+        &self,
+    ) -> &FxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
+        &self.sorter.valid_items
     }
 
-    pub fn num_invalid_items(&self) -> i64 {
-        self.sorter.invalid_items
+    pub fn num_invalid_items(
+        &self,
+    ) -> &FxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
+        &self.sorter.invalid_items
     }
 }
 
@@ -145,8 +149,8 @@ where
     invalid_writer: ShardWriter<T, Order>,
     invalid_sender: ShardSender<T>,
     valid_bc_distribution: FxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
-    valid_items: i64,
-    invalid_items: i64,
+    valid_items: FxHashMap<<T as HasBarcode>::LibraryType, i64>,
+    invalid_items: FxHashMap<<T as HasBarcode>::LibraryType, i64>,
 }
 
 impl<T, Order> BarcodeAwareSorter<T, Order>
@@ -171,8 +175,8 @@ where
             invalid_writer,
             invalid_sender,
             valid_bc_distribution: FxHashMap::default(),
-            valid_items: 0,
-            invalid_items: 0,
+            valid_items: FxHashMap::default(),
+            invalid_items: FxHashMap::default(),
         })
     }
 
@@ -182,11 +186,11 @@ where
                 .entry(read.library_type())
                 .or_insert(SimpleHistogram::new())
                 .observe(read.barcode());
+            *self.valid_items.entry(read.library_type()).or_insert(0) += 1;
             self.valid_sender.send(read)?;
-            self.valid_items += 1;
         } else {
+            *self.invalid_items.entry(read.library_type()).or_insert(0) += 1;
             self.invalid_sender.send(read)?;
-            self.invalid_items += 1;
         }
         Ok(())
     }
