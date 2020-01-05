@@ -548,9 +548,9 @@ impl<'a> MutReadPair<'a> {
         ReadPair {
             offsets: self.offsets,
             data: match self.storage {
-                ReadPairStorage::SharedBuffer => self.data.take().freeze(),
+                ReadPairStorage::SharedBuffer => self.data.split().freeze(),
                 ReadPairStorage::PerReadAllocation => {
-                    Bytes::from(self.data.take().freeze().to_vec()) // Allocate a vector and then make Bytes
+                    Bytes::from(self.data.split().freeze().to_vec()) // Allocate a vector and then make Bytes
                 }
             },
         }
