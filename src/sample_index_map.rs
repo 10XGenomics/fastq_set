@@ -1,12 +1,12 @@
 //! Mappings from symbol sample index set names to sample index sequences
 //! for official 10x sample index plate products.
 
-use fxhash::FxHashMap;
 use lazy_static::lazy_static;
+use metric::TxHashMap;
 
 lazy_static! {
-    pub static ref SAMPLE_INDEX_MAP: FxHashMap<&'static str, [&'static str; 4]> = {
-        let mut m = FxHashMap::default();
+    pub static ref SAMPLE_INDEX_MAP: TxHashMap<&'static str, [&'static str; 4]> = {
+        let mut m = TxHashMap::default();
         m.insert("220027", ["TCGCCATA", "GTATACAC", "AATGGTGG", "CGCATGCT"]);
         m.insert("220028", ["TATCCTCG", "GCGAGGTC", "CGCTTCAA", "ATAGAAGT"]);
         m.insert("220029", ["TGACGTCG", "CTTGTGTA", "ACGACCGT", "GACTAAAC"]);

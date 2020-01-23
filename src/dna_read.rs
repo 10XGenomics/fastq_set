@@ -4,10 +4,9 @@
 //! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
 //! trimming.
 
+use metric::TxHashMap;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
-
-use fxhash::FxHashMap;
 
 use crate::read_pair::{ReadPair, ReadPart, RpRange, WhichRead};
 use crate::{
@@ -40,11 +39,11 @@ pub struct DnaProcessor {
     chunk_id: u16,
     trim_r1: u8,
     trim_r2: u8,
-    whitelist: FxHashMap<SSeq, u32>,
+    whitelist: TxHashMap<SSeq, u32>,
 }
 
 impl DnaProcessor {
-    pub fn new(chunk: DnaChunk, chunk_id: u16, whitelist: FxHashMap<SSeq, u32>) -> Self {
+    pub fn new(chunk: DnaChunk, chunk_id: u16, whitelist: TxHashMap<SSeq, u32>) -> Self {
         DnaProcessor {
             chunk,
             chunk_id,

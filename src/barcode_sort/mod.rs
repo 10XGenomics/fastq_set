@@ -3,8 +3,7 @@ use crate::Barcode;
 use crate::FastqProcessor;
 use crate::HasBarcode;
 use failure::Error;
-use fxhash::FxHashMap;
-use metric::{Metric, SerdeFormat, SimpleHistogram};
+use metric::{Metric, SerdeFormat, SimpleHistogram, TxHashMap};
 use serde::{Deserialize, Serialize};
 use shardio::*;
 use std;
@@ -116,13 +115,13 @@ where
 
     pub fn num_valid_items(
         &self,
-    ) -> &FxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
+    ) -> &TxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
         &self.sorter.valid_items
     }
 
     pub fn num_invalid_items(
         &self,
-    ) -> &FxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
+    ) -> &TxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
         &self.sorter.invalid_items
     }
 }
@@ -148,9 +147,9 @@ where
     valid_sender: ShardSender<T>,
     invalid_writer: ShardWriter<T, Order>,
     invalid_sender: ShardSender<T>,
-    valid_bc_distribution: FxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
-    valid_items: FxHashMap<<T as HasBarcode>::LibraryType, i64>,
-    invalid_items: FxHashMap<<T as HasBarcode>::LibraryType, i64>,
+    valid_bc_distribution: TxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
+    valid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
+    invalid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
 }
 
 impl<T, Order> BarcodeAwareSorter<T, Order>
@@ -174,9 +173,9 @@ where
             valid_sender,
             invalid_writer,
             invalid_sender,
-            valid_bc_distribution: FxHashMap::default(),
-            valid_items: FxHashMap::default(),
-            invalid_items: FxHashMap::default(),
+            valid_bc_distribution: TxHashMap::default(),
+            valid_items: TxHashMap::default(),
+            invalid_items: TxHashMap::default(),
         })
     }
 
@@ -215,11 +214,11 @@ where
     Q: AsRef<Path>,
     R: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    let bc_counts: FxHashMap<R, SimpleHistogram<Barcode>> = {
-        let mut res = FxHashMap::default();
+    let bc_counts: TxHashMap<R, SimpleHistogram<Barcode>> = {
+        let mut res = TxHashMap::default();
         for x in shard_counts {
             let y = std::io::BufReader::new(std::fs::File::open(x)?);
-            let mut z: FxHashMap<R, SimpleHistogram<Barcode>> = bincode::deserialize_from(y)?;
+            let mut z: TxHashMap<R, SimpleHistogram<Barcode>> = bincode::deserialize_from(y)?;
             for (typ, hist) in z.drain() {
                 res.entry(typ).or_insert(SimpleHistogram::new()).merge(hist)
             }

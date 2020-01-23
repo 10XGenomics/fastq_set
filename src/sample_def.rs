@@ -1,8 +1,8 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
 //! Find FASTQs from SampleDefs which get passed to the input of 10x pipelines.
-use fxhash::FxHashMap;
 use glob::glob;
+use metric::TxHashMap;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -118,7 +118,7 @@ fn find_fastqs_10x(
     match lanes {
         Some(lanes_) => {
             for lane in lanes_ {
-                let mut t2f = FxHashMap::default();
+                let mut t2f = TxHashMap::default();
                 for read_type in read_types {
                     let pattern = format!(
                         "{}{}_si-{}_lane-{:03}[_\\-]*.fastq*",
@@ -130,7 +130,7 @@ fn find_fastqs_10x(
             }
         }
         None => {
-            let mut t2f = FxHashMap::default();
+            let mut t2f = TxHashMap::default();
             for read_type in read_types {
                 let pattern = format!("{}{}_si-{}*.fastq*", prefix, read_type, si_glob);
                 let files = fetch(&pattern);

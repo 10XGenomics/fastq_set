@@ -4,8 +4,7 @@
 //! and correcting incorrect barcodes.
 
 use failure::{format_err, Error};
-use fxhash::{FxHashMap, FxHashSet};
-use metric::SimpleHistogram;
+use metric::{SimpleHistogram, TxHashMap, TxHashSet};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -42,7 +41,7 @@ pub fn read_barcode_whitelist_vec(filename: impl AsRef<Path>) -> Result<Vec<SSeq
 }
 
 /// Read the barcode whitelist and return a set of SSeq.
-pub fn read_barcode_whitelist_set(filename: impl AsRef<Path>) -> Result<FxHashSet<SSeq>, Error> {
+pub fn read_barcode_whitelist_set(filename: impl AsRef<Path>) -> Result<TxHashSet<SSeq>, Error> {
     let barcodes = read_barcode_whitelist_iter(filename)?
         .map(|x| x.map(|x| x.0))
         .collect::<std::io::Result<_>>()?;
@@ -52,7 +51,7 @@ pub fn read_barcode_whitelist_set(filename: impl AsRef<Path>) -> Result<FxHashSe
 /// Read the barcode whitelist and return a map of SSeq to integers.
 pub fn read_barcode_whitelist_map(
     filename: impl AsRef<Path>,
-) -> Result<FxHashMap<SSeq, u32>, Error> {
+) -> Result<TxHashMap<SSeq, u32>, Error> {
     let barcodes = read_barcode_whitelist_iter(filename)?
         .enumerate()
         .map(|(i, x)| x.map(|x| (x.0, i as u32)))
@@ -63,7 +62,7 @@ pub fn read_barcode_whitelist_map(
 /// Read the barcode (translation) whitelist and return a map of SSeq to SSeq.
 pub fn read_barcode_whitelist_trans(
     filename: impl AsRef<Path>,
-) -> Result<FxHashMap<SSeq, SSeq>, Error> {
+) -> Result<TxHashMap<SSeq, SSeq>, Error> {
     let barcodes = read_barcode_whitelist_iter(filename.as_ref())?
         .map(|x| {
             let x = x?;
@@ -81,14 +80,14 @@ pub fn read_barcode_whitelist_trans(
 
 /// Read the barcode whitelist and return a map of SSeq to integers.
 #[deprecated = "Use read_barcode_whitelist_map instead"]
-pub fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<FxHashMap<SSeq, u32>, Error> {
+pub fn load_barcode_whitelist(filename: impl AsRef<Path>) -> Result<TxHashMap<SSeq, u32>, Error> {
     read_barcode_whitelist_map(filename)
 }
 
 pub(crate) fn reduce_counts<K: Hash + Eq>(
-    mut v1: FxHashMap<K, u32>,
-    mut v2: FxHashMap<K, u32>,
-) -> FxHashMap<K, u32> {
+    mut v1: TxHashMap<K, u32>,
+    mut v2: TxHashMap<K, u32>,
+) -> TxHashMap<K, u32> {
     for (k, v) in v2.drain() {
         let counter = v1.entry(k).or_insert(0);
         *counter += v;
@@ -99,8 +98,8 @@ pub(crate) fn reduce_counts<K: Hash + Eq>(
 
 #[derive(Serialize, Deserialize)]
 pub enum Whitelist {
-    Plain(FxHashSet<SSeq>),
-    Trans(FxHashMap<SSeq, SSeq>),
+    Plain(TxHashSet<SSeq>),
+    Trans(TxHashMap<SSeq, SSeq>),
 }
 
 impl Whitelist {
@@ -164,11 +163,11 @@ impl BarcodeChecker {
     }
 }
 
-/// Load barcode count data from a set of serialized files containg FxHashMap<Barcode, u32> counts.
+/// Load barcode count data from a set of serialized files containing HashMap<Barcode, u32> counts.
 pub fn load_barcode_counts(
     count_files: &[impl AsRef<Path>],
-) -> Result<FxHashMap<Barcode, u32>, Error> {
-    let mut counts = FxHashMap::default();
+) -> Result<TxHashMap<Barcode, u32>, Error> {
+    let mut counts = TxHashMap::default();
     for f in count_files {
         let shard_counts = crate::utils::read_obj(f.as_ref())?;
         counts = reduce_counts(counts, shard_counts);
@@ -188,7 +187,7 @@ where
     LibraryType: Eq + Hash,
 {
     whitelist: Whitelist,
-    bc_counts: FxHashMap<LibraryType, SimpleHistogram<Barcode>>,
+    bc_counts: TxHashMap<LibraryType, SimpleHistogram<Barcode>>,
     max_expected_barcode_errors: f64,
     bc_confidence_threshold: f64,
 }
@@ -209,7 +208,7 @@ where
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
         whitelist: impl AsRef<Path>,
-        bc_counts: FxHashMap<LibraryType, SimpleHistogram<Barcode>>,
+        bc_counts: TxHashMap<LibraryType, SimpleHistogram<Barcode>>,
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64,
     ) -> Result<BarcodeCorrector<LibraryType>, Error> {
@@ -303,7 +302,7 @@ mod test {
 
     #[test]
     pub fn test_barcode_correction() {
-        let mut wl = FxHashSet::default();
+        let mut wl = TxHashSet::default();
 
         let b1 = Barcode::test_valid(b"AAAAA");
         let b2 = Barcode::test_valid(b"AAGAC");
@@ -320,7 +319,7 @@ mod test {
         counts.insert(b2, 11);
         counts.insert(b3, 2);
 
-        let mut bc_counts = FxHashMap::default();
+        let mut bc_counts = TxHashMap::default();
         bc_counts.insert((), counts);
 
         let val = BarcodeCorrector {
@@ -371,7 +370,7 @@ mod test {
 
     #[test]
     pub fn test_barcode_correction_no_valid_counts() {
-        let mut wl = FxHashSet::default();
+        let mut wl = TxHashSet::default();
 
         let b1 = Barcode::test_valid(b"AAAAA");
         let b2 = Barcode::test_valid(b"AAGAC");
@@ -383,7 +382,7 @@ mod test {
         wl.insert(b3.sequence);
         wl.insert(b4.sequence);
 
-        let bc_counts: FxHashMap<usize, SimpleHistogram<Barcode>> = FxHashMap::default();
+        let bc_counts: TxHashMap<usize, SimpleHistogram<Barcode>> = TxHashMap::default();
 
         let val = BarcodeCorrector {
             max_expected_barcode_errors: 1.0,
@@ -415,10 +414,10 @@ mod test {
         fn prop_test_n_in_barcode(
             n_pos in (0..16usize)
         ) {
-            let mut wl = FxHashSet::default();
+            let mut wl = TxHashSet::default();
             let bc = Barcode::test_valid(b"GCGATTGACCCAAAGG");
             wl.insert(bc.sequence);
-            let mut counts = FxHashMap::default();
+            let mut counts = TxHashMap::default();
             counts.insert(0, SimpleHistogram::new());
             let corrector = BarcodeCorrector {
                 max_expected_barcode_errors: 1.0,

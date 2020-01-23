@@ -7,7 +7,7 @@ use fastq_10x::read_pair::WhichRead;
 use fastq_10x::read_pair_iter::{InputFastqs, ReadPairIter};
 // use fastq_10x::rna_read::{ChemistryDef, RnaChunk};
 use fastq_10x::FastqProcessor;
-use fxhash::FxHashMap;
+use metric::TxHashMap;
 use std::fs::File;
 use std::process::Command;
 
@@ -78,7 +78,7 @@ fn read_pair_count(file: impl ToString) -> usize {
 // fn rna_read_trim(
 //     chemistry: ChemistryDef,
 //     fastq_file: impl ToString,
-//     adapter_map: &FxHashMap<WhichRead, Vec<Adapter>>,
+//     adapter_map: &TxHashMap<WhichRead, Vec<Adapter>>,
 // ) -> usize {
 //     let mut ad_catalog = ReadAdapterCatalog::from(adapter_map);
 //     let chunk = RnaChunk::new(
@@ -199,7 +199,7 @@ fn run_fastq_benchmark(c: &mut Criterion) {
 //     let chemistry: ChemistryDef =
 //         serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
 //             .unwrap();
-//     let vdj_adapters: FxHashMap<WhichRead, Vec<Adapter>> =
+//     let vdj_adapters: TxHashMap<WhichRead, Vec<Adapter>> =
 //         serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap()).unwrap();
 
 //     c.bench(
