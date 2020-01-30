@@ -215,7 +215,7 @@ impl RpRange {
         assert!(offset < (1 << 15));
         let len_bits = match len {
             Some(v) => {
-                assert!(v < (1 << 15));
+                assert!(v < 0x7FFF);
                 v
             }
             None => 0x7FFF,
@@ -262,7 +262,7 @@ impl RpRange {
     // # Tests
     // * `prop_test_rprange_setter()`
     fn set_len(&mut self, len: usize) {
-        assert!(len < (1 << 15));
+        assert!(len < 0x7FFF);
         self.val = (self.val & (!0x7FFFu32)) | len as u32;
     }
 
@@ -668,6 +668,7 @@ mod tests {
     use std::cmp::{max, min};
 
     const MAX_RPRANGE_ENTRY: usize = 1usize << 15;
+
     #[test]
     #[should_panic]
     fn test_rprange_invalid_offset() {
@@ -730,7 +731,7 @@ mod tests {
             len in any::<usize>()
         ) {
             // Make sure out internal compact representation is valid for random inputs
-            let len = if len <= MAX_RPRANGE_ENTRY { Some(len) } else { None };
+            let len = if len < MAX_RPRANGE_ENTRY { Some(len) } else { None };
             let rprange = RpRange::new(read, offset, len);
             assert!(rprange.read() == read);
             assert!(rprange.offset() == offset);
@@ -745,17 +746,17 @@ mod tests {
             offset in 0..MAX_RPRANGE_ENTRY,
             len in any::<usize>(),
             new_offset in 0..MAX_RPRANGE_ENTRY,
-            new_len in 0..MAX_RPRANGE_ENTRY
+            new_len in 0..MAX_RPRANGE_ENTRY-1
         ) {
             // Make sure we set length and offset correctly using the setter functions
             // for random inputs
-            let len = if len <= MAX_RPRANGE_ENTRY { Some(len) } else { None };
+            let len = if len < MAX_RPRANGE_ENTRY { Some(len) } else { None };
             let mut rprange = RpRange::new(read, offset, len);
             rprange.set_offset(new_offset);
             rprange.set_len(new_len);
             assert!(rprange.read() == read);
             assert!(rprange.offset() == new_offset);
-            assert!(rprange.len() == Some(new_len));
+            assert_eq!(rprange.len(), Some(new_len));
         }
     }
 
