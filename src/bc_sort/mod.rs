@@ -94,12 +94,12 @@ where
         )?;
 
         // FIXME - configure thread consumption
-        let fq_w_senders: Vec<(P, ShardSender<<P as FastqProcessor>::ReadType>)> = self
-            .fastq_inputs
-            .iter()
-            .cloned()
-            .map(|fq| (fq, writer.get_sender()))
-            .collect();
+        let fq_w_senders: Vec<(P, ShardSender<<P as FastqProcessor>::ReadType, BcSortOrder>)> =
+            self.fastq_inputs
+                .iter()
+                .cloned()
+                .map(|fq| (fq, writer.get_sender()))
+                .collect();
 
         let bc_counts = fq_w_senders
             .into_par_iter()
@@ -128,7 +128,7 @@ where
     fn process_fastq<'a>(
         &self,
         chunk: P,
-        mut bc_sender: ShardSender<<P as FastqProcessor>::ReadType>,
+        mut bc_sender: ShardSender<<P as FastqProcessor>::ReadType, BcSortOrder>,
     ) -> Result<
         TxHashMap<
             <<P as FastqProcessor>::ReadType as HasBarcode>::LibraryType,

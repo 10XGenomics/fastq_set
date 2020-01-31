@@ -142,11 +142,12 @@ where
     T: 'static + HasBarcode + Send + Serialize,
     <T as HasBarcode>::LibraryType: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     Order: SortKey<T>,
+    Order::Key: 'static + Send + Serialize,
 {
     valid_writer: ShardWriter<T, Order>,
-    valid_sender: ShardSender<T>,
+    valid_sender: ShardSender<T, Order>,
     invalid_writer: ShardWriter<T, Order>,
-    invalid_sender: ShardSender<T>,
+    invalid_sender: ShardSender<T, Order>,
     valid_bc_distribution: TxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
     valid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
     invalid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
@@ -195,8 +196,8 @@ where
     }
 
     fn finish(&mut self) -> Result<(), Error> {
-        self.valid_sender.finished();
-        self.invalid_sender.finished();
+        self.valid_sender.finished()?;
+        self.invalid_sender.finished()?;
         self.valid_writer.finish()?;
         self.invalid_writer.finish()?;
         Ok(())

@@ -27,7 +27,7 @@ itertools = ">=0.8"
 lz4 = "*"
 fastq = "^0.6"
 bio = ">=0.29"
-shardio = "0.5.3"
+shardio = "0.6"
 
 metric = { path = "../metric" }
 
