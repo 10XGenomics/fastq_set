@@ -2,11 +2,9 @@
 
 //! Utility methods.
 
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::boxed::Box;
-use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
-use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
@@ -16,9 +14,10 @@ use bincode::{deserialize_from, serialize_into};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use failure::{format_err, Error};
+use failure::Error;
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
+use log::warn;
 use lz4;
 
 const GZ_BUF_SIZE: usize = 1 << 22;
@@ -72,12 +71,9 @@ pub fn write_obj<T: Any + Serialize, P: AsRef<Path> + Debug>(
     let f = File::create(&filename)?;
     let mut writer = lz4::EncoderBuilder::new().build(f)?;
 
-    let typeid = TypeId::of::<T>();
-    let mut hasher = DefaultHasher::new();
-    typeid.hash(&mut hasher);
-    let type_hash = hasher.finish();
+    let type_name = std::any::type_name::<T>();
 
-    serialize_into(&mut writer, &type_hash)?;
+    serialize_into(&mut writer, &type_name)?;
     serialize_into(&mut writer, &obj)?;
 
     let (_, result) = writer.finish();
@@ -91,19 +87,16 @@ pub fn read_obj<T: Any + DeserializeOwned, P: AsRef<Path>>(filename: P) -> Resul
     let lz4_reader = lz4::Decoder::new(f)?;
     let mut reader = BufReader::new(lz4_reader);
 
-    let typeid = TypeId::of::<T>();
-    let mut hasher = DefaultHasher::new();
-    typeid.hash(&mut hasher);
-    let type_hash = hasher.finish();
+    let type_name = std::any::type_name::<T>();
+    let file_type_name: String = deserialize_from(&mut reader)?;
 
-    let file_type_hash: u64 = deserialize_from(&mut reader)?;
-
-    if type_hash != file_type_hash {
-        let err = format_err!(
-            "data type in file '{:?}' does not match expected type",
-            filename.as_ref()
+    if type_name != file_type_name {
+        warn!(
+            "data type '{}' in file '{:?}' does not match expected type '{}'",
+            file_type_name,
+            filename.as_ref(),
+            type_name,
         );
-        return Err(err);
     }
 
     let res = deserialize_from(&mut reader)?;
@@ -116,6 +109,7 @@ mod test {
     use serde::{Deserialize, Serialize};
 
     #[test]
+    #[ignore]
     fn test_write_obj_read_obj() -> Result<(), Error> {
         let fn1 = "test1.bin";
         let fn2 = "test2.bin";
