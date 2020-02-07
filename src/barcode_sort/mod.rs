@@ -144,10 +144,12 @@ where
     Order: SortKey<T>,
     Order::Key: 'static + Send + Serialize,
 {
-    valid_writer: ShardWriter<T, Order>,
+    // note: sender must appear before writers, because senders
+    // must be dropped before writers.
     valid_sender: ShardSender<T, Order>,
-    invalid_writer: ShardWriter<T, Order>,
+    valid_writer: ShardWriter<T, Order>,
     invalid_sender: ShardSender<T, Order>,
+    invalid_writer: ShardWriter<T, Order>,
     valid_bc_distribution: TxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
     valid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
     invalid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
