@@ -14,8 +14,8 @@ use std::path::Path;
 
 // TODO: Set the parameters optimally?
 pub const SEND_BUFFER_SZ: usize = 256;
-pub const DISK_CHUNK_SZ: usize = 2048; // 2MB if ~1kB per record
-pub const ITEM_BUFFER_SZ: usize = 1_000_000; // 1GB if above holds
+pub const DISK_CHUNK_SZ: usize = 8_192; // 8MiB if ~1kB per record
+pub const ITEM_BUFFER_SZ: usize = 1_048_576; // 1GiB if above holds
 
 pub trait ReadVisitor {
     type ReadType;
