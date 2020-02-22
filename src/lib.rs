@@ -16,6 +16,7 @@
 
 use fastq;
 
+pub mod illumina_header_info;
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod read_pair_writer;
