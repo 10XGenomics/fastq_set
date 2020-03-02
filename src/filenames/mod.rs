@@ -30,10 +30,26 @@ pub enum FastqDef {
 }
 
 impl FastqDef {
-    pub fn bcl2fastq(fastq_path: String, sample_name: String) -> FastqDef {
+    pub fn bcl2fastq(
+        fastq_path: String,
+        sample_name: String,
+        lanes: Option<Vec<usize>>,
+    ) -> FastqDef {
         FastqDef::Bcl2Fastq(Bcl2FastqDef {
             fastq_path,
             sample_name,
+            lanes,
+        })
+    }
+    pub fn bcl_processor(
+        fastq_path: String,
+        sample_indices: Vec<String>,
+        lanes: Option<Vec<usize>>,
+    ) -> FastqDef {
+        FastqDef::BclProcessor(BclProcessorFastqDef {
+            fastq_path,
+            sample_indices,
+            lanes,
         })
     }
 }

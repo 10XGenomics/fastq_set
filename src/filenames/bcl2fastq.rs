@@ -11,7 +11,7 @@ use crate::read_pair_iter::InputFastqs;
 
 lazy_static! {
     static ref BCL2FASTQ_REGEX: Regex =
-        Regex::new(r"([\w_]+)_S(\d+)_L(\d+)_([RI][A12])_(\d+).fastq(.gz)?").unwrap();
+        Regex::new(r"^([\w_-]+)_S(\d+)_L(\d+)_([RI][A12])_(\d+).fastq(.gz)?$").unwrap();
 }
 
 /// A pointer to a set of FASTQ files on disk,
@@ -26,6 +26,9 @@ pub struct Bcl2FastqDef {
 
     /// Sample name used for this sample. Should form a prefix of the filename
     pub sample_name: String,
+
+    /// Lanes to include. None indicates that all lanes should be included
+    pub lanes: Option<Vec<usize>>,
 }
 
 impl FindFastqs for Bcl2FastqDef {
@@ -34,7 +37,13 @@ impl FindFastqs for Bcl2FastqDef {
 
         let mut res = Vec::new();
         for (info, fastqs) in all_fastqs {
-            if info.sample == self.sample_name {
+            if info.sample == self.sample_name
+                && self
+                    .lanes
+                    .as_ref()
+                    .map_or(true, |lanes| lanes.contains(&info.lane))
+            // require that the observed lane is in the allowed list, or it's None
+            {
                 res.push(fastqs);
             }
         }
@@ -187,6 +196,23 @@ mod test {
     }
 
     #[test]
+    fn test_parse_hyphen() {
+        let filename = "heart-1k-v3_S1_L002_R2_001.fastq.gz";
+        let r = IlmnFastqFile::new(filename);
+
+        let expected = IlmnFastqFile {
+            path: PathBuf::from(filename.to_string()),
+            sample: "heart-1k-v3".to_string(),
+            s: 1,
+            lane: 2,
+            read: "R2".to_string(),
+            chunk: 1,
+        };
+
+        assert_eq!(r.unwrap(), expected);
+    }
+
+    #[test]
     fn test_bad() {
         let filename = "heart_1k_v3_S1_LA_R2_001.fastq.gz";
         let r = IlmnFastqFile::new(filename);
@@ -204,6 +230,7 @@ mod test {
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
             sample_name: "Infected".to_string(),
+            lanes: None,
         };
 
         let fqs = query.find_fastqs()?;
@@ -214,6 +241,25 @@ mod test {
         );
         assert_eq!(
             fqs[1].r1,
+            "test/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn query_bcl2fastq_lanes() -> Result<(), Error> {
+        let path = "test/filenames/bcl2fastq";
+
+        let query = Bcl2FastqDef {
+            fastq_path: path.to_string(),
+            sample_name: "Infected".to_string(),
+            lanes: Some(vec![2]),
+        };
+
+        let fqs = query.find_fastqs()?;
+        assert_eq!(fqs.len(), 1);
+        assert_eq!(
+            fqs[0].r1,
             "test/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
         );
         Ok(())

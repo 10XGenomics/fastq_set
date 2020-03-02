@@ -73,6 +73,7 @@ mod test {
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
             sample_name: "Infected".to_string(),
+            lanes: None,
         };
 
         let mut fqs = query.find_fastqs()?;
