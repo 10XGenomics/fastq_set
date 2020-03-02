@@ -202,7 +202,7 @@ fn try_parse(f: PathBuf) -> Option<(BclProcessorFile, PathBuf)> {
 }
 
 fn try_parse_bclprocessor_file(filename: &str) -> Option<BclProcessorFile> {
-    let re = "read-([RI][A0-9])_si-([^_]+)_lane-([0-9]+)-chunk-([0-9]+).fastq(.gz)?";
+    let re = "^read-([RI][A0-9])_si-([^_]+)_lane-([0-9]+)-chunk-([0-9]+).fastq(.gz)?$";
     let re = regex::Regex::new(re).unwrap();
 
     match re.captures(filename) {
