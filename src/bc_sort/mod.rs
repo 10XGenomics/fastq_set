@@ -14,7 +14,9 @@ use std::marker::PhantomData;
 
 use rayon::prelude::*;
 
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::distributions::{Distribution, Uniform};
+use rand::SeedableRng;
+use rand_xorshift::XorShiftRng;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -140,11 +142,13 @@ where
         let mut counts = TxHashMap::default();
 
         // Always subsample deterministically
-        let mut rand = XorShiftRng::from_seed([0; 16]);
+        let mut rand = XorShiftRng::seed_from_u64(0);
         // below: 1.0-r "inverts" the sense of the fraction so that values near
         // 1.0 don't overflow.  Values near zero are a problem.
         let bc_subsample_thresh = chunk.bc_subsample_rate();
         let read_subsample_rate = chunk.read_subsample_rate();
+
+        let uniform = Uniform::new(0.0, 1.0);
 
         let fastqs = chunk.fastq_files();
         let iter = ReadPairIter::from_fastq_files(&fastqs)?;
@@ -153,7 +157,7 @@ where
             let r = _r?;
 
             // Read subsampling
-            if rand.gen_range(0.0, 1.0) < read_subsample_rate {
+            if uniform.sample(&mut rand) < read_subsample_rate {
                 match chunk.process_read(r) {
                     None => (),
                     Some(mut read_pair) => {

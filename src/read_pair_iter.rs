@@ -10,8 +10,9 @@ use fastq::{self, RecordRefIter};
 
 use bytes::{BufMut, BytesMut};
 use failure::{format_err, Error, ResultExt};
-use rand::distributions::{Distribution, Range};
-use rand::{SeedableRng, XorShiftRng};
+use rand::distributions::{Distribution, Uniform};
+use rand::SeedableRng;
+use rand_xorshift::XorShiftRng;
 use std::io::Seek;
 use std::io::{BufRead, BufReader, Read};
 
@@ -66,7 +67,7 @@ pub struct ReadPairIter {
     r1_interleaved: bool,
     buffer: BytesMut,
     rand: XorShiftRng,
-    range: Range<f64>,
+    uniform: Uniform<f64>,
     subsample_rate: f64,
     storage: ReadPairStorage,
     records_read: [usize; 4],
@@ -175,8 +176,8 @@ impl ReadPairIter {
             iters,
             r1_interleaved,
             buffer,
-            rand: XorShiftRng::from_seed([42; 16]),
-            range: Range::new(0.0, 1.0),
+            rand: XorShiftRng::seed_from_u64(0),
+            uniform: Uniform::new(0.0, 1.0),
             subsample_rate: 1.0,
             storage: ReadPairStorage::default(),
             records_read: [0; 4],
@@ -188,8 +189,8 @@ impl ReadPairIter {
         self
     }
 
-    pub fn seed(mut self, seed: [u8; 16]) -> Self {
-        self.rand = XorShiftRng::from_seed(seed);
+    pub fn seed(mut self, seed: u64) -> Self {
+        self.rand = XorShiftRng::seed_from_u64(seed);
         self
     }
 
@@ -211,7 +212,7 @@ impl ReadPairIter {
         let mut rp = MutReadPair::empty(&mut self.buffer).storage(self.storage);
 
         loop {
-            let sample = self.range.sample(&mut self.rand) < self.subsample_rate;
+            let sample = self.uniform.sample(&mut self.rand) < self.subsample_rate;
 
             // Track which reader was the first to finish.
             let mut iter_ended = [false; 4];

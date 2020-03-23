@@ -286,7 +286,7 @@ pub trait FastqProcessor {
         FastqProcessorIter::with_storage(self, storage)
     }
 
-    fn seeded_iter(&self, seed: [u8; 16]) -> Result<FastqProcessorIter<'_, Self>, Error>
+    fn seeded_iter(&self, seed: u64) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
         Self: Sized,
     {
@@ -295,7 +295,7 @@ pub trait FastqProcessor {
 
     fn seeded_iter_with_storage(
         &self,
-        seed: [u8; 16],
+        seed: u64,
         storage: read_pair::ReadPairStorage,
     ) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
@@ -341,7 +341,7 @@ where
         })
     }
 
-    pub fn with_seed(processor: &'a Processor, seed: [u8; 16]) -> Result<Self, Error> {
+    pub fn with_seed(processor: &'a Processor, seed: u64) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed);
@@ -353,7 +353,7 @@ where
 
     pub fn with_seed_and_storage(
         processor: &'a Processor,
-        seed: [u8; 16],
+        seed: u64,
         storage: read_pair::ReadPairStorage,
     ) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
