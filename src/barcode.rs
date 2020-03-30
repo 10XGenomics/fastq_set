@@ -146,10 +146,8 @@ pub struct BarcodeChecker {
 }
 
 impl BarcodeChecker {
-    pub fn new(whitelist: impl AsRef<Path>) -> Result<BarcodeChecker, Error> {
-        Ok(BarcodeChecker {
-            whitelist: Whitelist::new(whitelist)?,
-        })
+    pub fn new(whitelist: Whitelist) -> BarcodeChecker {
+        BarcodeChecker { whitelist }
     }
 
     /// Convert `barcode` to be `is_valid() == true` if the

@@ -1,4 +1,4 @@
-use crate::barcode::BarcodeChecker;
+use crate::barcode::{BarcodeChecker, Whitelist};
 use crate::Barcode;
 use crate::FastqProcessor;
 use crate::HasBarcode;
@@ -57,10 +57,10 @@ where
         processor: Processor,
         valid_path: impl AsRef<Path>,
         invalid_path: impl AsRef<Path>,
-        whitelist_path: impl AsRef<Path>,
+        whitelist: Whitelist,
     ) -> Result<Self, Error> {
         let sorter = BarcodeAwareSorter::new(valid_path, invalid_path)?;
-        let checker = BarcodeChecker::new(whitelist_path)?;
+        let checker = BarcodeChecker::new(whitelist);
         Ok(BarcodeSortWorkflow {
             processor,
             sorter,
