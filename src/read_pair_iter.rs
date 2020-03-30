@@ -9,14 +9,108 @@ use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRe
 use fastq::{self, RecordRefIter};
 
 use bytes::{BufMut, BytesMut};
-use failure::{format_err, Error, ResultExt};
+
+use std::io::ErrorKind;
+use std::io::{self, BufRead, BufReader, Read, Seek};
+
+use failure::Backtrace;
+use failure::Fail;
+
 use rand::distributions::{Distribution, Uniform};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use std::io::Seek;
-use std::io::{BufRead, BufReader, Read};
 
 const GZ_BUF_SIZE: usize = 1 << 16;
+
+#[derive(Fail, Debug)]
+pub enum FastqError {
+    #[fail(display = "{}: file: {:?}, line: {}", message, file, line)]
+    FastqFormat {
+        message: String,
+        line: usize,
+        file: PathBuf,
+        backtrace: Backtrace,
+    },
+    #[fail(display = "Error opening FASTQ file '{:?}': {}", file, source)]
+    Open {
+        source: io::Error,
+        file: PathBuf,
+        backtrace: Backtrace,
+    },
+    #[fail(
+        display = "IO error in FASTQ file '{:?}', line: {}: {}",
+        file, line, source
+    )]
+    Io {
+        source: io::Error,
+        file: PathBuf,
+        line: usize,
+        backtrace: Backtrace,
+    },
+}
+
+impl FastqError {
+    pub fn format(message: String, path: impl AsRef<Path>, line: usize) -> FastqError {
+        FastqError::FastqFormat {
+            message,
+            line,
+            file: path.as_ref().to_path_buf(),
+            backtrace: Backtrace::new(),
+        }
+    }
+}
+
+trait FileIoError<T> {
+    fn open_err(self, path: impl AsRef<Path>) -> Result<T, FastqError>;
+    fn fastq_err(self, path: impl AsRef<Path>, line: usize) -> Result<T, FastqError>;
+}
+
+impl<T> FileIoError<T> for Result<T, std::io::Error> {
+    fn open_err(self, path: impl AsRef<Path>) -> Result<T, FastqError> {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                let e = FastqError::Open {
+                    source: e,
+                    file: path.as_ref().to_path_buf(),
+                    backtrace: Backtrace::new(),
+                };
+                Err(e)
+            }
+        }
+    }
+
+    fn fastq_err(self, path: impl AsRef<Path>, line: usize) -> Result<T, FastqError> {
+        match self {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                match e.kind() {
+                    // convert InvalidData into a FastqFormat error
+                    ErrorKind::InvalidData => {
+                        let e = FastqError::FastqFormat {
+                            message: e.to_string(),
+                            line: line,
+                            file: path.as_ref().to_path_buf(),
+                            backtrace: Backtrace::new(),
+                        };
+                        Err(e)
+                    }
+
+                    // convert everything else to the Io case
+                    _ => {
+                        let e = FastqError::Io {
+                            source: e,
+                            file: path.as_ref().to_path_buf(),
+                            line: line,
+                            backtrace: Backtrace::new(),
+                        };
+                        Err(e)
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// A set of corresponding FASTQ representing the different read components from a set of flowcell 'clusters'
 /// All reads are optional except for R1. For an interleaved R1/R2 file, set the filename in the `r1` field,
@@ -76,7 +170,7 @@ pub struct ReadPairIter {
 impl ReadPairIter {
     /// Open a `ReadPairIter` given a `InputFastqs` describing a set of FASTQ files
     /// for the available parts of a read.
-    pub fn from_fastq_files(input_fastqs: &InputFastqs) -> Result<ReadPairIter, Error> {
+    pub fn from_fastq_files(input_fastqs: &InputFastqs) -> Result<ReadPairIter, FastqError> {
         Self::new(
             Some(&input_fastqs.r1),
             input_fastqs.r2.as_ref(),
@@ -89,39 +183,36 @@ impl ReadPairIter {
     /// Open a FASTQ file that is uncompressed, gzipped compressed, or lz4 compressed.
     /// The extension of the file is ignored & the filetype is determined by looking
     /// for magic bytes at the of the file
-    fn open_fastq(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, Error> {
+    fn open_fastq(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, FastqError> {
         let p = p.as_ref();
 
-        let mut file =
-            std::fs::File::open(p).context(format!("Error opening FASTQ file {:?}", p))?;
+        let mut file = std::fs::File::open(p).fastq_err(p, 0)?;
 
         let mut buf = vec![0u8; 4];
-        file.read_exact(&mut buf[..])?;
-        file.seek(std::io::SeekFrom::Start(0))?;
+        file.read_exact(&mut buf[..]).fastq_err(p, 0)?;
+        file.seek(std::io::SeekFrom::Start(0)).fastq_err(p, 0)?;
 
         if &buf[0..2] == &[0x1F, 0x8B] {
             let gz = flate2::read::MultiGzDecoder::new(file);
             let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, gz);
             Ok(Box::new(buf_reader))
         } else if &buf[0..4] == &[0x04, 0x22, 0x4D, 0x18] {
-            let lz = lz4::Decoder::new(file)?;
+            let lz = lz4::Decoder::new(file).fastq_err(p, 0)?;
             let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, lz);
             Ok(Box::new(buf_reader))
         } else if buf[0] == b'@' {
             let buf_reader = BufReader::with_capacity(32 * 1024, file);
             Ok(Box::new(buf_reader))
         } else {
-            let msg = format_err!(
-                "FASTQ error: '{:?}' is not appear to be a valid FASTQ. 
-            Input FASTQ file must be gzip or lz4 compressed, or must begin with the '@' symbol",
-                p
-            );
-            Err(msg)
+            let msg =
+            "FASTQ file does not appear to be valid. Input FASTQ file must be gzip or lz4 compressed, or must begin with the '@' symbol".to_string();
+            let e = FastqError::format(msg, p, 0);
+            Err(e)
         }
     }
 
     /// Open a (possibly gzip or lz4 compressed) FASTQ file & read some records to confirm the format looks good.
-    fn open_fastq_confirm_fmt(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, Error> {
+    fn open_fastq_confirm_fmt(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, FastqError> {
         let p = p.as_ref();
         let reader = Self::open_fastq(p)?;
         let parser = fastq::Parser::new(reader);
@@ -130,13 +221,8 @@ impl ReadPairIter {
         // try and give a useful message if we can't
         let mut iter = parser.ref_iter();
 
-        for _ in 0..10 {
-            let read_res = iter.advance();
-            read_res.context(format!(
-                "Error reading data from FASTQ file '{:?}' - is it corrupted?",
-                p
-            ))?;
-
+        for rec in 0..10 {
+            iter.advance().fastq_err(p, rec * 4)?;
             let rec = iter.get();
             if rec.is_none() {
                 break;
@@ -156,7 +242,7 @@ impl ReadPairIter {
         i1: Option<P>,
         i2: Option<P>,
         r1_interleaved: bool,
-    ) -> Result<ReadPairIter, Error> {
+    ) -> Result<ReadPairIter, FastqError> {
         let mut iters = [None, None, None, None];
         let mut paths = [None, None, None, None];
 
@@ -199,7 +285,7 @@ impl ReadPairIter {
         self
     }
 
-    fn get_next(&mut self) -> Result<Option<ReadPair>, Error> {
+    fn get_next(&mut self) -> Result<Option<ReadPair>, FastqError> {
         // Recycle the buffer if it's almost full.
         if self.buffer.remaining_mut() < 512 {
             self.buffer = BytesMut::with_capacity(BUF_SIZE)
@@ -219,13 +305,8 @@ impl ReadPairIter {
 
             for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
                 if let Some(ref mut iter) = *iter_opt {
-                    iter.advance().with_context(|_| {
-                        format!(
-                            "FASTQ format error in file {:?} in record starting a line {}",
-                            paths[idx].as_ref().unwrap(),
-                            rec_num[idx] * 4
-                        )
-                    })?;
+                    iter.advance()
+                        .fastq_err(paths[idx].as_ref().unwrap(), rec_num[idx] * 4)?;
 
                     {
                         let record = iter.get();
@@ -237,10 +318,14 @@ impl ReadPairIter {
                         // Check for non-ACGTN characters
                         if let Some(ref rec) = record {
                             if !fastq::Record::validate_dnan(rec) {
-                                let msg = format_err!(
-                                    "FASTQ contains sequence base with character other than [ACGTN] in file {:?} in record starting on line {}", 
-                                    paths[idx].as_ref().unwrap(), rec_num[idx] * 4);
-                                return Err(msg);
+                                let msg =
+                                    "FASTQ contains sequence base with character other than [ACGTN].".to_string();
+                                let e = FastqError::format(
+                                    msg,
+                                    paths[idx].as_ref().unwrap(),
+                                    rec_num[idx] * 4,
+                                );
+                                return Err(e);
                             }
                         }
 
@@ -255,22 +340,31 @@ impl ReadPairIter {
                     // If R1 is interleaved, read another entry
                     // and store it as R2
                     if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
-                        iter.advance()?;
+                        iter.advance()
+                            .fastq_err(paths[idx].as_ref().unwrap(), (rec_num[idx] + 1) * 4)?;
                         let record = iter.get();
                         if record.is_none() {
                             // We should only hit this if the FASTQ has an odd
                             // number of records. Throw an error
-                            let msg = format_err!("Input FASTQ file {:?} was input as interleaved R1 and R2, but contains an odd number of records .", self.paths[idx].as_ref().unwrap());
-                            return Err(msg);
+                            let msg = "Input FASTQ file was input as interleaved R1 and R2, but contains an odd number of records".to_string();
+                            let e = FastqError::format(
+                                msg,
+                                self.paths[idx].as_ref().unwrap(),
+                                rec_num[idx] * 4,
+                            );
+                            return Err(e);
                         }
 
                         // Check for non-ACGTN characters
                         if let Some(ref rec) = record {
                             if !fastq::Record::validate_dnan(rec) {
-                                let msg = format_err!(
-                                    "FASTQ contains sequence base with character other than [ACGTN] in file {:?} in record starting at line {}", 
-                                    paths[idx].as_ref().unwrap(), rec_num[idx] * 4);
-                                return Err(msg);
+                                let msg = "FASTQ contains sequence base with character other than [ACGTN].";
+                                let e = FastqError::format(
+                                    msg.to_string(),
+                                    paths[idx].as_ref().unwrap(),
+                                    rec_num[idx] * 4,
+                                );
+                                return Err(e);
                             }
                         }
 
@@ -298,12 +392,18 @@ impl ReadPairIter {
             if header_slices.len() > 0 {
                 for i in 1..header_slices.len() {
                     if header_slices[i].1 != header_slices[0].1 {
-                        let msg = format_err!("FASTQ header mismatch detected at line {} of input files {:?} and {:?} ",
+                        let msg = format!("FASTQ header mismatch detected at line {} of input files {:?} and {:?}",
                                 rec_num[0] * 4,
                                 self.paths[header_slices[0].0].as_ref().unwrap(),
                                 self.paths[header_slices[i].0].as_ref().unwrap()
                             );
-                        return Err(msg);
+
+                        let e = FastqError::format(
+                            msg,
+                            self.paths[header_slices[0].0].as_ref().unwrap(),
+                            rec_num[i] * 4,
+                        );
+                        return Err(e);
                     }
                 }
             }
@@ -320,11 +420,10 @@ impl ReadPairIter {
                     // Index of a finished iterator
                     let ended_index = iter_ended.iter().enumerate().find(|(_, v)| **v).unwrap().0;
 
-                    let msg = format_err!(
-                        "Input FASTQ file {:?} ended prematurely",
-                        self.paths.get(ended_index).unwrap()
-                    );
-                    return Err(msg);
+                    let msg = "Input FASTQ file ended prematurely";
+                    let path = self.paths[ended_index].as_ref().unwrap();
+                    let e = FastqError::format(msg.to_string(), path, rec_num[ended_index] * 4);
+                    return Err(e);
                 } else {
                     return Ok(None);
                 }
@@ -338,10 +437,10 @@ impl ReadPairIter {
 }
 
 impl Iterator for ReadPairIter {
-    type Item = Result<ReadPair, Error>;
+    type Item = Result<ReadPair, FastqError>;
 
     /// Iterate over ReadPair objects
-    fn next(&mut self) -> Option<Result<ReadPair, Error>> {
+    fn next(&mut self) -> Option<Result<ReadPair, FastqError>> {
         // Convert Result<Option<_>, Error> to Option<Result<_, Error>>
         match self.get_next() {
             Ok(Some(v)) => Some(Ok(v)),
@@ -370,7 +469,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let _res: Result<Vec<ReadPair>, Error> = it.collect();
+        let _res: Result<Vec<ReadPair>, FastqError> = it.collect();
         let res = _res.unwrap();
 
         {
@@ -402,7 +501,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 8);
     }
@@ -418,7 +517,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
     }
 
@@ -433,7 +532,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
     }
 
@@ -448,7 +547,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
     }
 
@@ -463,8 +562,12 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_err());
+
+        let e = res.err().unwrap();
+        println!("debug: {:?}", e);
+        println!("display: {}", e);
     }
 
     #[test]
@@ -478,7 +581,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_err());
     }
 
@@ -493,7 +596,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_err());
     }
 
@@ -508,7 +611,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_err());
     }
 
@@ -523,7 +626,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_err());
     }
 
@@ -538,7 +641,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        let res: Result<Vec<ReadPair>, Error> = it.collect();
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_err());
     }
 
@@ -560,7 +663,7 @@ mod test_read_pair_iter {
     use itertools::Itertools;
 
     #[cfg(target_os = "linux")]
-    fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, Error> {
+    fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, failure::Error> {
         let iter = ReadPairIter::new(
             Some("tests/read_pair_iter/vdj_micro_50k.fastq"),
             None,

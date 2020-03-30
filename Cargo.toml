@@ -12,7 +12,7 @@ serde_json = "*"
 serde = "*"
 serde_bytes = "*"
 bytes = { version = "0.5", features = ["serde"] }
-failure = "*"
+failure = { version = "0.1", features = ["backtrace"] }
 tempfile = "3"
 glob = "0.3"
 regex = "1"

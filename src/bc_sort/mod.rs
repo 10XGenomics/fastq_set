@@ -159,8 +159,8 @@ where
             // Read subsampling
             if uniform.sample(&mut rand) < read_subsample_rate {
                 match chunk.process_read(r) {
-                    None => (),
-                    Some(mut read_pair) => {
+                    Err(_) => (),
+                    Ok(mut read_pair) => {
                         // Check barcode against whitelist & mark correct if it matches.
                         let mut bc = read_pair.barcode().clone();
                         // FIXME: change this false to a proper check to translate

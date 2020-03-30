@@ -607,6 +607,36 @@ impl ReadPair {
         read.map(|r| rp_range.slice(r))
     }
 
+    pub fn check_range(&self, range: &RpRange, region_name: &str) -> Result<(), Error> {
+        let req_len = range.offset() + range.len().unwrap_or(0);
+
+        match self.get(range.read(), ReadPart::Seq) {
+            Some(read) => {
+                if read.len() < req_len {
+                    let e = format_err!(
+                        "{} is expected in positions {}-{} in Read {}, but read is {} bp long.",
+                        region_name,
+                        range.offset(),
+                        req_len,
+                        range.read(),
+                        read.len()
+                    );
+                    Err(e)
+                } else {
+                    Ok(())
+                }
+            }
+            None => {
+                let e = format_err!(
+                    "{} is missing from FASTQ. Read {} is not present.",
+                    region_name,
+                    range.read()
+                );
+                Err(e)
+            }
+        }
+    }
+
     pub fn to_owned_record(&self) -> HashMap<WhichRead, OwnedRecord> {
         let mut result = HashMap::new();
         for &which in WhichRead::read_types().iter() {

@@ -4,6 +4,7 @@
 //! and Single-Cell ATAC libraries. Provides access to the barcode and allows for dynamic
 //! trimming.
 
+use failure::{ensure, Error};
 use metric::TxHashMap;
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
@@ -67,17 +68,25 @@ impl DnaProcessor {
 impl FastqProcessor for DnaProcessor {
     type ReadType = DnaRead;
     /// Convert raw FASTQ data into DnaRead
-    fn process_read(&self, read: ReadPair) -> Option<DnaRead> {
-        assert!(read.get(WhichRead::R1, ReadPart::Seq).is_some());
-        assert!(read.get(WhichRead::R2, ReadPart::Seq).is_some());
+    fn process_read(&self, read: ReadPair) -> Result<DnaRead, Error> {
+        ensure!(
+            read.get(WhichRead::R1, ReadPart::Seq).is_some(),
+            "No R1 read found"
+        );
+        ensure!(
+            read.get(WhichRead::R2, ReadPart::Seq).is_some(),
+            "No R2 read found"
+        );
 
         // Setup initial (uncorrected) bacode
         let bc_length = self.chunk.bc_length.unwrap_or(16);
         let bc_range = match self.chunk.bc_in_read {
             Some(1) => RpRange::new(WhichRead::R1, 0, Some(bc_length)),
             None => RpRange::new(WhichRead::I2, 0, self.chunk.bc_length),
-            _ => panic!("unsupported barcode location"),
+            Some(rnum) => failure::bail!("unsupported barcode read {}", rnum),
         };
+
+        read.check_range(&bc_range, "Barcode")?;
 
         // Snip out barcode
         let barcode = {
@@ -86,7 +95,7 @@ impl FastqProcessor for DnaProcessor {
             Barcode::new(self.chunk.gem_group, bc_seq, is_valid)
         };
 
-        Some(DnaRead {
+        Ok(DnaRead {
             data: read,
             barcode,
             bc_range,
