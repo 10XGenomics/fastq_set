@@ -96,7 +96,7 @@ pub(crate) fn reduce_counts<K: Hash + Eq>(
     v1
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum Whitelist {
     Plain(TxHashSet<SSeq>),
     Trans(TxHashMap<SSeq, SSeq>),
