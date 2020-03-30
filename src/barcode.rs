@@ -104,10 +104,6 @@ pub enum Whitelist {
 
 impl Whitelist {
     pub fn new(p: impl AsRef<Path>) -> Result<Self, Error> {
-        // attempt first to deserialize
-        if let Ok(wl) = utils::read_obj(p.as_ref()) {
-            return Ok(wl);
-        }
         // if the parent directory is "translation", we're
         if p.as_ref()
             .parent()
@@ -201,13 +197,13 @@ impl BarcodeCorrector {
     /// * `bc_confidence_threshold` - if the posterior probability of a correction
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
-        whitelist: impl AsRef<Path>,
+        whitelist: Whitelist,
         bc_counts: SimpleHistogram<Barcode>,
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64,
     ) -> Result<BarcodeCorrector, Error> {
         Ok(BarcodeCorrector {
-            whitelist: Whitelist::new(whitelist)?,
+            whitelist,
             bc_counts,
             max_expected_barcode_errors,
             bc_confidence_threshold,
