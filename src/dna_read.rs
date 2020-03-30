@@ -141,8 +141,6 @@ pub struct DnaRead {
 }
 
 impl HasBarcode for DnaRead {
-    type LibraryType = ();
-
     fn barcode(&self) -> &Barcode {
         &self.barcode
     }
@@ -161,10 +159,6 @@ impl HasBarcode for DnaRead {
 
     fn raw_bc_qual(&self) -> &[u8] {
         self.data.get_range(self.bc_range, ReadPart::Qual).unwrap()
-    }
-
-    fn library_type(&self) -> Self::LibraryType {
-        ()
     }
 }
 

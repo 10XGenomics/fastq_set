@@ -16,27 +16,20 @@
 
 use fastq;
 
+pub mod adapter_trimmer;
+pub mod barcode;
+pub mod barcode_sort;
+pub mod dna_read;
+pub mod filenames;
 pub mod illumina_header_info;
+pub mod metric_utils;
 pub mod read_pair;
 pub mod read_pair_iter;
 pub mod read_pair_writer;
-pub mod sample_def;
 pub mod sample_index_map;
-
-pub mod filenames;
-
-pub mod barcode;
-// bc_sort is an older bc sorting workflow -- it's used in perf tests.
-// needs to be reconciled with mod barcode_sort.
-pub mod barcode_sort;
-pub mod bc_sort;
-pub mod metric_utils;
 pub mod squality;
 pub mod sseq;
 pub mod utils;
-
-pub mod adapter_trimmer;
-pub mod dna_read;
 
 pub use crate::squality::SQuality;
 pub use crate::sseq::SSeq;
@@ -159,13 +152,11 @@ impl std::fmt::Display for Barcode {
 /// A trait for objects that carry a 10x barcode, allowing for querying the barcode,
 /// and correcting the barcode.
 pub trait HasBarcode {
-    type LibraryType;
     fn barcode(&self) -> &Barcode;
     fn barcode_qual(&self) -> &[u8];
     fn set_barcode(&mut self, barcode: Barcode);
     fn raw_bc_seq(&self) -> &[u8];
     fn raw_bc_qual(&self) -> &[u8];
-    fn library_type(&self) -> Self::LibraryType;
 }
 
 /// A trait for reads that may have a sample index.

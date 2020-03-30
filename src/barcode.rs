@@ -182,20 +182,14 @@ type Of64 = NotNan<f64>;
 /// Implement the standard 10x barcode correction algorithm.
 /// Requires the barcode whitelist (`whitelist`), and the observed counts
 /// of each whitelist barcode, prior to correction (`bc_counts`).
-pub struct BarcodeCorrector<LibraryType>
-where
-    LibraryType: Eq + Hash,
-{
+pub struct BarcodeCorrector {
     whitelist: Whitelist,
-    bc_counts: TxHashMap<LibraryType, SimpleHistogram<Barcode>>,
+    bc_counts: SimpleHistogram<Barcode>,
     max_expected_barcode_errors: f64,
     bc_confidence_threshold: f64,
 }
 
-impl<LibraryType> BarcodeCorrector<LibraryType>
-where
-    LibraryType: Eq + Hash,
-{
+impl BarcodeCorrector {
     /// Load a barcode corrector from a whitelist path
     /// and a set of barcode count files.
     /// # Arguments
@@ -208,10 +202,10 @@ where
     ///    exceeds this threshold, the barcode will be corrected.
     pub fn new(
         whitelist: impl AsRef<Path>,
-        bc_counts: TxHashMap<LibraryType, SimpleHistogram<Barcode>>,
+        bc_counts: SimpleHistogram<Barcode>,
         max_expected_barcode_errors: f64,
         bc_confidence_threshold: f64,
-    ) -> Result<BarcodeCorrector<LibraryType>, Error> {
+    ) -> Result<BarcodeCorrector, Error> {
         Ok(BarcodeCorrector {
             whitelist: Whitelist::new(whitelist)?,
             bc_counts,
@@ -233,7 +227,6 @@ where
         &self,
         observed_barcode: &Barcode,
         qual: &[u8],
-        library_type: LibraryType,
         do_translate: bool,
     ) -> Option<Barcode> {
         let mut a = observed_barcode.sequence; // Create a copy
@@ -257,11 +250,7 @@ where
 
                 if self.whitelist.check(&mut trial_bc, do_translate) {
                     // Apply additive (Laplace) smoothing.
-                    let raw_count = self
-                        .bc_counts
-                        .get(&library_type)
-                        .map(|c| c.get(&trial_bc))
-                        .unwrap_or(0);
+                    let raw_count = self.bc_counts.get(&trial_bc);
                     let bc_count = 1 + raw_count;
                     let prob_edit = Of64::from(probability(qv.min(BC_MAX_QV)));
                     let likelihood = prob_edit * Of64::from(bc_count as f64);
@@ -314,13 +303,10 @@ mod test {
         wl.insert(b3.sequence);
         wl.insert(b4.sequence);
 
-        let mut counts = SimpleHistogram::new();
-        counts.insert(b1, 100);
-        counts.insert(b2, 11);
-        counts.insert(b3, 2);
-
-        let mut bc_counts = TxHashMap::default();
-        bc_counts.insert((), counts);
+        let mut bc_counts = SimpleHistogram::new();
+        bc_counts.insert(b1, 100);
+        bc_counts.insert(b2, 11);
+        bc_counts.insert(b3, 2);
 
         let val = BarcodeCorrector {
             max_expected_barcode_errors: 1.0,
@@ -335,35 +321,35 @@ mod test {
 
         // Low quality
         assert_eq!(
-            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], (), false),
+            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], false),
             None
         );
 
         // Trivial correction
         let t2 = Barcode::test_invalid(b"AAAAT");
         assert_eq!(
-            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], (), false),
+            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], false),
             Some(b1)
         );
 
         // Pseudo-count kills you
         let t3 = Barcode::test_invalid(b"ACGAT");
         assert_eq!(
-            val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66], (), false),
+            val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66], false),
             None
         );
 
         // Quality help you
         let t4 = Barcode::test_invalid(b"ACGAT");
         assert_eq!(
-            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40], (), false),
+            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40], false),
             Some(b3)
         );
 
         // Counts help you
         let t5 = Barcode::test_invalid(b"ACAAA");
         assert_eq!(
-            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40], (), false),
+            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40], false),
             Some(b1)
         );
     }
@@ -382,7 +368,7 @@ mod test {
         wl.insert(b3.sequence);
         wl.insert(b4.sequence);
 
-        let bc_counts: TxHashMap<usize, SimpleHistogram<Barcode>> = TxHashMap::default();
+        let bc_counts = SimpleHistogram::<Barcode>::new();
 
         let val = BarcodeCorrector {
             max_expected_barcode_errors: 1.0,
@@ -397,14 +383,14 @@ mod test {
 
         // Low quality
         assert_eq!(
-            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], 0, false),
+            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], false),
             None
         );
 
         // Trivial correction
         let t2 = Barcode::test_invalid(b"AAAAT");
         assert_eq!(
-            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], 0, false),
+            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], false),
             Some(b1)
         );
     }
@@ -417,13 +403,12 @@ mod test {
             let mut wl = TxHashSet::default();
             let bc = Barcode::test_valid(b"GCGATTGACCCAAAGG");
             wl.insert(bc.sequence);
-            let mut counts = TxHashMap::default();
-            counts.insert(0, SimpleHistogram::new());
+
             let corrector = BarcodeCorrector {
                 max_expected_barcode_errors: 1.0,
                 bc_confidence_threshold: 0.975,
                 whitelist: Whitelist::Plain(wl),
-                bc_counts: counts,
+                bc_counts: SimpleHistogram::new(),
             };
 
             let mut bc_seq_with_n = bc.sequence().to_vec();
@@ -433,7 +418,7 @@ mod test {
             let bc_with_n = Barcode::test_invalid(&bc_seq_with_n);
 
             assert_eq!(
-                corrector.correct_barcode(&bc_with_n, &qual, 0, false),
+                corrector.correct_barcode(&bc_with_n, &qual, false),
                 Some(bc)
             );
 

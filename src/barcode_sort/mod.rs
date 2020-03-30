@@ -3,7 +3,7 @@ use crate::Barcode;
 use crate::FastqProcessor;
 use crate::HasBarcode;
 use failure::Error;
-use metric::{Metric, SerdeFormat, SimpleHistogram, TxHashMap};
+use metric::{Metric, SimpleHistogram, TxHashMap};
 use serde::{Deserialize, Serialize};
 use shardio::*;
 use std;
@@ -36,8 +36,6 @@ pub struct BarcodeSortWorkflow<Processor, SortOrder = BarcodeOrder>
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
-    <<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType:
-        Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     SortOrder: SortKey<<Processor as FastqProcessor>::ReadType>,
     <SortOrder as SortKey<<Processor as FastqProcessor>::ReadType>>::Key:
         'static + Send + Ord + Serialize + Clone,
@@ -51,8 +49,6 @@ impl<Processor, SortOrder> BarcodeSortWorkflow<Processor, SortOrder>
 where
     Processor: FastqProcessor,
     <Processor as FastqProcessor>::ReadType: 'static + HasBarcode + Send + Serialize,
-    <<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType:
-        Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     SortOrder: SortKey<<Processor as FastqProcessor>::ReadType>,
     <SortOrder as SortKey<<Processor as FastqProcessor>::ReadType>>::Key:
         'static + Send + Ord + Serialize + Clone,
@@ -109,20 +105,12 @@ where
         self.sorter.finish()
     }
 
-    pub fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        self.sorter.write_barcode_counts(path)
+    pub fn num_valid_items(&self) -> i64 {
+        self.sorter.valid_items
     }
 
-    pub fn num_valid_items(
-        &self,
-    ) -> &TxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
-        &self.sorter.valid_items
-    }
-
-    pub fn num_invalid_items(
-        &self,
-    ) -> &TxHashMap<<<Processor as FastqProcessor>::ReadType as HasBarcode>::LibraryType, i64> {
-        &self.sorter.invalid_items
+    pub fn num_invalid_items(&self) -> i64 {
+        self.sorter.invalid_items
     }
 }
 
@@ -140,7 +128,6 @@ where
 struct BarcodeAwareSorter<T, Order = BarcodeOrder>
 where
     T: 'static + HasBarcode + Send + Serialize,
-    <T as HasBarcode>::LibraryType: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     Order: SortKey<T>,
     Order::Key: 'static + Send + Serialize,
 {
@@ -150,15 +137,13 @@ where
     valid_writer: ShardWriter<T, Order>,
     invalid_sender: ShardSender<T, Order>,
     invalid_writer: ShardWriter<T, Order>,
-    valid_bc_distribution: TxHashMap<<T as HasBarcode>::LibraryType, SimpleHistogram<Barcode>>,
-    valid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
-    invalid_items: TxHashMap<<T as HasBarcode>::LibraryType, i64>,
+    valid_items: i64,
+    invalid_items: i64,
 }
 
 impl<T, Order> BarcodeAwareSorter<T, Order>
 where
     T: 'static + HasBarcode + Send + Serialize,
-    <T as HasBarcode>::LibraryType: Eq + Hash + Clone + Serialize + for<'de> Deserialize<'de>,
     Order: SortKey<T>,
     <Order as SortKey<T>>::Key: 'static + Send + Ord + Serialize + Clone,
 {
@@ -176,22 +161,17 @@ where
             valid_sender,
             invalid_writer,
             invalid_sender,
-            valid_bc_distribution: TxHashMap::default(),
-            valid_items: TxHashMap::default(),
-            invalid_items: TxHashMap::default(),
+            valid_items: 0,
+            invalid_items: 0,
         })
     }
 
     fn process(&mut self, read: T) -> Result<(), Error> {
         if read.barcode().is_valid() {
-            self.valid_bc_distribution
-                .entry(read.library_type())
-                .or_insert(SimpleHistogram::new())
-                .observe(read.barcode());
-            *self.valid_items.entry(read.library_type()).or_insert(0) += 1;
+            self.valid_items += 1;
             self.valid_sender.send(read)?;
         } else {
-            *self.invalid_items.entry(read.library_type()).or_insert(0) += 1;
+            self.invalid_items += 1;
             self.invalid_sender.send(read)?;
         }
         Ok(())
@@ -203,11 +183,6 @@ where
         self.valid_writer.finish()?;
         self.invalid_writer.finish()?;
         Ok(())
-    }
-
-    fn write_barcode_counts<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
-        self.valid_bc_distribution
-            .to_file(path, SerdeFormat::Binary)
     }
 }
 
