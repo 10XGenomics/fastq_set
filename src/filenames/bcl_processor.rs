@@ -36,7 +36,7 @@ impl FindFastqs for BclProcessorFastqDef {
             if self
                 .sample_indices
                 .iter()
-                .any(|target| match_seqs_with_n(target, &bcl_proc.si, 1))
+                .any(|target| target == "*" || match_seqs_with_n(target, &bcl_proc.si, 1))
             {
                 // require that the observed lane is in the allowed list, or it's None
                 if self
@@ -278,5 +278,15 @@ mod tests {
             "test/filenames/bcl_processor/read-RA_si-TCGAATGATC_lane-002-chunk-001.fastq.gz"
         );
         Ok(())
+    }
+
+    #[test]
+    fn test_si_any() {
+        let bcl_proc = BclProcessorFastqDef {
+            fastq_path: "test/filenames/bcl_processor/".to_string(),
+            sample_indices: vec!["*".to_string()],
+            lanes: None,
+        };
+        assert_eq!(bcl_proc.find_fastqs().unwrap().len(), 44);
     }
 }
