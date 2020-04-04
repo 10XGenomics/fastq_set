@@ -1,28 +1,69 @@
+use super::FindFastqs;
+use crate::filenames::LaneMode;
+use crate::filenames::LaneSpec;
+use crate::read_pair_iter::InputFastqs;
+use crate::sample_index_map::SAMPLE_INDEX_MAP;
+use crate::sseq::SSeq;
 use failure::Error;
 use itertools::Itertools;
+use metric::TxHashSet;
 use regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use super::FindFastqs;
-use crate::read_pair_iter::InputFastqs;
-use crate::sample_index_map::SAMPLE_INDEX_MAP;
+/// Different ways to specify the sample index for `BclProcessorFastqDef`.
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
+pub enum SampleIndexSpec {
+    /// Allow all the sample indices **including X** irrespective of the number of N's in the SI
+    Any,
+    /// Allow sample indices from the given list of sequences. `indices` stores the list of allowed
+    /// sequences and require that the SI match to within `max_n` Ns
+    Sequences {
+        indices: TxHashSet<SSeq>,
+        max_n: usize,
+    },
+}
+
+/// SampleIndexSpec from a single sequence
+impl From<&str> for SampleIndexSpec {
+    fn from(index: &str) -> Self {
+        SampleIndexSpec::Sequences {
+            indices: [index]
+                .iter()
+                .map(|ind| SSeq::new(ind.as_bytes()))
+                .collect(),
+            max_n: 1,
+        }
+    }
+}
+
+impl SampleIndexSpec {
+    /// Does the given index match with the `SampleIndexSpec`
+    pub fn matches(&self, index: &str) -> bool {
+        match *self {
+            SampleIndexSpec::Any => true,
+            SampleIndexSpec::Sequences { ref indices, max_n } => indices
+                .iter()
+                .any(|target| match_seqs_with_n(target.as_bytes(), index.as_bytes(), max_n)),
+        }
+    }
+}
 
 /// A selector for a set of FASTQs emitted by the `BCL_PROCESSOR`
 /// demultiplexing pipeline used internally at 10x, and in the
 /// (now deprecated) `demux` customer command. `find_fastqs` will
 /// select the set of FASTQs in `fastq_path` with the matching
 /// sample index and lane values.
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub struct BclProcessorFastqDef {
     /// Path to demux / bcl_proccesor FASTQ files
     pub fastq_path: String,
     /// Sample index sequences to include
-    pub sample_indices: Vec<String>,
-    /// Lanes to include. None indicates that all lanes should be included
-    pub lanes: Option<Vec<usize>>,
+    pub sample_index_spec: SampleIndexSpec,
+    /// Lanes to include
+    pub lane_spec: LaneSpec,
 }
 
 impl FindFastqs for BclProcessorFastqDef {
@@ -32,20 +73,10 @@ impl FindFastqs for BclProcessorFastqDef {
         let mut res = Vec::new();
 
         for (bcl_proc, fastqs) in all_fastq_sets {
-            // require that the SI match to within one N
-            if self
-                .sample_indices
-                .iter()
-                .any(|target| target == "*" || match_seqs_with_n(target, &bcl_proc.si, 1))
+            if self.sample_index_spec.matches(&bcl_proc.si)
+                && self.lane_spec.contains(bcl_proc.lane_mode())
             {
-                // require that the observed lane is in the allowed list, or it's None
-                if self
-                    .lanes
-                    .as_ref()
-                    .map_or(true, |lanes| lanes.contains(&bcl_proc.lane))
-                {
-                    res.push(fastqs)
-                }
+                res.push(fastqs)
             }
         }
 
@@ -54,19 +85,17 @@ impl FindFastqs for BclProcessorFastqDef {
     }
 }
 
-fn match_seqs_with_n(target: &str, observed: &str, ns_allowed: usize) -> bool {
-    let target = target.as_bytes();
-    let observed = observed.as_bytes();
+fn match_seqs_with_n(target: &[u8], observed: &[u8], ns_allowed: usize) -> bool {
     if target.len() != observed.len() {
         return false;
     }
 
     let mut num_ns = 0;
 
-    for i in 0..target.len() {
-        if observed[i] == b'N' {
+    for (&tgt, &obs) in target.iter().zip_eq(observed.iter()) {
+        if obs == b'N' {
             num_ns += 1;
-        } else if observed[i] != target[i] {
+        } else if obs != tgt {
             return false;
         }
     }
@@ -81,6 +110,12 @@ pub struct BclProcessorFile {
     pub chunk: usize,
     pub read: String,
     pub path: PathBuf,
+}
+
+impl BclProcessorFile {
+    pub fn lane_mode(&self) -> LaneMode {
+        LaneMode::SingleLane(self.lane)
+    }
 }
 
 impl fmt::Display for BclProcessorFile {
@@ -252,8 +287,8 @@ mod tests {
 
         let query = BclProcessorFastqDef {
             fastq_path: path.to_string(),
-            sample_indices: vec!["TCGAATGATC".to_string()],
-            lanes: None,
+            sample_index_spec: "TCGAATGATC".into(),
+            lane_spec: LaneSpec::Any,
         };
 
         let fqs = query.find_fastqs()?;
@@ -267,8 +302,8 @@ mod tests {
 
         let query = BclProcessorFastqDef {
             fastq_path: path.to_string(),
-            sample_indices: vec!["TCGAATGATC".to_string()],
-            lanes: Some(vec![2]),
+            sample_index_spec: "TCGAATGATC".into(),
+            lane_spec: LaneSpec::Lanes(vec![2].into_iter().collect()),
         };
 
         let fqs = query.find_fastqs()?;
@@ -284,9 +319,61 @@ mod tests {
     fn test_si_any() {
         let bcl_proc = BclProcessorFastqDef {
             fastq_path: "test/filenames/bcl_processor/".to_string(),
-            sample_indices: vec!["*".to_string()],
-            lanes: None,
+            sample_index_spec: SampleIndexSpec::Any,
+            lane_spec: LaneSpec::Any,
         };
         assert_eq!(bcl_proc.find_fastqs().unwrap().len(), 44);
+    }
+}
+
+// The following tests are based on the tests in tenkit: lib/python/tenkit/test/test_fasta.py
+#[cfg(test)]
+mod tests_from_tenkit {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_find_input_fastq_files_10x_preprocess() -> Result<(), Error> {
+        let path = "test/filenames/bcl_processor_2";
+
+        let query = BclProcessorFastqDef {
+            fastq_path: path.to_string(),
+            sample_index_spec: "ACAGCAAC".into(),
+            lane_spec: LaneSpec::Lanes(vec![1, 2].into_iter().collect()),
+        };
+
+        let fqs = query.find_fastqs()?;
+        let expected = vec![
+            InputFastqs {
+                r1: format!("{}/read-RA_si-ACAGCAAC_lane-001-chunk-001.fastq.gz", path),
+                r2: None,
+                i1: Some(format!(
+                    "{}/read-I1_si-ACAGCAAC_lane-001-chunk-001.fastq.gz",
+                    path
+                )),
+                i2: Some(format!(
+                    "{}/read-I2_si-ACAGCAAC_lane-001-chunk-001.fastq.gz",
+                    path
+                )),
+                r1_interleaved: true,
+            },
+            InputFastqs {
+                r1: format!("{}/read-RA_si-ACAGCAAC_lane-002-chunk-000.fastq.gz", path),
+                r2: None,
+                i1: Some(format!(
+                    "{}/read-I1_si-ACAGCAAC_lane-002-chunk-000.fastq.gz",
+                    path
+                )),
+                i2: Some(format!(
+                    "{}/read-I2_si-ACAGCAAC_lane-002-chunk-000.fastq.gz",
+                    path
+                )),
+                r1_interleaved: true,
+            },
+        ];
+
+        assert_eq!(fqs, expected);
+
+        Ok(())
     }
 }

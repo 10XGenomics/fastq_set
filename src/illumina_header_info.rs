@@ -64,7 +64,7 @@ impl InputFastqs {
 mod test {
     use super::*;
     use crate::filenames::bcl2fastq::Bcl2FastqDef;
-    use crate::filenames::FindFastqs;
+    use crate::filenames::{FindFastqs, LaneSpec};
 
     #[test]
     fn test_parse_fastq_info() -> Result<(), Error> {
@@ -72,8 +72,8 @@ mod test {
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
-            sample_name: "Infected".to_string(),
-            lanes: None,
+            sample_name_spec: "Infected".into(),
+            lane_spec: LaneSpec::Any,
         };
 
         let mut fqs = query.find_fastqs()?;

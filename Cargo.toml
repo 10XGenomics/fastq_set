@@ -39,6 +39,7 @@ criterion = "0.2"
 bincode = "*"
 tempfile = "3.1.0"
 psutil = ">=1.7"
+pretty_assertions = "0.6.1"
 
 [[bench]]
 name = "benchmarks"
