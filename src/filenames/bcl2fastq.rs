@@ -5,16 +5,16 @@ use crate::read_pair_iter::InputFastqs;
 use failure::Error;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use metric::TxHashSet;
+use metric::{TxHashMap, TxHashSet};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 lazy_static! {
     static ref BCL2FASTQ_REGEX: Regex =
-        Regex::new(r"^([\w_-]+)_S(\d+)_L(\d+)_([RI][A12])_(\d+).fastq(.gz)?$").unwrap();
+        Regex::new(r"^([\w_-]+)_S(\d+)_L(\d+)_([RI][A123])_(\d+).fastq(.gz)?$").unwrap();
     static ref BCL2FASTQ_NO_LANE_SPLIT_REGEX: Regex =
-        Regex::new(r"^([\w_-]+)_S(\d+)_([RI][A12])_(\d+).fastq(.gz)?$").unwrap();
+        Regex::new(r"^([\w_-]+)_S(\d+)_([RI][A123])_(\d+).fastq(.gz)?$").unwrap();
 }
 
 /// Different ways to specify sample names for the `Bcl2FastqDef`
@@ -79,14 +79,20 @@ impl FindFastqs for Bcl2FastqDef {
     }
 }
 
-/// A parsed representation of an FASTQ file produced by
-/// Illumina's bcl2fastq tool.
+/// Metadata for a group of FASTQ files representing the different read components
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IlmnFastqFile {
+pub struct IlmnFastqFileGroup {
     pub sample: String,
     pub s: usize,
     pub lane_mode: LaneMode,
     pub chunk: usize,
+}
+
+/// A parsed representation of an FASTQ file produced by
+/// Illumina's bcl2fastq tool.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IlmnFastqFile {
+    pub group: IlmnFastqFileGroup,
     pub read: String,
     pub path: PathBuf,
 }
@@ -109,11 +115,14 @@ impl IlmnFastqFile {
                 let chunk: usize = cap.get(5).unwrap().as_str().parse().unwrap();
 
                 let r = Some(IlmnFastqFile {
-                    sample,
-                    s,
-                    lane_mode: LaneMode::SingleLane(lane),
+                    group: IlmnFastqFileGroup {
+                        sample,
+                        s,
+                        lane_mode: LaneMode::SingleLane(lane),
+                        chunk,
+                    },
                     read,
-                    chunk,
+
                     path: path.as_ref().into(),
                 });
 
@@ -128,11 +137,13 @@ impl IlmnFastqFile {
                 let chunk: usize = cap.get(4).unwrap().as_str().parse().unwrap();
 
                 let r = Some(IlmnFastqFile {
-                    sample,
-                    s,
-                    lane_mode: LaneMode::NoLaneSplitting,
+                    group: IlmnFastqFileGroup {
+                        sample,
+                        s,
+                        lane_mode: LaneMode::NoLaneSplitting,
+                        chunk,
+                    },
                     read,
-                    chunk,
                     path: path.as_ref().into(),
                 });
 
@@ -168,7 +179,7 @@ fn get_bcl2fastq_files(path: impl AsRef<Path>) -> Result<Vec<(IlmnFastqFile, Pat
 /// `InputFastqs`, along with a representative `IlmnFastqFile` struct.
 pub fn find_flowcell_fastqs(
     path: impl AsRef<Path>,
-) -> Result<Vec<(IlmnFastqFile, InputFastqs)>, Error> {
+) -> Result<Vec<(IlmnFastqFileGroup, InputFastqs)>, Error> {
     let mut res = Vec::new();
 
     let mut files = get_bcl2fastq_files(&path)?;
@@ -182,47 +193,43 @@ pub fn find_flowcell_fastqs(
     }
     files.sort();
 
-    for (_, files) in &files
-        .into_iter()
-        .group_by(|(info, _)| (info.sample.clone(), info.s, info.lane_mode, info.chunk))
-    {
-        let my_files: Vec<_> = files.collect();
+    for (group, files) in &files.into_iter().group_by(|(info, _)| (info.group.clone())) {
+        let mut my_files: TxHashMap<_, _> = files
+            .into_iter()
+            .map(|(info, path)| (info.read, path.to_str().unwrap().to_string()))
+            .collect();
 
-        let r1 = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "R1");
-        let r2 = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "R2");
-        let i1 = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "I1");
-        let i2 = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "I2");
-
-        // We will tolerate a missing R1 file here -- this
-        // could be due to a copying error & unrelated to the
-        // sample we're interested in, so we don't want to
-        // throw an error just yet.
-        if r1.is_none() {
-            continue;
-        }
-
-        let fastqs = InputFastqs {
-            r1: r1.unwrap().1.to_str().unwrap().to_string(),
-            r2: r2.map(|x| x.1.to_str().unwrap().to_string()),
-            i1: i1.map(|x| x.1.to_str().unwrap().to_string()),
-            i2: i2.map(|x| x.1.to_str().unwrap().to_string()),
-            r1_interleaved: false,
+        let fastqs = match my_files.remove("R1") {
+            Some(r1) => match my_files.remove("R3") {
+                Some(r3) =>
+                // Account for the confusing R1/R2/R3 convention that is used in SC3pv1, ATAC etc
+                {
+                    InputFastqs {
+                        r1,
+                        r2: Some(r3),
+                        i1: my_files.remove("R2"),
+                        i2: my_files.remove("I1"),
+                        r1_interleaved: false,
+                    }
+                }
+                None => InputFastqs {
+                    r1,
+                    r2: my_files.remove("R2"),
+                    i1: my_files.remove("I1"),
+                    i2: my_files.remove("I2"),
+                    r1_interleaved: false,
+                },
+            },
+            None => {
+                // We will tolerate a missing R1 file here -- this
+                // could be due to a copying error & unrelated to the
+                // sample we're interested in, so we don't want to
+                // throw an error just yet.
+                continue;
+            }
         };
 
-        let info = my_files[0].0.clone();
-        res.push((info, fastqs));
+        res.push((group, fastqs));
     }
 
     Ok(res)
@@ -240,11 +247,13 @@ mod test {
 
         let expected = IlmnFastqFile {
             path: PathBuf::from(filename.to_string()),
-            sample: "heart_1k_v3".to_string(),
-            s: 1,
-            lane_mode: 2.into(),
             read: "R2".to_string(),
-            chunk: 1,
+            group: IlmnFastqFileGroup {
+                sample: "heart_1k_v3".to_string(),
+                s: 1,
+                lane_mode: 2.into(),
+                chunk: 1,
+            },
         };
 
         assert_eq!(r.unwrap(), expected);
@@ -257,11 +266,32 @@ mod test {
 
         let expected = IlmnFastqFile {
             path: PathBuf::from(filename.to_string()),
-            sample: "heart-1k-v3".to_string(),
-            s: 1,
-            lane_mode: 2.into(),
             read: "R2".to_string(),
-            chunk: 1,
+            group: IlmnFastqFileGroup {
+                sample: "heart-1k-v3".to_string(),
+                s: 1,
+                lane_mode: 2.into(),
+                chunk: 1,
+            },
+        };
+
+        assert_eq!(r.unwrap(), expected);
+    }
+
+    #[test]
+    fn test_parse_r3() {
+        let filename = "heart_1k_v3_S1_L002_R3_001.fastq.gz";
+        let r = IlmnFastqFile::new(filename);
+
+        let expected = IlmnFastqFile {
+            path: PathBuf::from(filename.to_string()),
+            read: "R3".to_string(),
+            group: IlmnFastqFileGroup {
+                sample: "heart_1k_v3".to_string(),
+                s: 1,
+                lane_mode: 2.into(),
+                chunk: 1,
+            },
         };
 
         assert_eq!(r.unwrap(), expected);
@@ -275,11 +305,13 @@ mod test {
 
         let expected = IlmnFastqFile {
             path: PathBuf::from(filename),
-            sample: "test_sample".to_string(),
-            s: 1,
-            lane_mode: LaneMode::NoLaneSplitting,
             read: "R1".to_string(),
-            chunk: 1,
+            group: IlmnFastqFileGroup {
+                sample: "test_sample".to_string(),
+                s: 1,
+                lane_mode: LaneMode::NoLaneSplitting,
+                chunk: 1,
+            },
         };
 
         assert_eq!(r.unwrap(), expected);
@@ -379,12 +411,11 @@ mod tests_from_tenkit {
         };
 
         let fqs = query.find_fastqs()?;
-        // NOTE: R3 is not read
         let expected = vec![InputFastqs {
             r1: format!("{}/test_sample_S1_L001_R1_001.fastq.gz", path),
-            r2: Some(format!("{}/test_sample_S1_L001_R2_001.fastq.gz", path)),
-            i1: Some(format!("{}/test_sample_S1_L001_I1_001.fastq.gz", path)),
-            i2: None,
+            r2: Some(format!("{}/test_sample_S1_L001_R3_001.fastq.gz", path)),
+            i1: Some(format!("{}/test_sample_S1_L001_R2_001.fastq.gz", path)),
+            i2: Some(format!("{}/test_sample_S1_L001_I1_001.fastq.gz", path)),
             r1_interleaved: false,
         }];
         assert_eq!(fqs, expected);
@@ -405,16 +436,16 @@ mod tests_from_tenkit {
         let expected = vec![
             InputFastqs {
                 r1: format!("{}/s1/test_sample_S1_L001_R1_001.fastq.gz", path),
-                r2: Some(format!("{}/s1/test_sample_S1_L001_R2_001.fastq.gz", path)),
-                i1: Some(format!("{}/s1/test_sample_S1_L001_I1_001.fastq.gz", path)),
-                i2: None,
+                r2: Some(format!("{}/s1/test_sample_S1_L001_R3_001.fastq.gz", path)),
+                i1: Some(format!("{}/s1/test_sample_S1_L001_R2_001.fastq.gz", path)),
+                i2: Some(format!("{}/s1/test_sample_S1_L001_I1_001.fastq.gz", path)),
                 r1_interleaved: false,
             },
             InputFastqs {
                 r1: format!("{}/s2/test_sample_S2_L001_R1_001.fastq.gz", path),
-                r2: Some(format!("{}/s2/test_sample_S2_L001_R2_001.fastq.gz", path)),
-                i1: Some(format!("{}/s2/test_sample_S2_L001_I1_001.fastq.gz", path)),
-                i2: None,
+                r2: Some(format!("{}/s2/test_sample_S2_L001_R3_001.fastq.gz", path)),
+                i1: Some(format!("{}/s2/test_sample_S2_L001_R2_001.fastq.gz", path)),
+                i2: Some(format!("{}/s2/test_sample_S2_L001_I1_001.fastq.gz", path)),
                 r1_interleaved: false,
             },
         ];
@@ -435,9 +466,9 @@ mod tests_from_tenkit {
         let fqs = query.find_fastqs()?;
         let expected = vec![InputFastqs {
             r1: format!("{}/s1/test_sample2_S1_L001_R1_001.fastq.gz", path),
-            r2: Some(format!("{}/s1/test_sample2_S1_L001_R2_001.fastq.gz", path)),
-            i1: Some(format!("{}/s1/test_sample2_S1_L001_I1_001.fastq.gz", path)),
-            i2: None,
+            r2: Some(format!("{}/s1/test_sample2_S1_L001_R3_001.fastq.gz", path)),
+            i1: Some(format!("{}/s1/test_sample2_S1_L001_R2_001.fastq.gz", path)),
+            i2: Some(format!("{}/s1/test_sample2_S1_L001_I1_001.fastq.gz", path)),
             r1_interleaved: false,
         }];
         assert_eq!(fqs, expected);
@@ -456,9 +487,9 @@ mod tests_from_tenkit {
             let fqs = query.find_fastqs()?;
             let expected = vec![InputFastqs {
                 r1: format!("{}/{}_S1_L001_R1_001.fastq.gz", path, s),
-                r2: Some(format!("{}/{}_S1_L001_R2_001.fastq.gz", path, s)),
-                i1: Some(format!("{}/{}_S1_L001_I1_001.fastq.gz", path, s)),
-                i2: None,
+                r2: Some(format!("{}/{}_S1_L001_R3_001.fastq.gz", path, s)),
+                i1: Some(format!("{}/{}_S1_L001_R2_001.fastq.gz", path, s)),
+                i2: Some(format!("{}/{}_S1_L001_I1_001.fastq.gz", path, s)),
                 r1_interleaved: false,
             }];
             assert_eq!(fqs, expected);
@@ -479,22 +510,25 @@ mod tests_from_tenkit {
         let expected = vec![
             InputFastqs {
                 r1: format!("{}/test_sample_S1_L001_R1_001.fastq.gz", path),
-                r2: Some(format!("{}/test_sample_S1_L001_R2_001.fastq.gz", path)),
-                i1: Some(format!("{}/test_sample_S1_L001_I1_001.fastq.gz", path)),
-                i2: None,
+                r2: Some(format!("{}/test_sample_S1_L001_R3_001.fastq.gz", path)),
+                i1: Some(format!("{}/test_sample_S1_L001_R2_001.fastq.gz", path)),
+                i2: Some(format!("{}/test_sample_S1_L001_I1_001.fastq.gz", path)),
                 r1_interleaved: false,
             },
             InputFastqs {
                 r1: format!("{}/test_sample_suffix_S1_L001_R1_001.fastq.gz", path),
                 r2: Some(format!(
-                    "{}/test_sample_suffix_S1_L001_R2_001.fastq.gz",
+                    "{}/test_sample_suffix_S1_L001_R3_001.fastq.gz",
                     path
                 )),
                 i1: Some(format!(
+                    "{}/test_sample_suffix_S1_L001_R2_001.fastq.gz",
+                    path
+                )),
+                i2: Some(format!(
                     "{}/test_sample_suffix_S1_L001_I1_001.fastq.gz",
                     path
                 )),
-                i2: None,
                 r1_interleaved: false,
             },
         ];
