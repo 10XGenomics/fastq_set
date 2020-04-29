@@ -104,18 +104,23 @@ fn match_seqs_with_n(target: &[u8], observed: &[u8], ns_allowed: usize) -> bool 
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BclProcessorFile {
+pub struct BclProcessorFileGroup {
     pub si: String,
     pub lane: usize,
     pub chunk: usize,
-    pub read: String,
-    pub path: PathBuf,
 }
 
-impl BclProcessorFile {
+impl BclProcessorFileGroup {
     pub fn lane_mode(&self) -> LaneMode {
         LaneMode::SingleLane(self.lane)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BclProcessorFile {
+    pub group: BclProcessorFileGroup,
+    pub read: String,
+    pub path: PathBuf,
 }
 
 impl fmt::Display for BclProcessorFile {
@@ -130,9 +135,9 @@ impl fmt::Display for BclProcessorFile {
 /// the SI set name, if matched to a known SI set, otherwise it's the SI sequence
 /// and the values is a vec of the corresponding input filesets.
 pub fn group_samples(
-    files: Vec<(BclProcessorFile, InputFastqs)>,
+    files: Vec<(BclProcessorFileGroup, InputFastqs)>,
     include_unrec: bool,
-) -> HashMap<String, Vec<(BclProcessorFile, InputFastqs)>> {
+) -> HashMap<String, Vec<(BclProcessorFileGroup, InputFastqs)>> {
     let mut si_set_name_map: HashMap<&str, &str> = HashMap::new();
 
     for (id, vals) in SAMPLE_INDEX_MAP.iter() {
@@ -166,16 +171,13 @@ pub fn group_samples(
 
 pub fn find_flowcell_fastqs(
     path: impl AsRef<Path>,
-) -> Result<Vec<(BclProcessorFile, InputFastqs)>, Error> {
+) -> Result<Vec<(BclProcessorFileGroup, InputFastqs)>, Error> {
     let mut res = Vec::new();
 
     let mut files = get_demux_files(path)?;
     files.sort();
 
-    for (_, files) in &files
-        .into_iter()
-        .group_by(|(info, _)| (info.si.clone(), info.lane, info.chunk))
-    {
+    for (group, files) in &files.into_iter().group_by(|(info, _)| info.group.clone()) {
         let my_files: Vec<_> = files.collect();
 
         let ra = my_files
@@ -200,8 +202,7 @@ pub fn find_flowcell_fastqs(
             r1_interleaved: true,
         };
 
-        let info = my_files[0].0.clone();
-        res.push((info, fastqs));
+        res.push((group, fastqs));
     }
 
     Ok(res)
@@ -245,9 +246,11 @@ fn try_parse_bclprocessor_file(filename: &str) -> Option<BclProcessorFile> {
         Some(caps) => Some(BclProcessorFile {
             path: PathBuf::from(filename),
             read: caps.get(1).unwrap().as_str().to_string(),
-            si: caps.get(2).unwrap().as_str().to_string(),
-            lane: caps.get(3).unwrap().as_str().parse().unwrap(),
-            chunk: caps.get(4).unwrap().as_str().parse().unwrap(),
+            group: BclProcessorFileGroup {
+                si: caps.get(2).unwrap().as_str().to_string(),
+                lane: caps.get(3).unwrap().as_str().parse().unwrap(),
+                chunk: caps.get(4).unwrap().as_str().parse().unwrap(),
+            },
         }),
     }
 }
@@ -265,9 +268,11 @@ mod tests {
         let truth = BclProcessorFile {
             path: PathBuf::from(f1),
             read: "RA".to_string(),
-            si: "TTAGCGAT".to_string(),
-            lane: 2,
-            chunk: 1,
+            group: BclProcessorFileGroup {
+                si: "TTAGCGAT".to_string(),
+                lane: 2,
+                chunk: 1,
+            },
         };
 
         assert_eq!(bcl, truth);

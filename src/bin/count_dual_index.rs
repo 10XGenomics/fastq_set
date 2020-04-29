@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 
-use fastq_10x::filenames::bcl_processor::{find_flowcell_fastqs, BclProcessorFile};
+use fastq_10x::filenames::bcl_processor::{find_flowcell_fastqs, BclProcessorFileGroup};
 use fastq_10x::read_pair::{ReadPart::Seq, WhichRead::I2};
 use fastq_10x::read_pair_iter::InputFastqs;
 use fastq_10x::sseq::SSeq;
@@ -32,7 +32,7 @@ pub fn count_dual_indexes(fastqs: InputFastqs) -> Result<HashMap<SSeq, u32>, Err
 
 pub fn count_dual_indexes_flowcell(
     p: impl AsRef<Path>,
-) -> Result<Vec<(BclProcessorFile, HashMap<SSeq, u32>)>, Error> {
+) -> Result<Vec<(BclProcessorFileGroup, HashMap<SSeq, u32>)>, Error> {
     let fc_data = find_flowcell_fastqs(p)?;
     let mut results = Vec::new();
 
@@ -62,7 +62,7 @@ struct CountStruct<'a, 'b> {
 
 pub fn write_counts(
     file: impl AsRef<Path>,
-    data: Vec<(BclProcessorFile, HashMap<SSeq, u32>)>,
+    data: Vec<(BclProcessorFileGroup, HashMap<SSeq, u32>)>,
 ) -> Result<(), Error> {
     let writer = std::io::BufWriter::new(std::fs::File::create(file)?);
     let mut wtr = WriterBuilder::new().from_writer(writer);

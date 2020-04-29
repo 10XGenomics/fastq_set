@@ -138,6 +138,13 @@ impl Whitelist {
         }
         barcode.valid
     }
+
+    pub fn contains(&self, sequence: &SSeq) -> bool {
+        match self {
+            Whitelist::Plain(ref whitelist) => whitelist.contains(sequence),
+            Whitelist::Trans(ref whitelist) => whitelist.contains_key(sequence),
+        }
+    }
 }
 
 /// Check an observed barcode sequence against a whitelist of barcodes
