@@ -68,10 +68,9 @@ pub fn read_barcode_whitelist_trans(
             let x = x?;
             Ok((
                 x.0,
-                x.1.ok_or(format_err!(
-                    "not a translation whitelist: {:?}",
-                    filename.as_ref()
-                ))?,
+                x.1.ok_or_else(|| {
+                    format_err!("not a translation whitelist: {:?}", filename.as_ref())
+                })?,
             ))
         })
         .collect::<Result<_, Error>>()?;

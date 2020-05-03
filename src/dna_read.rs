@@ -304,14 +304,6 @@ mod test_dna_cfg {
             let prc = DnaProcessor::new(chunk, idx as u16, whitelist.clone());
             procs.push(prc);
         }
-
-        // Only run the full bc-sort workflow in release mode -- it's too slow in debug mode.
-        #[cfg(not(debug_assertions))]
-        {
-            let _bc_sort_results =
-                crate::bc_sort::barcode_sort_workflow(procs, "tests", "tests/10K-agora-dev.txt")
-                    .unwrap();
-        }
     }
 
     const CRG_CFG: &str = r#"

@@ -232,6 +232,34 @@ fn sseq_serde_bincode(c: &mut Criterion) {
     });
 }
 
+fn whitelist_load_benchmark(c: &mut Criterion) {
+    c.bench(
+        "whitelist_load",
+        Benchmark::new("737k", |b| {
+            b.iter(|| {
+                fastq_10x::barcode::Whitelist::new(
+                    "/mnt/home/sreenath.krishnan/more_codes/cellranger_slfe/lib/python/cellranger/barcodes/737K-august-2016.txt"
+                )
+            })
+        })
+        .with_function("3M", |b| {
+            b.iter(|| {
+                fastq_10x::barcode::Whitelist::new(
+                    "/mnt/home/sreenath.krishnan/more_codes/cellranger_slfe/lib/python/cellranger/barcodes/3M-february-2018.txt.gz"
+                )
+            })
+        })
+        .with_function("3M-trans", |b| {
+            b.iter(|| {
+                fastq_10x::barcode::Whitelist::new(
+                    "/mnt/home/sreenath.krishnan/more_codes/cellranger_slfe/lib/python/cellranger/barcodes/translation/3M-february-2018.txt.gz"
+                )
+            })
+        })
+        .sample_size(10),
+    );
+}
+
 criterion_group!(
     benches,
     run_fastq_lz4_benchmark,
@@ -239,6 +267,7 @@ criterion_group!(
     run_fastq_gz_benchmark,
     // run_trim_benchmark,
     sseq_serde_bincode,
+    whitelist_load_benchmark,
 );
 
 criterion_main!(benches);
