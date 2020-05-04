@@ -115,7 +115,7 @@ impl Whitelist {
         }
     }
 
-    fn check(&self, barcode: &mut Barcode, do_translate: bool) -> bool {
+    fn check(&self, barcode: &mut Barcode) -> bool {
         match self {
             Whitelist::Plain(ref whitelist) => {
                 if whitelist.contains(&barcode.sequence) {
@@ -127,9 +127,7 @@ impl Whitelist {
             Whitelist::Trans(ref whitelist) => {
                 if let Some(translation) = whitelist.get(&barcode.sequence) {
                     barcode.valid = true;
-                    if do_translate {
-                        barcode.sequence = *translation;
-                    }
+                    barcode.sequence = *translation;
                 } else {
                     barcode.valid = false;
                 }
@@ -158,8 +156,8 @@ impl BarcodeChecker {
 
     /// Convert `barcode` to be `is_valid() == true` if the
     /// barcode sequence exactly matches a whitelist sequence.
-    pub fn check(&self, barcode: &mut Barcode, do_translate: bool) -> bool {
-        self.whitelist.check(barcode, do_translate)
+    pub fn check(&self, barcode: &mut Barcode) -> bool {
+        self.whitelist.check(barcode)
     }
 }
 
@@ -223,12 +221,7 @@ impl BarcodeCorrector {
     /// the barcode if there's a whitelist barcode with posterior probability greater than
     /// self.bc_confidence_threshold
     #[allow(clippy::needless_range_loop)]
-    pub fn correct_barcode(
-        &self,
-        observed_barcode: &Barcode,
-        qual: &[u8],
-        do_translate: bool,
-    ) -> Option<Barcode> {
+    pub fn correct_barcode(&self, observed_barcode: &Barcode, qual: &[u8]) -> Option<Barcode> {
         let mut a = observed_barcode.sequence; // Create a copy
 
         let mut candidates: Vec<(Of64, Barcode)> = Vec::new();
@@ -248,7 +241,7 @@ impl BarcodeCorrector {
                     gem_group: observed_barcode.gem_group,
                 };
 
-                if self.whitelist.check(&mut trial_bc, do_translate) {
+                if self.whitelist.check(&mut trial_bc) {
                     // Apply additive (Laplace) smoothing.
                     let raw_count = self.bc_counts.get(&trial_bc);
                     let bc_count = 1 + raw_count;
@@ -320,36 +313,30 @@ mod test {
         //assert_eq!(val.correct_barcode(&t1, &vec![66,66,66,66,66]), Some(Barcode::test_valid(b"AAAAA")));
 
         // Low quality
-        assert_eq!(
-            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], false),
-            None
-        );
+        assert_eq!(val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66]), None);
 
         // Trivial correction
         let t2 = Barcode::test_invalid(b"AAAAT");
         assert_eq!(
-            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], false),
+            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40]),
             Some(b1)
         );
 
         // Pseudo-count kills you
         let t3 = Barcode::test_invalid(b"ACGAT");
-        assert_eq!(
-            val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66], false),
-            None
-        );
+        assert_eq!(val.correct_barcode(&t3, &vec![66, 66, 66, 66, 66]), None);
 
         // Quality help you
         let t4 = Barcode::test_invalid(b"ACGAT");
         assert_eq!(
-            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40], false),
+            val.correct_barcode(&t4, &vec![66, 66, 66, 66, 40]),
             Some(b3)
         );
 
         // Counts help you
         let t5 = Barcode::test_invalid(b"ACAAA");
         assert_eq!(
-            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40], false),
+            val.correct_barcode(&t5, &vec![66, 66, 66, 66, 40]),
             Some(b1)
         );
     }
@@ -382,15 +369,12 @@ mod test {
         //assert_eq!(val.correct_barcode(&t1, &vec![66,66,66,66,66]), Some(Barcode::test_valid(b"AAAAA")));
 
         // Low quality
-        assert_eq!(
-            val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66], false),
-            None
-        );
+        assert_eq!(val.correct_barcode(&t1, &vec![34, 34, 34, 66, 66]), None);
 
         // Trivial correction
         let t2 = Barcode::test_invalid(b"AAAAT");
         assert_eq!(
-            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40], false),
+            val.correct_barcode(&t2, &vec![66, 66, 66, 66, 40]),
             Some(b1)
         );
     }
@@ -418,7 +402,7 @@ mod test {
             let bc_with_n = Barcode::test_invalid(&bc_seq_with_n);
 
             assert_eq!(
-                corrector.correct_barcode(&bc_with_n, &qual, false),
+                corrector.correct_barcode(&bc_with_n, &qual),
                 Some(bc)
             );
 

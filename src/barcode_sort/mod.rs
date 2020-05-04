@@ -72,20 +72,16 @@ where
         let mut v = DefaultVisitor {
             phantom: PhantomData,
         };
-        // FIXME: hoist to caller?
-        let f = |_: &<Processor as FastqProcessor>::ReadType| false;
-        self.execute_workflow_with_visitor(max_iters, &mut v, f)
+        self.execute_workflow_with_visitor(max_iters, &mut v)
     }
 
-    pub fn execute_workflow_with_visitor<V, F>(
+    pub fn execute_workflow_with_visitor<V>(
         &mut self,
         max_iters: Option<usize>,
         visitor: &mut V,
-        translate_barcode: F,
     ) -> Result<(), Error>
     where
         V: ReadVisitor<ReadType = <Processor as FastqProcessor>::ReadType>,
-        F: Fn(&<Processor as FastqProcessor>::ReadType) -> bool,
     {
         let mut nreads = 0;
         for read_result in self
@@ -96,7 +92,7 @@ where
             nreads += 1;
             let mut read = read_result?;
             let mut bc = *read.barcode();
-            self.checker.check(&mut bc, translate_barcode(&read));
+            self.checker.check(&mut bc);
             read.set_barcode(bc);
             visitor.visit_read(&mut read)?;
             self.sorter.process(read)?;
