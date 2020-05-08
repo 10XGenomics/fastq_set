@@ -250,11 +250,12 @@ impl RpRange {
     }
 
     // Slice the input to the range [offset, offset + len).
-    // The input length is not checked in this function.
-    fn slice<'a>(&self, input: &'a [u8]) -> &'a [u8] {
+    fn slice<'a>(&self, input: &'a [u8]) -> Option<&'a [u8]> {
+        let o = self.offset();
         match self.len() {
-            Some(l) => &input[self.offset()..self.offset() + l],
-            None => &input[self.offset()..],
+            Some(l) if o + l <= input.len() => Some(&input[o..o + l]),
+            None if o < input.len() => Some(&input[o..]),
+            _ => None,
         }
     }
 
@@ -604,7 +605,7 @@ impl ReadPair {
     /// Get the range in `RpRange`, return the chosen `part` (sequence or qvs).
     pub fn get_range(&self, rp_range: RpRange, part: ReadPart) -> Option<&[u8]> {
         let read = self.get(rp_range.read(), part);
-        read.map(|r| rp_range.slice(r))
+        read.and_then(|r| rp_range.slice(r))
     }
 
     pub fn check_range(&self, range: &RpRange, region_name: &str) -> Result<(), Error> {
@@ -698,6 +699,19 @@ mod tests {
     use std::cmp::{max, min};
 
     const MAX_RPRANGE_ENTRY: usize = 1usize << 15;
+
+    #[test]
+    fn test_rprange_slice() {
+        let data = &[1u8, 2, 3, 4, 5];
+        let r1 = RpRange::new(WhichRead::R1, 0, Some(5));
+        assert_eq!(r1.slice(data), Some(&data[..]));
+        let r2 = RpRange::new(WhichRead::R1, 0, Some(6));
+        assert_eq!(r2.slice(data), None);
+        let r3 = RpRange::new(WhichRead::R1, 0, None);
+        assert_eq!(r3.slice(data), Some(&data[..]));
+        let r4 = RpRange::new(WhichRead::R1, 5, None);
+        assert_eq!(r4.slice(data), None);
+    }
 
     #[test]
     #[should_panic]
