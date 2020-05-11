@@ -254,7 +254,7 @@ impl RpRange {
         let o = self.offset();
         match self.len() {
             Some(l) if o + l <= input.len() => Some(&input[o..o + l]),
-            None if o < input.len() => Some(&input[o..]),
+            None if o <= input.len() => Some(&input[o..]),
             _ => None,
         }
     }
@@ -710,7 +710,9 @@ mod tests {
         let r3 = RpRange::new(WhichRead::R1, 0, None);
         assert_eq!(r3.slice(data), Some(&data[..]));
         let r4 = RpRange::new(WhichRead::R1, 5, None);
-        assert_eq!(r4.slice(data), None);
+        assert_eq!(r4.slice(data), Some(&[][..]));
+        let r5 = RpRange::new(WhichRead::R1, 6, None);
+        assert_eq!(r5.slice(data), None);
     }
 
     #[test]
