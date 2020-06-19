@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 
 lazy_static! {
     static ref BCL2FASTQ_REGEX: Regex =
-        Regex::new(r"^([\w_-]+)_S(\d+)_L(\d+)_([RI][A123])_(\d+).fastq(.gz)?$").unwrap();
+        Regex::new(r"^([\w_-]+)_S(\d+)_L(\d+)_([RI][A123])_(\d+).fastq(.gz|.lz4)?$").unwrap();
     static ref BCL2FASTQ_NO_LANE_SPLIT_REGEX: Regex =
-        Regex::new(r"^([\w_-]+)_S(\d+)_([RI][A123])_(\d+).fastq(.gz)?$").unwrap();
+        Regex::new(r"^([\w_-]+)_S(\d+)_([RI][A123])_(\d+).fastq(.gz|.lz4)?$").unwrap();
 }
 
 /// Different ways to specify sample names for the `Bcl2FastqDef`
@@ -347,6 +347,29 @@ mod test {
         assert_eq!(
             fqs[1].r1,
             "test/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn query_bcl2fastq_lz4() -> Result<(), Error> {
+        let path = "test/filenames/bcl2fastq_lz4";
+
+        let query = Bcl2FastqDef {
+            fastq_path: path.to_string(),
+            sample_name_spec: "Infected".into(),
+            lane_spec: LaneSpec::Any,
+        };
+
+        let fqs = query.find_fastqs()?;
+        assert_eq!(fqs.len(), 2);
+        assert_eq!(
+            fqs[0].r1,
+            "test/filenames/bcl2fastq_lz4/Infected_S3_L001_R1_001.fastq.lz4"
+        );
+        assert_eq!(
+            fqs[1].r1,
+            "test/filenames/bcl2fastq_lz4/Infected_S3_L002_R1_001.fastq.lz4"
         );
         Ok(())
     }
