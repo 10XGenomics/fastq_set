@@ -35,7 +35,7 @@ metric = { path = "../metric" }
 [dev-dependencies]
 time = "*"
 file_diff = "1.0"
-criterion = "0.2"
+criterion = "0.3"
 bincode = "*"
 tempfile = "3.1.0"
 psutil = ">=1.7"
