@@ -58,7 +58,7 @@ fn main() -> Result<(), Error> {
 
     let end = PreciseTime::now();
     println!(
-        "Elapsed time {} seconds for rust adapter trimmer.",
+        "Elapsed time {:?} seconds for rust adapter trimmer.",
         start.to(end)
     );
 
