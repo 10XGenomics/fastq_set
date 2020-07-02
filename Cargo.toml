@@ -38,7 +38,7 @@ file_diff = "1.0"
 criterion = "0.3"
 bincode = "*"
 tempfile = "3.1.0"
-psutil = ">=1.7"
+psutil = ">=2.0"
 pretty_assertions = "0.6.1"
 
 [[bench]]

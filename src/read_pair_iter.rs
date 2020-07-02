@@ -674,19 +674,19 @@ mod test_read_pair_iter {
         .unwrap()
         .storage(storage);
 
-        let rss_before = psutil::process::Process::new(std::process::id() as i32)?
-            .memory()?
-            .resident;
+        let rss_before = psutil::process::Process::new(std::process::id())?
+            .memory_info()?
+            .rss();
         let rp = iter.step_by(every).collect_vec();
         let elements = rp.len();
-        let rss_after = psutil::process::Process::new(std::process::id() as i32)?
-            .memory()?
-            .resident;
+        let rss_after = psutil::process::Process::new(std::process::id())?
+            .memory_info()?
+            .rss();
 
         drop(rp);
-        let rss_after_drop = psutil::process::Process::new(std::process::id() as i32)?
-            .memory()?
-            .resident;
+        let rss_after_drop = psutil::process::Process::new(std::process::id())?
+            .memory_info()?
+            .rss();
 
         let rss_used = rss_after.saturating_sub(rss_after_drop);
         println!(
