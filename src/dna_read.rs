@@ -123,6 +123,14 @@ impl FastqProcessor for DnaProcessor {
         self.chunk.subsample_rate
     }
 
+    fn illumina_r1_trim_length(&self) -> Option<usize> {
+        None
+    }
+
+    fn illumina_r2_trim_length(&self) -> Option<usize> {
+        None
+    }
+
     fn gem_group(&self) -> u16 {
         self.chunk.gem_group
     }

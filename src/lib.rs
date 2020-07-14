@@ -266,6 +266,10 @@ pub trait FastqProcessor {
     fn bc_subsample_rate(&self) -> f64;
     fn read_subsample_rate(&self) -> f64;
 
+    /// Read trimming
+    fn illumina_r1_trim_length(&self) -> Option<usize>;
+    fn illumina_r2_trim_length(&self) -> Option<usize>;
+
     fn iter(&self) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
         Self: Sized,
@@ -318,6 +322,8 @@ where
 {
     pub fn new(processor: &'a Processor) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
+            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
+            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .subsample_rate(processor.read_subsample_rate());
         Ok(FastqProcessorIter {
             read_pair_iter,
@@ -331,6 +337,8 @@ where
     ) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .subsample_rate(processor.read_subsample_rate())
+            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
+            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .storage(storage);
         Ok(FastqProcessorIter {
             read_pair_iter,
@@ -340,6 +348,8 @@ where
 
     pub fn with_seed(processor: &'a Processor, seed: u64) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
+            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
+            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed);
         Ok(FastqProcessorIter {
@@ -354,6 +364,8 @@ where
         storage: read_pair::ReadPairStorage,
     ) -> Result<Self, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
+            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
+            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed)
             .storage(storage);

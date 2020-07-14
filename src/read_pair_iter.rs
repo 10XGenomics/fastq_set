@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
-use fastq::{self, RecordRefIter};
+use fastq::{self, Record, RecordRefIter};
 
 use bytes::{BufMut, BytesMut};
 
 use std::io::ErrorKind;
-use std::io::{self, BufRead, BufReader, Read, Seek};
+use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 
 use failure::Backtrace;
 use failure::Fail;
@@ -148,6 +148,44 @@ impl InputFastqs {
 
 const BUF_SIZE: usize = 4096 * 4;
 
+/// A type implementing the fastq Record trait for handling trimming
+struct TrimRecord<'a, R: Record> {
+    inner: &'a R,
+    trim: usize,
+}
+
+impl<'a, 'b, R: Record> TrimRecord<'a, R> {
+    fn new(inner: &'a R, trim: usize) -> Self {
+        let trim = trim.min(inner.seq().len());
+        TrimRecord { inner, trim }
+    }
+}
+
+impl<'a, R: Record> Record for TrimRecord<'a, R> {
+    fn seq(&self) -> &[u8] {
+        &self.inner.seq()[..self.trim]
+    }
+    fn qual(&self) -> &[u8] {
+        &self.inner.qual()[..self.trim]
+    }
+    fn head(&self) -> &[u8] {
+        self.inner.head()
+    }
+    fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<usize> {
+        let mut written = 0;
+        // TODO(lhepler): the fundamental impl in fastq here is busted, write may not write all
+        // bytes...
+        written += writer.write(b"@")?;
+        written += writer.write(self.head())?;
+        written += writer.write(b"\n")?;
+        written += writer.write(self.seq())?;
+        written += writer.write(b"\n+\n")?;
+        written += writer.write(self.qual())?;
+        written += writer.write(b"\n")?;
+        Ok(written)
+    }
+}
+
 /// Read sequencing data from a parallel set of FASTQ files.
 /// Illumina sequencers typically emit a parallel set of FASTQ files, with one file
 /// for each read component taken by the sequencer. Up to 4 reads are possible (R1, R2, I1, and I2).
@@ -165,6 +203,7 @@ pub struct ReadPairIter {
     subsample_rate: f64,
     storage: ReadPairStorage,
     records_read: [usize; 4],
+    read_lengths: [usize; 4],
 }
 
 impl ReadPairIter {
@@ -267,7 +306,18 @@ impl ReadPairIter {
             subsample_rate: 1.0,
             storage: ReadPairStorage::default(),
             records_read: [0; 4],
+            read_lengths: [std::usize::MAX; 4],
         })
+    }
+
+    pub fn illumina_r1_trim_length(mut self, r1_length: Option<usize>) -> Self {
+        self.read_lengths[WhichRead::R1 as usize] = r1_length.unwrap_or(std::usize::MAX);
+        self
+    }
+
+    pub fn illumina_r2_trim_length(mut self, r2_length: Option<usize>) -> Self {
+        self.read_lengths[WhichRead::R2 as usize] = r2_length.unwrap_or(std::usize::MAX);
+        self
     }
 
     pub fn storage(mut self, storage: ReadPairStorage) -> Self {
@@ -331,7 +381,11 @@ impl ReadPairIter {
 
                         if sample {
                             let which = WhichRead::read_types()[idx];
-                            record.map(|r| rp.push_read(&r, which));
+                            let read_length = self.read_lengths[which as usize];
+                            record.map(|r| {
+                                let tr = TrimRecord::new(&r, read_length);
+                                rp.push_read(&tr, which)
+                            });
                         }
 
                         rec_num[idx] = rec_num[idx] + 1;
@@ -370,7 +424,11 @@ impl ReadPairIter {
 
                         if sample {
                             let which = WhichRead::read_types()[idx + 1];
-                            record.map(|r| rp.push_read(&r, which));
+                            let read_length = self.read_lengths[which as usize];
+                            record.map(|r| {
+                                let tr = TrimRecord::new(&r, read_length);
+                                rp.push_read(&tr, which)
+                            });
                         }
 
                         rec_num[idx] = rec_num[idx] + 1;
