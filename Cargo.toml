@@ -1,8 +1,15 @@
 [package]
-name = "fastq_10x"
+name = "fastq_set"
 version = "0.2.0"
 authors = ["Patrick Marks <patrick@10xgenomics.com>", "Sreenath Krishnan <sreenath.krishnan@10xgenomics.com>"]
 edition = "2018"
+license = "MIT"
+description = "Utilities for reading groups of FASTQ files from different sequencing reads of the same library molecule. Encodes filename conventions used by `bcl2fastq` from Illumina"
+repository = "https://github.com/10XGenomics/fastq_set"
+keywords = ["bioinformatics", "DNA", "sequencing"]
+readme = "README.md"
+
+
 
 [dependencies]
 ordered-float = "1"
@@ -13,31 +20,24 @@ serde = "*"
 serde_bytes = "*"
 bytes = { version = "0.5", features = ["serde"] }
 failure = { version = "0.1", features = ["backtrace"] }
-tempfile = "3"
 glob = "0.3"
 regex = "1"
 lazy_static = "1"
-csv = ">=1"
+ahash = "0.4"
 
-rayon = "*"
 log = "*"
-bincode = "1.3.1"
 rand = "0.7"
 rand_xorshift = "0.2"
 itertools = ">=0.8"
 lz4 = "*"
 fastq = "^0.6"
 bio = ">=0.29"
-shardio = "0.7"
-
-metric = { path = "../metric" }
 
 [dev-dependencies]
 time = "*"
 file_diff = "1.0"
 criterion = "0.3"
 bincode = "*"
-tempfile = "3.1.0"
 psutil = ">=2.0"
 pretty_assertions = "0.6.1"
 

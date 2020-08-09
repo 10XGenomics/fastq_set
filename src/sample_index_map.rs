@@ -2,11 +2,11 @@
 //! for official 10x sample index plate products.
 
 use lazy_static::lazy_static;
-use metric::TxHashMap;
+use std::collections::HashMap;
 
 lazy_static! {
-    pub static ref SAMPLE_INDEX_MAP: TxHashMap<&'static str, [&'static str; 4]> = {
-        let mut m = TxHashMap::default();
+    pub static ref SAMPLE_INDEX_MAP: HashMap<&'static str, [&'static str; 4]> = {
+        let mut m = HashMap::default();
         m.insert("220027", ["TCGCCATA", "GTATACAC", "AATGGTGG", "CGCATGCT"]);
         m.insert("220028", ["TATCCTCG", "GCGAGGTC", "CGCTTCAA", "ATAGAAGT"]);
         m.insert("220029", ["TGACGTCG", "CTTGTGTA", "ACGACCGT", "GACTAAAC"]);

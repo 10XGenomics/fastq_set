@@ -119,10 +119,10 @@ pub enum ReadPart {
 ///
 /// # Example
 /// ```rust
-/// extern crate fastq_10x;
+/// extern crate fastq_set;
 /// extern crate fastq;
-/// use fastq_10x::read_pair::{RpRange, WhichRead, ReadPart, ReadPair};
-/// use fastq_10x::WhichEnd;
+/// use fastq_set::read_pair::{RpRange, WhichRead, ReadPart, ReadPair};
+/// use fastq_set::WhichEnd;
 /// use fastq::OwnedRecord;
 /// let read1 = OwnedRecord {
 ///     head: b"some_name".to_vec(),
@@ -134,7 +134,7 @@ pub enum ReadPart {
 ///
 /// // WARNING: DO NOT USE THIS FUNCTION IF YOU ARE STREAMING FASTQ DATA
 /// // AND WANT TO CREATE ReadPair STRUCTS.
-/// // USE `fastq_10x::read_pair_iter::ReadPairIter` INSTEAD.
+/// // USE `fastq_set::read_pair_iter::ReadPairIter` INSTEAD.
 /// let read_pair = ReadPair::new(input);
 /// // Let's say the read1 is of the form BC(16)-UMI(10)-Insert. This example will
 /// // setup different RpRanges to represent these ranges.
@@ -196,8 +196,8 @@ impl RpRange {
     ///
     /// # Example
     /// ```rust
-    /// use fastq_10x::read_pair::RpRange;
-    /// use fastq_10x::read_pair::WhichRead;
+    /// use fastq_set::read_pair::RpRange;
+    /// use fastq_set::read_pair::WhichRead;
     /// let range = RpRange::new(WhichRead::R1, 10, Some(50));
     /// assert!(range.read() == WhichRead::R1);
     /// assert!(range.offset() == 10);
@@ -285,7 +285,7 @@ impl RpRange {
     ///
     /// # Example
     /// ```rust
-    /// use fastq_10x::read_pair::{RpRange, WhichRead};
+    /// use fastq_set::read_pair::{RpRange, WhichRead};
     /// let read_seq = b"AAGCAGGGGCGGGCAAATCCAGCCGTTACCTTACACGCCCCACTGGGAAG";
     /// let full_range = RpRange::new(WhichRead::R1, 0, Some(read_seq.len()));
     /// let mut r1_range = RpRange::new(WhichRead::R1, 20, None);
@@ -350,7 +350,7 @@ impl RpRange {
     ///
     /// # Example
     /// ```rust
-    /// use fastq_10x::read_pair::{RpRange, WhichRead};
+    /// use fastq_set::read_pair::{RpRange, WhichRead};
     /// // 100 bases in R1 starting from base 10
     /// let mut rp_range = RpRange::new(WhichRead::R1, 10, Some(100));
     /// let shrink_range = 20..60;
@@ -400,8 +400,8 @@ impl RpRange {
     ///
     /// # Example
     /// ```rust
-    /// use fastq_10x::read_pair::{RpRange, WhichRead};
-    /// use fastq_10x::WhichEnd;
+    /// use fastq_set::read_pair::{RpRange, WhichRead};
+    /// use fastq_set::WhichEnd;
     /// let mut rp_range1 = RpRange::new(WhichRead::R1, 40, None);
     /// // Trim 10 bases in the 5' end
     /// rp_range1.trim(WhichEnd::FivePrime, 10);

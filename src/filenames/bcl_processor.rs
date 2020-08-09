@@ -6,10 +6,9 @@ use crate::sample_index_map::SAMPLE_INDEX_MAP;
 use crate::sseq::SSeq;
 use failure::Error;
 use itertools::Itertools;
-use metric::TxHashSet;
 use regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -21,7 +20,7 @@ pub enum SampleIndexSpec {
     /// Allow sample indices from the given list of sequences. `indices` stores the list of allowed
     /// sequences and require that the SI match to within `max_n` Ns
     Sequences {
-        indices: TxHashSet<SSeq>,
+        indices: HashSet<SSeq>,
         max_n: usize,
     },
 }
@@ -280,7 +279,7 @@ mod tests {
 
     #[test]
     fn load_dir() -> Result<(), Error> {
-        let path = "test/filenames/bcl_processor";
+        let path = "tests/filenames/bcl_processor";
         let fastqs = find_flowcell_fastqs(path)?;
         assert_eq!(fastqs.len(), 44);
         Ok(())
@@ -288,7 +287,7 @@ mod tests {
 
     #[test]
     fn query_all_lanes() -> Result<(), Error> {
-        let path = "test/filenames/bcl_processor";
+        let path = "tests/filenames/bcl_processor";
 
         let query = BclProcessorFastqDef {
             fastq_path: path.to_string(),
@@ -303,7 +302,7 @@ mod tests {
 
     #[test]
     fn query_one_lane() -> Result<(), Error> {
-        let path = "test/filenames/bcl_processor";
+        let path = "tests/filenames/bcl_processor";
 
         let query = BclProcessorFastqDef {
             fastq_path: path.to_string(),
@@ -315,7 +314,7 @@ mod tests {
         assert_eq!(fqs.len(), 1);
         assert_eq!(
             fqs[0].r1,
-            "test/filenames/bcl_processor/read-RA_si-TCGAATGATC_lane-002-chunk-001.fastq.gz"
+            "tests/filenames/bcl_processor/read-RA_si-TCGAATGATC_lane-002-chunk-001.fastq.gz"
         );
         Ok(())
     }
@@ -323,7 +322,7 @@ mod tests {
     #[test]
     fn test_si_any() {
         let bcl_proc = BclProcessorFastqDef {
-            fastq_path: "test/filenames/bcl_processor/".to_string(),
+            fastq_path: "tests/filenames/bcl_processor/".to_string(),
             sample_index_spec: SampleIndexSpec::Any,
             lane_spec: LaneSpec::Any,
         };
@@ -339,7 +338,7 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_find_input_fastq_files_10x_preprocess() -> Result<(), Error> {
-        let path = "test/filenames/bcl_processor_2";
+        let path = "tests/filenames/bcl_processor_2";
 
         let query = BclProcessorFastqDef {
             fastq_path: path.to_string(),

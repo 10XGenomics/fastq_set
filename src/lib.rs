@@ -17,9 +17,6 @@
 use fastq;
 
 pub mod adapter_trimmer;
-pub mod barcode;
-pub mod barcode_sort;
-pub mod dna_read;
 pub mod filenames;
 pub mod illumina_header_info;
 pub mod metric_utils;
@@ -48,9 +45,9 @@ use serde::{Deserialize, Serialize};
 /// Note the natural sort order groups barcodes by GEM group, then whether they valid, then barcode sequence.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
 pub struct Barcode {
-    gem_group: u16,
-    valid: bool,
-    sequence: SSeq,
+    pub gem_group: u16,
+    pub valid: bool,
+    pub sequence: SSeq,
 }
 
 impl Barcode {
@@ -87,6 +84,7 @@ impl Barcode {
         }
     }
 
+    /*
     #[cfg(test)]
     fn test_valid(sequence: &[u8]) -> Barcode {
         Barcode {
@@ -104,6 +102,7 @@ impl Barcode {
             valid: false,
         }
     }
+    */
 
     /// Does this represent a valid whitelist barcode
     pub fn is_valid(self) -> bool {

@@ -2,12 +2,11 @@
 extern crate criterion;
 
 use criterion::{Benchmark, Criterion, Throughput};
-use fastq_10x::adapter_trimmer::{Adapter, ReadAdapterCatalog};
-use fastq_10x::read_pair::WhichRead;
-use fastq_10x::read_pair_iter::{InputFastqs, ReadPairIter};
-// use fastq_10x::rna_read::{ChemistryDef, RnaChunk};
-use fastq_10x::FastqProcessor;
-use metric::TxHashMap;
+use fastq_set::adapter_trimmer::{Adapter, ReadAdapterCatalog};
+use fastq_set::read_pair::WhichRead;
+use fastq_set::read_pair_iter::{InputFastqs, ReadPairIter};
+use fastq_set::FastqProcessor;
+use std::collections::HashSet;
 use std::fs::File;
 use std::process::Command;
 
@@ -78,7 +77,7 @@ fn read_pair_count(file: impl ToString) -> usize {
 // fn rna_read_trim(
 //     chemistry: ChemistryDef,
 //     fastq_file: impl ToString,
-//     adapter_map: &TxHashMap<WhichRead, Vec<Adapter>>,
+//     adapter_map: &HashMap<WhichRead, Vec<Adapter>>,
 // ) -> usize {
 //     let mut ad_catalog = ReadAdapterCatalog::from(adapter_map);
 //     let chunk = RnaChunk::new(
@@ -199,7 +198,7 @@ fn run_fastq_benchmark(c: &mut Criterion) {
 //     let chemistry: ChemistryDef =
 //         serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
 //             .unwrap();
-//     let vdj_adapters: TxHashMap<WhichRead, Vec<Adapter>> =
+//     let vdj_adapters: HashMap<WhichRead, Vec<Adapter>> =
 //         serde_json::from_reader(File::open("tests/rna_read/vdj_adapters.json").unwrap()).unwrap();
 
 //     c.bench(
@@ -220,7 +219,7 @@ fn sseq_serde_bincode(c: &mut Criterion) {
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
         for i in 0..10_000 {
-            let s = fastq_10x::sseq::SSeq::new(seq);
+            let s = fastq_set::sseq::SSeq::new(seq);
             sseqs.push(s);
         }
 
@@ -232,34 +231,6 @@ fn sseq_serde_bincode(c: &mut Criterion) {
     });
 }
 
-fn whitelist_load_benchmark(c: &mut Criterion) {
-    c.bench(
-        "whitelist_load",
-        Benchmark::new("737k", |b| {
-            b.iter(|| {
-                fastq_10x::barcode::Whitelist::new(
-                    "/mnt/home/sreenath.krishnan/more_codes/cellranger_slfe/lib/python/cellranger/barcodes/737K-august-2016.txt"
-                )
-            })
-        })
-        .with_function("3M", |b| {
-            b.iter(|| {
-                fastq_10x::barcode::Whitelist::new(
-                    "/mnt/home/sreenath.krishnan/more_codes/cellranger_slfe/lib/python/cellranger/barcodes/3M-february-2018.txt.gz"
-                )
-            })
-        })
-        .with_function("3M-trans", |b| {
-            b.iter(|| {
-                fastq_10x::barcode::Whitelist::new(
-                    "/mnt/home/sreenath.krishnan/more_codes/cellranger_slfe/lib/python/cellranger/barcodes/translation/3M-february-2018.txt.gz"
-                )
-            })
-        })
-        .sample_size(10),
-    );
-}
-
 criterion_group!(
     benches,
     run_fastq_lz4_benchmark,
@@ -267,7 +238,6 @@ criterion_group!(
     run_fastq_gz_benchmark,
     // run_trim_benchmark,
     sseq_serde_bincode,
-    whitelist_load_benchmark,
 );
 
 criterion_main!(benches);

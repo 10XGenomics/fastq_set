@@ -68,7 +68,7 @@ mod test {
 
     #[test]
     fn test_parse_fastq_info() -> Result<(), Error> {
-        let path = "test/filenames/bcl2fastq";
+        let path = "tests/filenames/bcl2fastq";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),

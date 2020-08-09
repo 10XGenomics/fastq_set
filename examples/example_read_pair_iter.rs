@@ -1,4 +1,4 @@
-use fastq_10x::read_pair_iter::ReadPairIter;
+use fastq_set::read_pair_iter::ReadPairIter;
 
 fn main() {
     let file = "tests/rna_read/interleaved_2k.fastq.lz4";

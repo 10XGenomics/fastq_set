@@ -1,12 +1,12 @@
 #![no_main]
 #[macro_use] extern crate libfuzzer_sys;
-extern crate fastq_10x;
+extern crate fastq_set;
 
 extern crate serde;
 #[macro_use] extern crate serde_derive;
 extern crate bincode;
-use fastq_10x::{Record, OwnedRecord};
-use fastq_10x::read_pair::{ReadPair, ReadPart, WhichRead};
+use fastq_set::{Record, OwnedRecord};
+use fastq_set::read_pair::{ReadPair, ReadPart, WhichRead};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Rec {

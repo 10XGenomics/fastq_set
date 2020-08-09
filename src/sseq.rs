@@ -62,6 +62,12 @@ impl SSeq {
         self.as_bytes()
     }
 
+    /// Returns a byte slice of this sequence's contents.
+    /// A synonym for as_bytes().
+    pub fn seq_mut(&mut self) -> &mut [u8] {
+        &mut self.sequence[0..self.length as usize]
+    }
+
     /// Returns the length of this sequence, in bytes.
     pub fn len(self) -> usize {
         self.length as usize

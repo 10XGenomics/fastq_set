@@ -2,6 +2,7 @@
 
 pub mod bcl2fastq;
 pub mod bcl_processor;
+pub mod fastq_dir;
 
 use crate::read_pair_iter::InputFastqs;
 pub use bcl2fastq::Bcl2FastqDef;
@@ -9,8 +10,9 @@ use bcl2fastq::SampleNameSpec;
 pub use bcl_processor::BclProcessorFastqDef;
 use bcl_processor::SampleIndexSpec;
 use failure::Error;
-use metric::TxHashSet;
 use serde::{Deserialize, Serialize};
+
+use std::collections::HashSet;
 
 /// A method to find a set of `InputFastqs` based on
 /// some configuration information held by `self`,
@@ -41,7 +43,7 @@ pub enum LaneSpec {
     /// Consider all the lanes
     Any,
     /// Only consider the given set of lanes
-    Lanes(TxHashSet<usize>),
+    Lanes(HashSet<usize>),
 }
 
 impl LaneSpec {

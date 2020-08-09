@@ -13,7 +13,7 @@ serde = "*"
 bincode = "*"
 serde_derive = "*"
 
-[dependencies.fastq_10x]
+[dependencies.fastq_set]
 path = ".."
 [dependencies.libfuzzer-sys]
 git = "https://github.com/rust-fuzz/libfuzzer-sys.git"

@@ -5,10 +5,10 @@ use crate::read_pair_iter::InputFastqs;
 use failure::Error;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use metric::{TxHashMap, TxHashSet};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::collections::{HashSet, HashMap};
 
 lazy_static! {
     static ref BCL2FASTQ_REGEX: Regex =
@@ -23,13 +23,13 @@ pub enum SampleNameSpec {
     /// All the samples within the fastq directory
     Any,
     /// Only consider a known set of names
-    Names(TxHashSet<String>),
+    Names(HashSet<String>),
 }
 
 /// SampleNameSpec for a single sample name
 impl From<&str> for SampleNameSpec {
     fn from(sample_name: &str) -> Self {
-        let mut names = TxHashSet::default();
+        let mut names = HashSet::default();
         names.insert(sample_name.to_string());
         SampleNameSpec::Names(names)
     }
@@ -194,7 +194,7 @@ pub fn find_flowcell_fastqs(
     files.sort();
 
     for (group, files) in &files.into_iter().group_by(|(info, _)| (info.group.clone())) {
-        let mut my_files: TxHashMap<_, _> = files
+        let mut my_files: HashMap<_, _> = files
             .into_iter()
             .map(|(info, path)| (info.read, path.to_str().unwrap().to_string()))
             .collect();
@@ -232,6 +232,7 @@ pub fn find_flowcell_fastqs(
         res.push((group, fastqs));
     }
 
+    res.sort();
     Ok(res)
 }
 
@@ -299,7 +300,7 @@ mod test {
 
     #[test]
     fn test_parse_no_lane_split() {
-        let filename = "test/filenames/test_sample_S1_R1_001.fastq.gz";
+        let filename = "tests/filenames/test_sample_S1_R1_001.fastq.gz";
 
         let r = IlmnFastqFile::new(filename);
 
@@ -330,7 +331,7 @@ mod test {
 
     #[test]
     fn query_bcl2fastq() -> Result<(), Error> {
-        let path = "test/filenames/bcl2fastq";
+        let path = "tests/filenames/bcl2fastq";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -342,18 +343,18 @@ mod test {
         assert_eq!(fqs.len(), 2);
         assert_eq!(
             fqs[0].r1,
-            "test/filenames/bcl2fastq/Infected_S3_L001_R1_001.fastq"
+            "tests/filenames/bcl2fastq/Infected_S3_L001_R1_001.fastq"
         );
         assert_eq!(
             fqs[1].r1,
-            "test/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
+            "tests/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
         );
         Ok(())
     }
 
     #[test]
     fn query_bcl2fastq_lz4() -> Result<(), Error> {
-        let path = "test/filenames/bcl2fastq_lz4";
+        let path = "tests/filenames/bcl2fastq_lz4";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -365,18 +366,18 @@ mod test {
         assert_eq!(fqs.len(), 2);
         assert_eq!(
             fqs[0].r1,
-            "test/filenames/bcl2fastq_lz4/Infected_S3_L001_R1_001.fastq.lz4"
+            "tests/filenames/bcl2fastq_lz4/Infected_S3_L001_R1_001.fastq.lz4"
         );
         assert_eq!(
             fqs[1].r1,
-            "test/filenames/bcl2fastq_lz4/Infected_S3_L002_R1_001.fastq.lz4"
+            "tests/filenames/bcl2fastq_lz4/Infected_S3_L002_R1_001.fastq.lz4"
         );
         Ok(())
     }
 
     #[test]
     fn query_bcl2fastq_lanes() -> Result<(), Error> {
-        let path = "test/filenames/bcl2fastq";
+        let path = "tests/filenames/bcl2fastq";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -388,14 +389,14 @@ mod test {
         assert_eq!(fqs.len(), 1);
         assert_eq!(
             fqs[0].r1,
-            "test/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
+            "tests/filenames/bcl2fastq/Infected_S3_L002_R1_001.fastq"
         );
         Ok(())
     }
 
     #[test]
     fn test_bcl2fastq_no_lane_split() -> Result<(), Error> {
-        let path = "test/filenames/bcl2fastq_no_lane_split";
+        let path = "tests/filenames/bcl2fastq_no_lane_split";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -425,7 +426,7 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_find_input_fastq_files_bcl2fastq_demult() -> Result<(), Error> {
-        let path = "test/filenames/bcl2fastq_2";
+        let path = "tests/filenames/bcl2fastq_2";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -447,7 +448,7 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_find_input_fastq_files_bc2fastq_demult_project_1() -> Result<(), Error> {
-        let path = "test/filenames/project_dir";
+        let path = "tests/filenames/project_dir";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -478,7 +479,7 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_find_input_fastq_files_bc2fastq_demult_project_2() -> Result<(), Error> {
-        let path = "test/filenames/project_dir";
+        let path = "tests/filenames/project_dir";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),
@@ -500,7 +501,7 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_sample_name_verification() -> Result<(), Error> {
-        let path = "test/filenames/tenkit91";
+        let path = "tests/filenames/tenkit91";
         for &s in ["test_sample", "test_sample_suffix"].iter() {
             let query = Bcl2FastqDef {
                 fastq_path: path.to_string(),
@@ -522,7 +523,7 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_sample_name_any() -> Result<(), Error> {
-        let path = "test/filenames/tenkit91";
+        let path = "tests/filenames/tenkit91";
 
         let query = Bcl2FastqDef {
             fastq_path: path.to_string(),

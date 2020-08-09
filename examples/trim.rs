@@ -1,4 +1,4 @@
-use fastq_10x::adapter_trimmer::{Adapter, AdapterTrimmer};
+use fastq_set::adapter_trimmer::{Adapter, AdapterTrimmer};
 
 use failure::Error;
 

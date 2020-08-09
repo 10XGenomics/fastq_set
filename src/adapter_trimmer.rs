@@ -93,7 +93,7 @@ const MIN_PATH_SCORE: i32 = -5;
 /// Hence, in order to deserialize from a JSON file/string for example, make sure
 /// you use the snake case
 /// ```rust
-/// use fastq_10x::adapter_trimmer::AdapterLoc;
+/// use fastq_set::adapter_trimmer::AdapterLoc;
 /// assert_eq!(serde_json::from_str::<AdapterLoc>(r#""anywhere""#).unwrap(), AdapterLoc::Anywhere);
 /// assert_eq!(serde_json::from_str::<AdapterLoc>(r#""non_internal""#).unwrap(), AdapterLoc::NonInternal);
 /// assert_eq!(serde_json::from_str::<AdapterLoc>(r#""anchored""#).unwrap(), AdapterLoc::Anchored);
@@ -125,8 +125,8 @@ pub enum AdapterLoc {
 /// # Example
 /// The example below shows how you can create an `Adapter` from a JSON string
 /// ```rust
-/// use fastq_10x::adapter_trimmer::{Adapter, AdapterLoc};
-/// use fastq_10x::WhichEnd;
+/// use fastq_set::adapter_trimmer::{Adapter, AdapterLoc};
+/// use fastq_set::WhichEnd;
 /// let adapter_json_str = r#"{
 ///     "name": "spacer",
 ///     "end": "five_prime",
@@ -159,8 +159,8 @@ impl Adapter {
     ///
     /// # Example
     /// ```rust
-    /// use fastq_10x::adapter_trimmer::{Adapter, AdapterLoc};
-    /// use fastq_10x::WhichEnd;
+    /// use fastq_set::adapter_trimmer::{Adapter, AdapterLoc};
+    /// use fastq_set::WhichEnd;
     /// let adapter = Adapter::new("custom_primer", WhichEnd::ThreePrime, AdapterLoc::Anywhere, "ACCGGTAACCGTTTAGC");
     /// ```
     pub fn new(
@@ -189,8 +189,8 @@ impl Adapter {
 /// The following example demonstates how to trim an adapter from a single read
 ///
 /// ```rust
-/// use fastq_10x::adapter_trimmer::{Adapter, AdapterLoc, AdapterTrimmer};
-/// use fastq_10x::WhichEnd;
+/// use fastq_set::adapter_trimmer::{Adapter, AdapterLoc, AdapterTrimmer};
+/// use fastq_set::WhichEnd;
 /// // Define the adapter
 /// let adapter = Adapter::new("my_primer",
 ///     WhichEnd::ThreePrime,
