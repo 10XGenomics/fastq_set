@@ -10,7 +10,7 @@ use failure::Error;
 use itertools::Itertools;
 use regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 

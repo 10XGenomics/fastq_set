@@ -1,11 +1,11 @@
 //! Scan a directory of FASTQ file & provide access a subset of files based on lane or sample name.
 
-use failure::{format_err, Error, ResultExt};
 use crate::filenames::bcl2fastq::{self, IlmnFastqFileGroup, SampleNameSpec};
 use crate::filenames::bcl_processor::{self, BclProcessorFileGroup};
 use crate::filenames::{LaneMode, LaneSpec};
 use crate::read_pair_iter::InputFastqs;
 use crate::sample_index_map::SAMPLE_INDEX_MAP;
+use failure::{format_err, Error, ResultExt};
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::path::Path;

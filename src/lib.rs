@@ -1,6 +1,6 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Tools for working with groups FASTQ of files. 
+//! Tools for working with groups FASTQ of files.
 //! Major functionality includes:
 //! * Find groups FASTQs (R1/R2/I1/I2) following Illumina filename conventions
 //! * Parsing flowcell information from Illumina FASTQ headers
