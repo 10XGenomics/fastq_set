@@ -1,0 +1,22 @@
+name: Run tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+
+jobs:
+  test:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Checkout Git repository
+        uses: actions/checkout@master
+      - name: Check Rust formatting
+        run: cargo fmt -- --check
+      - name: Build
+        run: cargo build --release
+      - name: Unit tests
+        run: cargo test --release -- --nocapture
