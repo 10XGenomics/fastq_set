@@ -1,3 +1,5 @@
+//! Scan a directory of FASTQ file & provide access a subset of files based on lane or sample name.
+
 use failure::{format_err, Error, ResultExt};
 use crate::filenames::bcl2fastq::{self, IlmnFastqFileGroup, SampleNameSpec};
 use crate::filenames::bcl_processor::{self, BclProcessorFileGroup};

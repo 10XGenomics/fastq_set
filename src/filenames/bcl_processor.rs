@@ -1,3 +1,5 @@
+//! Utilities for finding groups of FASTQ produced by the legacy `demux` pipeline from 10x Genomics.
+
 use super::FindFastqs;
 use crate::filenames::LaneMode;
 use crate::filenames::LaneSpec;

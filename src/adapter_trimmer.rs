@@ -1,7 +1,7 @@
 //! Trim adapters from reads using a combination of
 //! k-mer matches, sparse alignment and banded alignment.
-//! Think about this as our internal version of
-//! [cutadapt](https://cutadapt.readthedocs.io/)
+//! Inspired by the [cutadapt](https://cutadapt.readthedocs.io/)
+//! tool.
 //!
 //! # Features/Limitations
 //! * Supports regular, anchored and non-internal, 3' and 5'

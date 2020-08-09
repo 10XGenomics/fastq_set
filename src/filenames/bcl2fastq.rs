@@ -1,3 +1,5 @@
+//! Utilities for finding groups of FASTQ produced by `bcl2fastq` from Illumina.
+
 use super::FindFastqs;
 use crate::filenames::LaneMode;
 use crate::filenames::LaneSpec;

@@ -1,10 +1,13 @@
 // Copyright (c) 2018 10x Genomics, Inc. All rights reserved.
 
-//! Utilities for working with FASTQ files. Includes:
-//! * Routines to find groups of FASTQs on the filesystem
-//! * High-speed FASTQ I/O (via the `fastq` crate)
+//! Tools for working with groups FASTQ of files. 
+//! Major functionality includes:
+//! * Find groups FASTQs (R1/R2/I1/I2) following Illumina filename conventions
+//! * Parsing flowcell information from Illumina FASTQ headers
+//! * High-speed FASTQ I/O (via the `fastq` crate), with careful validation of FASTQ correctness and good error message.
 //! * Containers for FASTQ read-pairs (along with index reads), providing access to 'technical' read components like cell barcode and
 //! UMI sequences.
+//! * Flexible read trimming inspired by `cutadapt`
 
 #![deny(warnings)]
 // Allowed clippy lints
@@ -84,9 +87,8 @@ impl Barcode {
         }
     }
 
-    /*
-    #[cfg(test)]
-    fn test_valid(sequence: &[u8]) -> Barcode {
+    /// Create a test barcode, with the given sequence, marked as valid
+    pub fn test_valid(sequence: &[u8]) -> Barcode {
         Barcode {
             gem_group: 1,
             sequence: SSeq::new(sequence),
@@ -94,15 +96,14 @@ impl Barcode {
         }
     }
 
-    #[cfg(test)]
-    fn test_invalid(sequence: &[u8]) -> Barcode {
+    /// Create a test barcode, with the given sequence, marked as invalid
+    pub fn test_invalid(sequence: &[u8]) -> Barcode {
         Barcode {
             gem_group: 1,
             sequence: SSeq::new(sequence),
             valid: false,
         }
     }
-    */
 
     /// Does this represent a valid whitelist barcode
     pub fn is_valid(self) -> bool {
@@ -409,6 +410,7 @@ where
     }
 }
 
+/// Which end of a transcript reads come from
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum WhichEnd {
     #[serde(rename = "three_prime")]
