@@ -20,6 +20,7 @@
 use fastq;
 
 pub mod adapter_trimmer;
+pub mod background_iterator;
 pub mod filenames;
 pub mod illumina_header_info;
 pub mod metric_utils;
@@ -37,7 +38,7 @@ pub use crate::sseq::SSeq;
 pub use fastq::OwnedRecord;
 pub use fastq::Record;
 
-use crate::read_pair_iter::{InputFastqs, ReadPairIter};
+use crate::read_pair_iter::{InputFastqs, AnyReadPairIter, ReadPairIter};
 use crate::sseq::{HammingIterOpt, SSeqOneHammingIter};
 use failure::{format_err, Error};
 use itertools::Itertools;
@@ -277,6 +278,13 @@ pub trait FastqProcessor {
         FastqProcessorIter::new(self)
     }
 
+    fn iter_background(&self, read_ahead: usize) -> Result<FastqProcessorIter<'_, Self>, Error>
+    where
+        Self: Sized,
+    {
+        FastqProcessorIter::new_background(self, read_ahead)
+    }
+
     fn iter_with_storage(
         &self,
         storage: read_pair::ReadPairStorage,
@@ -312,7 +320,7 @@ pub struct FastqProcessorIter<'a, Processor>
 where
     Processor: FastqProcessor,
 {
-    read_pair_iter: ReadPairIter,
+    read_pair_iter: AnyReadPairIter,
     processor: &'a Processor,
 }
 
@@ -325,6 +333,22 @@ where
             .illumina_r1_trim_length(processor.illumina_r1_trim_length())
             .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .subsample_rate(processor.read_subsample_rate());
+
+        let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
+        Ok(FastqProcessorIter {
+            read_pair_iter,
+            processor,
+        })
+    }
+
+    pub fn new_background(processor: &'a Processor, readahead: usize) -> Result<Self, Error> {
+        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
+            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
+            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
+            .subsample_rate(processor.read_subsample_rate());
+
+        let bg_iter = background_iterator::BackgroundIterator::new(read_pair_iter, readahead);
+        let read_pair_iter = AnyReadPairIter::Background(bg_iter);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,
@@ -340,6 +364,8 @@ where
             .illumina_r1_trim_length(processor.illumina_r1_trim_length())
             .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .storage(storage);
+
+        let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,
@@ -352,6 +378,8 @@ where
             .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed);
+
+        let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,
@@ -369,6 +397,8 @@ where
             .subsample_rate(processor.read_subsample_rate())
             .seed(seed)
             .storage(storage);
+
+        let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,

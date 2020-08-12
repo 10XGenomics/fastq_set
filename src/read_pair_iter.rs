@@ -193,7 +193,7 @@ impl<'a, R: Record> Record for TrimRecord<'a, R> {
 /// as well as an interleaved R1/R2 file. Supports plain or gzipped FASTQ files, which
 /// will be detected based on the filename extension.
 pub struct ReadPairIter {
-    iters: [Option<RecordRefIter<Box<dyn BufRead>>>; 4],
+    iters: [Option<RecordRefIter<Box<dyn BufRead + Send>>>; 4],
     paths: [Option<PathBuf>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,
@@ -222,7 +222,7 @@ impl ReadPairIter {
     /// Open a FASTQ file that is uncompressed, gzipped compressed, or lz4 compressed.
     /// The extension of the file is ignored & the filetype is determined by looking
     /// for magic bytes at the of the file
-    fn open_fastq(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, FastqError> {
+    fn open_fastq(p: impl AsRef<Path>) -> Result<Box<dyn BufRead + Send>, FastqError> {
         let p = p.as_ref();
 
         let mut file = std::fs::File::open(p).fastq_err(p, 0)?;
@@ -251,7 +251,7 @@ impl ReadPairIter {
     }
 
     /// Open a (possibly gzip or lz4 compressed) FASTQ file & read some records to confirm the format looks good.
-    fn open_fastq_confirm_fmt(p: impl AsRef<Path>) -> Result<Box<dyn BufRead>, FastqError> {
+    fn open_fastq_confirm_fmt(p: impl AsRef<Path>) -> Result<Box<dyn BufRead + Send>, FastqError> {
         let p = p.as_ref();
         let reader = Self::open_fastq(p)?;
         let parser = fastq::Parser::new(reader);
@@ -504,6 +504,26 @@ impl Iterator for ReadPairIter {
             Ok(Some(v)) => Some(Ok(v)),
             Ok(None) => None,
             Err(v) => Some(Err(v)),
+        }
+    }
+}
+
+type BackgroundReadPairIter = crate::background_iterator::BackgroundIterator<Result<ReadPair, FastqError>>;
+
+pub(crate) enum AnyReadPairIter {
+    Direct(ReadPairIter),
+    Background(BackgroundReadPairIter),
+}
+
+impl Iterator for AnyReadPairIter {
+    type Item = Result<ReadPair, FastqError>;
+
+    /// Iterate over ReadPair objects
+    fn next(&mut self) -> Option<Result<ReadPair, FastqError>> {
+        // Convert Result<Option<_>, Error> to Option<Result<_, Error>>
+        match self {
+            AnyReadPairIter::Direct(v) => v.next(),
+            AnyReadPairIter::Background(v) => v.next(),
         }
     }
 }
