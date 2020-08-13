@@ -9,6 +9,27 @@ pub struct BackgroundIterator<T> {
     handle: Option<JoinHandle<()>>,
 }
 
+impl<T> BackgroundIterator<T> {
+    // Join on the producer thread dies, and propagate the panic
+    fn join_and_propagate_panic(&mut self) {
+        match self.handle.take().unwrap().join() {
+            Ok(_) => (),
+            Err(e) => {
+                // sender panicked - we will re-panic the panic.
+                // need to do a little dance here to get the panic message
+                let msg = match e.downcast_ref::<&'static str>() {
+                    Some(s) => s.to_string(),
+                    None => match e.downcast_ref::<String>() {
+                        Some(s) => s.clone(),
+                        None => "unknown panic on BackgroundIterator worker thread".to_string(),
+                    },
+                };
+                panic!(msg);
+            }
+        }
+    }
+}
+
 impl<T: Send> Iterator for BackgroundIterator<T> {
     type Item = T;
 
@@ -21,34 +42,15 @@ impl<T: Send> Iterator for BackgroundIterator<T> {
             Ok(Some(v)) => Some(v),
             Ok(None) => {
                 self.done = true;
+                self.join_and_propagate_panic();
                 None
             }
             // if the producer thread dies, then the sender thread must have panicked
             // propagate the panic, otherwise we will silently continue with likely incomplete results
             Err(_) => {
                 self.done = true;
-                let r = self.handle.take().unwrap().join();
-                match r {
-                    Ok(()) => {
-                        // this state should be unreachable,
-                        // but presumably benign if we get here
-                        None
-                    }
-                    Err(e) => {
-                        // sender panicked - we will re-panic the panic.
-                        // need to do a little dance here to get the panic message
-                        let msg = match e.downcast_ref::<&'static str>() {
-                            Some(s) => s.to_string(),
-                            None => match e.downcast_ref::<String>() {
-                                Some(s) => s.clone(),
-                                None => {
-                                    "unknown panic on BackgroundIterator worker thread".to_string()
-                                }
-                            },
-                        };
-                        panic!(msg);
-                    }
-                }
+                self.join_and_propagate_panic();
+                None
             }
         }
     }

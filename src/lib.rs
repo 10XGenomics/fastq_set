@@ -328,13 +328,18 @@ impl<'a, Processor> FastqProcessorIter<'a, Processor>
 where
     Processor: FastqProcessor,
 {
-    pub fn new(processor: &'a Processor) -> Result<Self, Error> {
+    fn make_read_pair_iter(processor: &'a Processor) -> Result<ReadPairIter, Error> {
         let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
             .illumina_r1_trim_length(processor.illumina_r1_trim_length())
             .illumina_r2_trim_length(processor.illumina_r2_trim_length())
             .subsample_rate(processor.read_subsample_rate());
 
-        let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
+        Ok(read_pair_iter)
+    }
+
+    pub fn new(processor: &'a Processor) -> Result<Self, Error> {
+        let iter = Self::make_read_pair_iter(processor)?;
+        let read_pair_iter = AnyReadPairIter::Direct(iter);
         Ok(FastqProcessorIter {
             read_pair_iter,
             processor,
@@ -342,12 +347,9 @@ where
     }
 
     pub fn new_background(processor: &'a Processor, readahead: usize) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
-            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
-            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
-            .subsample_rate(processor.read_subsample_rate());
+        let iter = Self::make_read_pair_iter(processor)?;
 
-        let bg_iter = background_iterator::BackgroundIterator::new(read_pair_iter, readahead);
+        let bg_iter = background_iterator::BackgroundIterator::new(iter, readahead);
         let read_pair_iter = AnyReadPairIter::Background(bg_iter);
         Ok(FastqProcessorIter {
             read_pair_iter,
