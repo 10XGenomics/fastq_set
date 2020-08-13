@@ -508,7 +508,8 @@ impl Iterator for ReadPairIter {
     }
 }
 
-type BackgroundReadPairIter = crate::background_iterator::BackgroundIterator<Result<ReadPair, FastqError>>;
+type BackgroundReadPairIter =
+    crate::background_iterator::BackgroundIterator<Result<ReadPair, FastqError>>;
 
 pub(crate) enum AnyReadPairIter {
     Direct(ReadPairIter),

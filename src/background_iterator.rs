@@ -1,5 +1,5 @@
-use std::sync::mpsc::{Receiver, sync_channel};
 use std;
+use std::sync::mpsc::{sync_channel, Receiver};
 use std::thread;
 
 /// Execute an iterator on a worker thread, which can work ahead a configurable number of items.

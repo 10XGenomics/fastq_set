@@ -38,7 +38,7 @@ pub use crate::sseq::SSeq;
 pub use fastq::OwnedRecord;
 pub use fastq::Record;
 
-use crate::read_pair_iter::{InputFastqs, AnyReadPairIter, ReadPairIter};
+use crate::read_pair_iter::{AnyReadPairIter, InputFastqs, ReadPairIter};
 use crate::sseq::{HammingIterOpt, SSeqOneHammingIter};
 use failure::{format_err, Error};
 use itertools::Itertools;
