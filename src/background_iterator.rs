@@ -1,6 +1,6 @@
 use std;
 use std::sync::mpsc::{sync_channel, Receiver};
-use std::thread::{JoinHandle, spawn};
+use std::thread::{spawn, JoinHandle};
 
 /// Execute an iterator on a worker thread, which can work ahead a configurable number of items.
 pub struct BackgroundIterator<T> {
@@ -38,12 +38,14 @@ impl<T: Send> Iterator for BackgroundIterator<T> {
                         // sender panicked - we will re-panic the panic.
                         // need to do a little dance here to get the panic message
                         let msg = match e.downcast_ref::<&'static str>() {
-                            Some(s) => s.to_string(),                            
+                            Some(s) => s.to_string(),
                             None => match e.downcast_ref::<String>() {
                                 Some(s) => s.clone(),
-                                None => "unknown panic on BackgroundIterator worker thread".to_string(),
+                                None => {
+                                    "unknown panic on BackgroundIterator worker thread".to_string()
+                                }
                             },
-                        };                        
+                        };
                         panic!(msg);
                     }
                 }
@@ -71,10 +73,11 @@ impl<T: 'static + Send> BackgroundIterator<T> {
             tx.send(None).unwrap();
         });
 
-        BackgroundIterator { 
-            rx, 
-            handle: Some(handle), 
-            done: false }
+        BackgroundIterator {
+            rx,
+            handle: Some(handle),
+            done: false,
+        }
     }
 }
 
@@ -85,7 +88,7 @@ mod test {
     #[test]
     #[should_panic]
     fn panic_bg_iter() {
-        let v = vec![0,1,2,3,4,5,6,7,8,9];
+        let v = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         let iter = (0..11usize).map(move |i| {
             if v[i] == 5 {
@@ -124,16 +127,15 @@ mod test {
         let n_send = 1_000_000;
 
         // big iterator with lots of buffering
-        let iter = (0..n_send).map(|i| i*i);
+        let iter = (0..n_send).map(|i| i * i);
         let bg_iter = BackgroundIterator::new(iter, n_send >> 2);
-
 
         // slow reader -- the sender thread will complete before the reading is complete
         // make sure we get all the items
 
         let mut n_read = 0;
         for v in bg_iter {
-            assert_eq!(v, n_read*n_read);
+            assert_eq!(v, n_read * n_read);
             n_read += 1;
 
             // make sure the reader goes slowly
