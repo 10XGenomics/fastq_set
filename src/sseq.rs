@@ -25,12 +25,12 @@ pub fn ensure_upper_case_acgtn(seq: &[u8]) {
     }
 }
 
-/// Fixed-sized container for a short DNA sequence, up to 23bp in length.
+/// Fixed-sized container for a short DNA sequence, up to 32bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
 /// An `SSeq` is guaranteed to contain only "ACGTN" alphabets
 #[derive(Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct SSeq {
-    pub(crate) sequence: [u8; 23],
+    pub(crate) sequence: [u8; 32],
     pub(crate) length: u8,
 }
 
@@ -39,10 +39,10 @@ impl SSeq {
     /// The byte slice should contain only "ACGTN" (upper case) alphabets,
     /// otherwise this function will panic
     pub fn new(seq: &[u8]) -> SSeq {
-        assert!(seq.len() <= 23);
+        assert!(seq.len() <= 32);
         ensure_upper_case_acgtn(seq);
 
-        let mut sequence = [0u8; 23];
+        let mut sequence = [0u8; 32];
         sequence[0..seq.len()].copy_from_slice(&seq);
 
         SSeq {
@@ -330,7 +330,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_sort_sseq(
-            ref seqs_str in vec("[ACGTN]{0, 23}", 0usize..=10usize),
+            ref seqs_str in vec("[ACGTN]{0, 32}", 0usize..=10usize),
         ) {
             let mut seqs = seqs_str.iter().map(|s| s.clone().into_bytes()).collect_vec();
             let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::new(x)).collect();
@@ -387,7 +387,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_serde_sseq(
-            ref seq in "[ACGTN]{0, 23}",
+            ref seq in "[ACGTN]{0, 32}",
         ) {
             let target = SSeq::new(seq.as_bytes());
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
@@ -396,7 +396,7 @@ mod sseq_test {
         }
         #[test]
         fn prop_test_serde_json_sseq(
-            ref seq in "[ACGTN]{0, 23}",
+            ref seq in "[ACGTN]{0, 32}",
         ) {
             let target = SSeq::new(seq.as_bytes());
             let encoded = serde_json::to_string_pretty(&target).unwrap();
@@ -433,7 +433,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_one_hamming_upper(
-            seq in "[ACGTN]{0, 23}", // 0 and 23 are inclusive bounds
+            seq in "[ACGTN]{0, 32}", // 0 and 32 are inclusive bounds
         ) {
             test_hamming_helper(&seq, HammingIterOpt::SkipNBase, b'N');
             test_hamming_helper(&seq, HammingIterOpt::MutateNBase, b'N');
