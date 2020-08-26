@@ -450,8 +450,6 @@ impl ReadPairIter {
             if header_slices.len() > 0 {
                 for i in 1..header_slices.len() {
                     if header_slices[i].1 != header_slices[0].1 {
-                        // if the
-
                         let msg = format!("FASTQ header mismatch detected at line {} of input files {:?} and {:?}",
                                 rec_num[0] * 4,
                                 self.paths[header_slices[0].0].as_ref().unwrap(),
