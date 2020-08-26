@@ -36,13 +36,21 @@ impl InputFastqs {
             .get(WhichRead::R1, ReadPart::Header)
             .ok_or(format_err!("No Read1 in FASTQ data"))?;
 
+        
         let header = std::str::from_utf8(header)?;
+        let header_prefix =  header.split(|x:char| x == ' ' || x == '/').next();
+        if header_prefix.is_none() {
+            return Ok(None)
+        }
+        let header_prefix = header_prefix.unwrap();
 
-        let header_parts: Vec<&str> = header.split(':').collect();
+        let header_parts: Vec<&str> = header_prefix.split(':').collect();
 
         if header_parts.len() < 4 {
             Ok(None)
         } else {
+
+            println!("parts: {:?}", header_parts);
             let instrument = header_parts[0].to_string();
             let run_number: u32 = header_parts[1].parse()?;
             let flowcell = header_parts[2].to_string();
@@ -65,6 +73,7 @@ mod test {
     use super::*;
     use crate::filenames::bcl2fastq::Bcl2FastqDef;
     use crate::filenames::{FindFastqs, LaneSpec};
+    use crate::InputFastqs;
 
     #[test]
     fn test_parse_fastq_info() -> Result<(), Error> {
@@ -92,4 +101,28 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn weird_header_info() -> Result<(), Error> {
+        let fq = InputFastqs {
+            r1: "tests/read_pair_iter/weird-header-R1.fastq".to_string(),
+            r2: Some("tests/read_pair_iter/weird-header-R2.fastq".to_string()),
+            i1: None,
+            i2: None,
+            r1_interleaved: false
+        };
+
+        // This is an example of a wierd customer FASTQ adapter from MGI
+        // this checks that we cna parse the 4th field correctly if
+        // it's the last field before a space or /
+        assert_eq!(info.instrument, "3");
+        assert_eq!(info.lane, 1000);
+
+
+        let info = fq.get_header_info()?;
+        println!("info: {:?}", info);
+        Ok(())
+    }
+
+
 }
