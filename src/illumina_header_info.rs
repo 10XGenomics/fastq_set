@@ -36,11 +36,10 @@ impl InputFastqs {
             .get(WhichRead::R1, ReadPart::Header)
             .ok_or(format_err!("No Read1 in FASTQ data"))?;
 
-        
         let header = std::str::from_utf8(header)?;
-        let header_prefix =  header.split(|x:char| x == ' ' || x == '/').next();
+        let header_prefix = header.split(|x: char| x == ' ' || x == '/').next();
         if header_prefix.is_none() {
-            return Ok(None)
+            return Ok(None);
         }
         let header_prefix = header_prefix.unwrap();
 
@@ -49,7 +48,6 @@ impl InputFastqs {
         if header_parts.len() < 4 {
             Ok(None)
         } else {
-
             println!("parts: {:?}", header_parts);
             let instrument = header_parts[0].to_string();
             let run_number: u32 = header_parts[1].parse()?;
@@ -109,7 +107,7 @@ mod test {
             r2: Some("tests/read_pair_iter/weird-header-R2.fastq".to_string()),
             i1: None,
             i2: None,
-            r1_interleaved: false
+            r1_interleaved: false,
         };
 
         let info = fq.get_header_info()?.unwrap();
@@ -123,6 +121,4 @@ mod test {
 
         Ok(())
     }
-
-
 }
