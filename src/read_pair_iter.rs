@@ -442,7 +442,7 @@ impl ReadPairIter {
             let which = [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2];
             for w in 0..4 {
                 if let Some(header) = rp.get(which[w], ReadPart::Header) {
-                    let prefix = header.split(|x| *x == b' ').next();
+                    let prefix = header.split(|x| *x == b' ' || *x == b'/').next();
                     header_slices.push((w, prefix));
                 }
             }
@@ -583,6 +583,22 @@ mod test_read_pair_iter {
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 8);
+    }
+
+    #[test]
+    fn test_mgi() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/slash1.fastq"),
+            Some("tests/read_pair_iter/slash2.fastq"),
+            None,
+            None,
+            false,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().len(), 6);
     }
 
     #[test]
