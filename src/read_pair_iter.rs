@@ -442,7 +442,7 @@ impl ReadPairIter {
             let which = [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2];
             for w in 0..4 {
                 if let Some(header) = rp.get(which[w], ReadPart::Header) {
-                    let prefix = header.split(|x| *x == b' ').next();
+                    let prefix = header.split(|x| *x == b' ' || *x == b'/').next();
                     header_slices.push((w, prefix));
                 }
             }
@@ -450,6 +450,10 @@ impl ReadPairIter {
             if header_slices.len() > 0 {
                 for i in 1..header_slices.len() {
                     if header_slices[i].1 != header_slices[0].1 {
+
+                        // if the 
+
+
                         let msg = format!("FASTQ header mismatch detected at line {} of input files {:?} and {:?}",
                                 rec_num[0] * 4,
                                 self.paths[header_slices[0].0].as_ref().unwrap(),
@@ -583,6 +587,22 @@ mod test_read_pair_iter {
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 8);
+    }
+
+    #[test]
+    fn test_mgi() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/slash1.fastq"),
+            Some("tests/read_pair_iter/slash2.fastq"),
+            None,
+            None,
+            false,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().len(), 6);
     }
 
     #[test]
