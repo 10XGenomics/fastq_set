@@ -112,15 +112,15 @@ mod test {
             r1_interleaved: false
         };
 
+        let info = fq.get_header_info()?.unwrap();
+        println!("info: {:?}", info);
+
         // This is an example of a wierd customer FASTQ adapter from MGI
         // this checks that we cna parse the 4th field correctly if
         // it's the last field before a space or /
         assert_eq!(info.instrument, "3");
         assert_eq!(info.lane, 1000);
 
-
-        let info = fq.get_header_info()?;
-        println!("info: {:?}", info);
         Ok(())
     }
 
