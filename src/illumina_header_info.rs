@@ -48,11 +48,22 @@ impl InputFastqs {
         if header_parts.len() < 4 {
             Ok(None)
         } else {
-            println!("parts: {:?}", header_parts);
             let instrument = header_parts[0].to_string();
-            let run_number: u32 = header_parts[1].parse()?;
+
+            // Just bail out with None if we can parse integer fields in header
+            let run_number = header_parts[1].parse();
+            if run_number.is_err() {
+                return Ok(None);
+            }
+            let run_number = run_number?;
+
             let flowcell = header_parts[2].to_string();
-            let lane: u32 = header_parts[3].parse()?;
+
+            let lane = header_parts[3].parse();
+            if lane.is_err() {
+                return Ok(None);
+            }
+            let lane = lane?;
 
             let res = IlluminaHeaderInfo {
                 instrument,
@@ -118,6 +129,23 @@ mod test {
         // it's the last field before a space or /
         assert_eq!(info.instrument, "3");
         assert_eq!(info.lane, 1000);
+
+        Ok(())
+    }
+
+    #[test]
+    fn weird_header2_info() -> Result<(), Error> {
+        let fq = InputFastqs {
+            r1: "tests/read_pair_iter/weird-header2-R1.fastq".to_string(),
+            r2: Some("tests/read_pair_iter/weird-header2-R2.fastq".to_string()),
+            i1: None,
+            i2: None,
+            r1_interleaved: false,
+        };
+
+        let info = fq.get_header_info()?;
+        println!("info: {:?}", info);
+        assert_eq!(info, None);
 
         Ok(())
     }
