@@ -150,7 +150,6 @@ mod test {
         Ok(())
     }
 
-
     #[test]
     fn weird_header_csi_1376() -> Result<(), Error> {
         let fq = InputFastqs {
@@ -167,5 +166,4 @@ mod test {
 
         Ok(())
     }
-
 }
