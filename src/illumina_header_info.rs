@@ -149,4 +149,21 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn weird_header_csi_1376() -> Result<(), Error> {
+        let fq = InputFastqs {
+            r1: "tests/read_pair_iter/csi-1376-R1.fastq".to_string(),
+            r2: Some("tests/read_pair_iter/csi-1376-R2.fastq".to_string()),
+            i1: None,
+            i2: None,
+            r1_interleaved: false,
+        };
+
+        let info = fq.get_header_info()?;
+        println!("info: {:?}", info);
+        assert_eq!(info, None);
+
+        Ok(())
+    }
 }

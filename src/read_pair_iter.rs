@@ -602,6 +602,23 @@ mod test_read_pair_iter {
     }
 
     #[test]
+    fn test_csi_1376() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/csi-1376-R1.fastq"),
+            Some("tests/read_pair_iter/csi-1376-R2.fastq"),
+            None,
+            None,
+            false,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
+        println!("res: {:?}", res);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().len(), 3);
+    }
+
+    #[test]
     fn test_not_gzipped() {
         let it = ReadPairIter::new(
             Some("tests/read_pair_iter/not-gzipped-RA.fastq.gz"),
