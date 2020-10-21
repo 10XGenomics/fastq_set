@@ -245,20 +245,23 @@ pub trait HasBamTags {
     fn tags(&self) -> Vec<([u8; 2], &[u8])>;
 }
 
+pub enum ProcessResult<T> {
+    Processed(T),
+    Unprocessed {
+        read: read_pair::ReadPair,
+        reason: String,
+    },
+}
+
 /// A specification for a group of input FASTQ data, and how to interpret
 /// the raw sequences as a assay-specific `ReadType` that can provide access to
 /// barcodes, UMIs, and track trimmed bases.
 pub trait FastqProcessor {
     type ReadType;
 
-    /// Determine whether to ignore or propagate
-    fn ignore_incomplete_reads(&self) -> bool {
-        return true;
-    }
-
     /// Convert a `ReadPair` representing the raw data from a single read-pair
     /// into an assay-specific `ReadType`
-    fn process_read(&self, read: read_pair::ReadPair) -> Result<Self::ReadType, Error>;
+    fn process_read(&self, read: read_pair::ReadPair) -> ProcessResult<Self::ReadType>;
 
     /// A corresponding set of FASTQ files to read data from.
     fn fastq_files(&self) -> InputFastqs;
@@ -412,32 +415,14 @@ impl<'a, Processor> Iterator for FastqProcessorIter<'a, Processor>
 where
     Processor: FastqProcessor,
 {
-    type Item = Result<<Processor as FastqProcessor>::ReadType, Error>;
+    type Item = Result<ProcessResult<<Processor as FastqProcessor>::ReadType>, Error>;
 
-    /// Iterate over ReadType objects. Reads that aren't parsed succesfully by `process_read`
-    /// will be skipped if `FastqProcessor.ignore_incomplete_reads == true`, otherwise
-    /// they will be returned as `Some(Err(e))`.
+    /// Iterate over ReadType objects.
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let next_read = self.read_pair_iter.next();
-
-            match next_read {
-                Some(Ok(read)) => {
-                    let r = self.processor.process_read(read);
-                    match r {
-                        Ok(r) => return Some(Ok(r)),
-                        Err(e) => {
-                            // if we're not ignoring read parsing error, throw the err.
-                            if !self.processor.ignore_incomplete_reads() {
-                                return Some(Err(e.into()));
-                            }
-                            // otherwise we'll try again.
-                        }
-                    };
-                }
-                Some(Err(e)) => return Some(Err(e.into())),
-                None => return None,
-            }
+        match self.read_pair_iter.next() {
+            Some(Ok(read)) => Some(Ok(self.processor.process_read(read))), // Processed Read
+            Some(Err(e)) => Some(Err(e.into())),                           // IO Error
+            None => None,                                                  // End of fastq
         }
     }
 }
