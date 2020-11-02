@@ -177,6 +177,7 @@ impl FastqChecker {
         fastq_path: impl AsRef<Path>,
         requested_samples: &Option<Vec<String>>,
         lanes: &Option<Vec<usize>>,
+        help_text: &str,
     ) -> Result<HashSet<String>, Error> {
         let bcl_dir = Bcl2FastqDir::new(&fastq_path).with_context(|e| {
             format!(
@@ -187,8 +188,7 @@ impl FastqChecker {
         })?;
 
         if bcl_dir.is_empty() {
-            let msg = format_err!("{}", FQ_HELP);
-            return Err(msg);
+            return Err(format_err!("{}", help_text));
         }
 
         // >=1 samples due to the check above
@@ -236,12 +236,17 @@ impl FastqChecker {
         .count() // .next().is_none() would be better?
         == 0
         {
-            return Err(format_err!("{}", FQ_HELP));
+            return Err(format_err!("{}", help_text));
         }
 
         Ok(match sample_name_spec {
             SampleNameSpec::Names(names) => names,
             _ => unreachable!(),
         })
+    }
+
+    /// return the default help text for *_COUNTER_* pipelines
+    pub fn count_help() -> &'static str {
+        FQ_HELP
     }
 }

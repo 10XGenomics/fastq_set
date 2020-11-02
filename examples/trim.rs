@@ -10,7 +10,7 @@ use std::fs::File;
 
 use bio::io::fasta::{Reader, Writer};
 
-use time::PreciseTime;
+use time::Instant;
 
 use std::env;
 
@@ -22,7 +22,7 @@ struct Input {
 }
 
 fn main() -> Result<(), Error> {
-    let start = PreciseTime::now();
+    let start = Instant::now();
     // Accepts a json which can populate the Input struct above
     let args: Vec<String> = env::args().collect();
     assert!(args.len() == 2);
@@ -56,10 +56,10 @@ fn main() -> Result<(), Error> {
     writer.flush()?;
     println!("Trimmed {}/{} reads", ntrimmed, total_reads);
 
-    let end = PreciseTime::now();
+    let end = Instant::now();
     println!(
         "Elapsed time {:?} seconds for rust adapter trimmer.",
-        start.to(end)
+        (end - start).as_seconds_f32()
     );
 
     Ok(())
