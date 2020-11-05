@@ -10,6 +10,8 @@ use std::iter::Iterator;
 use std::ops::{Index, IndexMut};
 use std::str;
 
+use crate::sseq::LENGTH;
+
 /// Ensure that the input byte slice contains only valid quality characters, and panic otherwise.
 pub fn ensure_valid_quality(seq: &[u8]) {
     for (i, &c) in seq.iter().enumerate() {
@@ -23,12 +25,12 @@ pub fn ensure_valid_quality(seq: &[u8]) {
     }
 }
 
-/// Fixed-sized container for a short quality string, up to 23bp in length.
+/// Fixed-sized container for a short quality string, up to 31bp in length.
 /// Used as a convenient container for a barcode or UMI quality string.
 /// An `SQuality` is guaranteed to contain only valid quality characters.
 #[derive(Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct SQuality {
-    pub(crate) bytes: [u8; 23],
+    pub(crate) bytes: [u8; LENGTH],
     pub(crate) length: u8,
 }
 
@@ -36,10 +38,10 @@ impl SQuality {
     /// Create a new SQuality from the given byte slice
     /// The byte slice must contain only valid quality characters and panics otherwise.
     pub fn new(s: &[u8]) -> SQuality {
-        assert!(s.len() <= 23);
+        assert!(s.len() <= LENGTH);
         ensure_valid_quality(s);
 
-        let mut bytes = [0u8; 23];
+        let mut bytes = [0u8; LENGTH];
         bytes[0..s.len()].copy_from_slice(&s);
 
         SQuality {
@@ -174,11 +176,11 @@ mod squality_test {
 
     #[test]
     fn test_sseq_valid_quality() {
-        assert_eq!(SQuality::new(&VALID_CHARS[0..23]).len(), 23);
-        assert_eq!(SQuality::new(&VALID_CHARS[23..42]).len(), 19);
+        assert_eq!(SQuality::new(&VALID_CHARS[0..LENGTH]).len(), LENGTH);
+        assert_eq!(SQuality::new(&VALID_CHARS[LENGTH..42]).len(), 42 - LENGTH);
         assert_eq!(
-            SQuality::new(&VALID_CHARS[0..23]).to_string(),
-            str::from_utf8(&VALID_CHARS[0..23]).unwrap()
+            SQuality::new(&VALID_CHARS[0..LENGTH]).to_string(),
+            str::from_utf8(&VALID_CHARS[0..LENGTH]).unwrap()
         );
     }
 
@@ -197,8 +199,8 @@ mod squality_test {
     #[test]
     fn test_serde() {
         let mut sseqs = Vec::new();
-        sseqs.push(SQuality::new(&VALID_CHARS[0..23]));
-        sseqs.push(SQuality::new(&VALID_CHARS[23..41]));
+        sseqs.push(SQuality::new(&VALID_CHARS[0..LENGTH]));
+        sseqs.push(SQuality::new(&VALID_CHARS[LENGTH..41]));
 
         let mut buf = Vec::new();
         bincode::serialize_into(&mut buf, &sseqs).unwrap();
@@ -209,7 +211,7 @@ mod squality_test {
     proptest! {
         #[test]
         fn prop_test_serde_squality(
-            ref seq in "[!FGHIJ]{0, 23}",
+            ref seq in "[!FGHIJ]{0, 31}",
         ) {
             let target = SQuality::new(seq.as_bytes());
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();

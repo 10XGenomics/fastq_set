@@ -13,6 +13,9 @@ use std::str;
 const UPPER_ACGTN: &[u8; 5] = b"ACGTN";
 const N_BASE_INDEX: usize = 4;
 
+/// Length limit of small-seq types
+pub(crate) const LENGTH: usize = 31;
+
 /// Make sure that the input byte slice contains only
 /// "ACGTN" characters. Panics otherwise with an error
 /// message describing the position of the first character
@@ -25,12 +28,12 @@ pub fn ensure_upper_case_acgtn(seq: &[u8]) {
     }
 }
 
-/// Fixed-sized container for a short DNA sequence, up to 23bp in length.
+/// Fixed-sized container for a short DNA sequence, up to 31bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
 /// An `SSeq` is guaranteed to contain only "ACGTN" alphabets
 #[derive(Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct SSeq {
-    pub(crate) sequence: [u8; 23],
+    pub(crate) sequence: [u8; LENGTH],
     pub(crate) length: u8,
 }
 
@@ -39,10 +42,10 @@ impl SSeq {
     /// The byte slice should contain only "ACGTN" (upper case) alphabets,
     /// otherwise this function will panic
     pub fn new(seq: &[u8]) -> SSeq {
-        assert!(seq.len() <= 23);
+        assert!(seq.len() <= LENGTH);
         ensure_upper_case_acgtn(seq);
 
-        let mut sequence = [0u8; 23];
+        let mut sequence = [0u8; LENGTH];
         sequence[0..seq.len()].copy_from_slice(&seq);
 
         SSeq {
@@ -104,14 +107,14 @@ impl SSeq {
         self.has_homopolymer_suffix(b'T', n)
     }
 
-    /// Returns a 2-bit encoding of this sequence.
-    pub fn encode_2bit_u32(self) -> u32 {
-        let mut res: u32 = 0;
-        assert!(self.length < 16);
+    /// Returns a 2-bit encoding of this sequence (64-bit).
+    pub fn encode_2bit_u64(self) -> u64 {
+        let mut res: u64 = 0;
+        assert!(self.length <= 32);
 
         for (bit_pos, str_pos) in (0..self.length).rev().enumerate() {
-            let byte: u32 = match self.sequence[str_pos as usize] {
-                b'A' => 0,
+            let byte = match self.sequence[str_pos as usize] {
+                b'A' => 0u64,
                 b'C' => 1,
                 b'G' => 2,
                 b'T' => 3,
@@ -124,6 +127,12 @@ impl SSeq {
         }
 
         res
+    }
+
+    /// Returns a 2-bit encoding of this sequence.
+    pub fn encode_2bit_u32(self) -> u32 {
+        assert!(self.length <= 16);
+        self.encode_2bit_u64() as u32
     }
 
     pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter {
@@ -330,7 +339,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_sort_sseq(
-            ref seqs_str in vec("[ACGTN]{0, 23}", 0usize..=10usize),
+            ref seqs_str in vec("[ACGTN]{0, 31}", 0usize..=10usize),
         ) {
             let mut seqs = seqs_str.iter().map(|s| s.clone().into_bytes()).collect_vec();
             let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::new(x)).collect();
@@ -387,7 +396,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_serde_sseq(
-            ref seq in "[ACGTN]{0, 23}",
+            ref seq in "[ACGTN]{0, 31}",
         ) {
             let target = SSeq::new(seq.as_bytes());
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
@@ -396,7 +405,7 @@ mod sseq_test {
         }
         #[test]
         fn prop_test_serde_json_sseq(
-            ref seq in "[ACGTN]{0, 23}",
+            ref seq in "[ACGTN]{0, 31}",
         ) {
             let target = SSeq::new(seq.as_bytes());
             let encoded = serde_json::to_string_pretty(&target).unwrap();
@@ -433,7 +442,7 @@ mod sseq_test {
     proptest! {
         #[test]
         fn prop_test_one_hamming_upper(
-            seq in "[ACGTN]{0, 23}", // 0 and 23 are inclusive bounds
+            seq in "[ACGTN]{0, 31}", // 0 and 31 are inclusive bounds
         ) {
             test_hamming_helper(&seq, HammingIterOpt::SkipNBase, b'N');
             test_hamming_helper(&seq, HammingIterOpt::MutateNBase, b'N');
