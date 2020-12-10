@@ -15,6 +15,9 @@ jobs:
         rust:
           - 1.47.0
     steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
       - name: Print cargo version
         run: cargo --version
       - name: Checkout Git repository
