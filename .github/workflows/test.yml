@@ -10,16 +10,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-18.04
-    strategy:
-      matrix:
-        rust:
-          - 1.47.0
+
     steps:
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: 1.47.0
       - name: Print cargo version
-        run: cargo --version
+        run: rustup default 1.47.0 && cargo --version
       - name: Checkout Git repository
         uses: actions/checkout@master
       - name: Check Rust formatting
