@@ -12,6 +12,12 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.47.0
+          components: rustfmt
+      - name: Print cargo version
+        run: rustup default 1.47.0 && cargo --version
       - name: Checkout Git repository
         uses: actions/checkout@master
       - name: Check Rust formatting
