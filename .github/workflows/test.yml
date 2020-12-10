@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
+      - with:
+        rust-version: 1.47.0
       - name: Checkout Git repository
         uses: actions/checkout@master
       - name: Check Rust formatting
