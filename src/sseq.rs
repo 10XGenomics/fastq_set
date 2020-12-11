@@ -3,6 +3,7 @@
 //! Sized, stack-allocated container for a short DNA sequence.
 
 use crate::array::{typenum, ArrayContent, ByteArray};
+use generic_array::ArrayLength;
 use std::iter::Iterator;
 use std::str;
 
@@ -29,12 +30,21 @@ impl ArrayContent for SSeqContents {
     }
 }
 
+/// Fixed-sized container for a short DNA sequence, with capacity determined by type `N`.
+/// Used as a convenient container for barcode or UMI sequences.
+/// An `SSeqGen` is guaranteed to contain only "ACGTN" alphabets
+pub type SSeqGen<N> = ByteArray<N, SSeqContents>;
+
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
 /// An `SSeq` is guaranteed to contain only "ACGTN" alphabets
-pub type SSeq = ByteArray<typenum::U23, SSeqContents>;
+pub type SSeq = SSeqGen<typenum::U23>;
 
-impl SSeq {
+impl<N> SSeqGen<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
     /// Returns a byte slice of this sequence's contents.
     /// A synonym for as_bytes().
     pub fn seq(&self) -> &[u8] {
@@ -45,11 +55,6 @@ impl SSeq {
     /// A synonym for as_bytes().
     pub fn seq_mut(&mut self) -> &mut [u8] {
         self.as_mut_bytes()
-    }
-
-    /// Returns true if this sequence has a length of zero, and false otherwise.
-    pub fn is_empty(self) -> bool {
-        self.len() == 0
     }
 
     /// Returns true if this sequence contains an N.
@@ -96,7 +101,7 @@ impl SSeq {
         res
     }
 
-    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter {
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter<N> {
         SSeqOneHammingIter::new(self, opt)
     }
 }
@@ -111,16 +116,24 @@ pub enum HammingIterOpt {
 /// from an `SSeq`. `SSeq` is guaranteed to contain "ACGTN" alphabets.
 /// Positions containing "N" or "n" are mutated or skipped
 /// depending on the `HammingIterOpt`
-pub struct SSeqOneHammingIter {
-    source: SSeq,            // Original SSeq from which we need to generate values
+pub struct SSeqOneHammingIter<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
+    source: SSeqGen<N>,      // Original SSeq from which we need to generate values
     chars: &'static [u8; 5], // Whether it's ACGTN or acgtn
     position: usize,         // Index into SSeq where last base was mutated
     chars_index: usize,      // The last base which was used
     skip_n: bool,            // Whether to skip N bases or mutate them
 }
 
-impl SSeqOneHammingIter {
-    fn new(sseq: SSeq, opt: HammingIterOpt) -> Self {
+impl<N> SSeqOneHammingIter<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
+    fn new(sseq: SSeqGen<N>, opt: HammingIterOpt) -> Self {
         let chars = UPPER_ACGTN;
         SSeqOneHammingIter {
             source: sseq,
@@ -135,8 +148,12 @@ impl SSeqOneHammingIter {
     }
 }
 
-impl Iterator for SSeqOneHammingIter {
-    type Item = SSeq;
+impl<N> Iterator for SSeqOneHammingIter<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
+    type Item = SSeqGen<N>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.position >= self.source.len() {

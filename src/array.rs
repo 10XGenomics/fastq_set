@@ -15,7 +15,7 @@ pub trait ArrayContent {
 
 /// Fixed-sized container for a short DNA sequence or quality.
 /// The capacity is determined by the type `N` and the contents are validates based on type `T`
-/// Typically used as a convenient container for barcode or UMI sequences.
+/// Typically used as a convenient container for barcode or UMI sequences or quality.
 #[derive(Clone, Copy, PartialOrd, Ord, Eq)]
 pub struct ByteArray<N, T>
 where
@@ -71,6 +71,11 @@ where
     /// Returns the length of this sequence, in bytes.
     pub fn len(self) -> usize {
         self.length as usize
+    }
+
+    /// Returns true if self has a length of zero bytes.
+    pub fn is_empty(self) -> bool {
+        self.length == 0
     }
 
     /// Returns an iterator over the bytes.
