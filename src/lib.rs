@@ -20,6 +20,7 @@
 use fastq;
 
 pub mod adapter_trimmer;
+pub mod array;
 pub mod background_iterator;
 pub mod filenames;
 pub mod illumina_header_info;

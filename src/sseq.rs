@@ -2,60 +2,49 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
-use serde::de::{self, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
+use crate::array::{typenum, ArrayContent, ByteArray};
+use generic_array::ArrayLength;
 use std::iter::Iterator;
-use std::ops::{Index, IndexMut};
 use std::str;
 
 const UPPER_ACGTN: &[u8; 5] = b"ACGTN";
 const N_BASE_INDEX: usize = 4;
 
-/// Make sure that the input byte slice contains only
-/// "ACGTN" characters. Panics otherwise with an error
-/// message describing the position of the first character
-/// that is not an ACGTN.
-pub fn ensure_upper_case_acgtn(seq: &[u8]) {
-    for (i, &s) in seq.iter().enumerate() {
-        if !UPPER_ACGTN.iter().any(|&c| c == s) {
-            panic!("Non ACGTN character {} at position {}", s, i);
-        };
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+pub struct SSeqContents;
+
+impl ArrayContent for SSeqContents {
+    /// Make sure that the input byte slice contains only
+    /// "ACGTN" characters. Panics otherwise with an error
+    /// message describing the position of the first character
+    /// that is not an ACGTN.
+    fn validate_bytes(seq: &[u8]) {
+        for (i, &s) in seq.iter().enumerate() {
+            if !UPPER_ACGTN.iter().any(|&c| c == s) {
+                panic!("Non ACGTN character {} at position {}", s, i);
+            };
+        }
+    }
+    fn expected_contents() -> &'static str {
+        "An [ACGTN]* string"
     }
 }
+
+/// Fixed-sized container for a short DNA sequence, with capacity determined by type `N`.
+/// Used as a convenient container for barcode or UMI sequences.
+/// An `SSeqGen` is guaranteed to contain only "ACGTN" alphabets
+pub type SSeqGen<N> = ByteArray<N, SSeqContents>;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
 /// An `SSeq` is guaranteed to contain only "ACGTN" alphabets
-#[derive(Clone, Copy, PartialOrd, Ord, Eq)]
-pub struct SSeq {
-    pub(crate) sequence: [u8; 23],
-    pub(crate) length: u8,
-}
+pub type SSeq = SSeqGen<typenum::U23>;
 
-impl SSeq {
-    /// Create a new SSeq from the given byte slice
-    /// The byte slice should contain only "ACGTN" (upper case) alphabets,
-    /// otherwise this function will panic
-    pub fn new(seq: &[u8]) -> SSeq {
-        assert!(seq.len() <= 23);
-        ensure_upper_case_acgtn(seq);
-
-        let mut sequence = [0u8; 23];
-        sequence[0..seq.len()].copy_from_slice(&seq);
-
-        SSeq {
-            length: seq.len() as u8,
-            sequence,
-        }
-    }
-
-    /// Returns a byte slice of this SSeq's contents.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.sequence[0..self.length as usize]
-    }
-
+impl<N> SSeqGen<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
     /// Returns a byte slice of this sequence's contents.
     /// A synonym for as_bytes().
     pub fn seq(&self) -> &[u8] {
@@ -65,22 +54,7 @@ impl SSeq {
     /// Returns a byte slice of this sequence's contents.
     /// A synonym for as_bytes().
     pub fn seq_mut(&mut self) -> &mut [u8] {
-        &mut self.sequence[0..self.length as usize]
-    }
-
-    /// Returns the length of this sequence, in bytes.
-    pub fn len(self) -> usize {
-        self.length as usize
-    }
-
-    /// Returns true if this sequence has a length of zero, and false otherwise.
-    pub fn is_empty(self) -> bool {
-        self.length == 0
-    }
-
-    /// Returns an iterator over this sequence.
-    pub fn iter(&self) -> std::slice::Iter<u8> {
-        self.sequence[..self.length as usize].iter()
+        self.as_mut_bytes()
     }
 
     /// Returns true if this sequence contains an N.
@@ -91,12 +65,12 @@ impl SSeq {
     /// Returns true if this sequence is a homopolymer.
     pub fn is_homopolymer(&self) -> bool {
         assert!(!self.is_empty());
-        self.iter().all(|&c| c == self.sequence[0])
+        self.iter().all(|&c| c == self.seq()[0])
     }
 
     /// Returns true if the last n characters of this sequence are the specified homopolymer.
     pub fn has_homopolymer_suffix(&self, c: u8, n: usize) -> bool {
-        self.length as usize >= n && self.iter().rev().take(n).all(|&x| x == c)
+        self.len() as usize >= n && self.iter().rev().take(n).all(|&x| x == c)
     }
 
     /// Returns true if the last n characters of this sequence are T.
@@ -107,10 +81,11 @@ impl SSeq {
     /// Returns a 2-bit encoding of this sequence.
     pub fn encode_2bit_u32(self) -> u32 {
         let mut res: u32 = 0;
-        assert!(self.length < 16);
+        assert!(self.len() < 16);
 
-        for (bit_pos, str_pos) in (0..self.length).rev().enumerate() {
-            let byte: u32 = match self.sequence[str_pos as usize] {
+        let seq = self.seq();
+        for (bit_pos, str_pos) in (0..self.len()).rev().enumerate() {
+            let byte: u32 = match seq[str_pos as usize] {
                 b'A' => 0,
                 b'C' => 1,
                 b'G' => 2,
@@ -126,7 +101,7 @@ impl SSeq {
         res
     }
 
-    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter {
+    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter<N> {
         SSeqOneHammingIter::new(self, opt)
     }
 }
@@ -141,16 +116,24 @@ pub enum HammingIterOpt {
 /// from an `SSeq`. `SSeq` is guaranteed to contain "ACGTN" alphabets.
 /// Positions containing "N" or "n" are mutated or skipped
 /// depending on the `HammingIterOpt`
-pub struct SSeqOneHammingIter {
-    source: SSeq,            // Original SSeq from which we need to generate values
+pub struct SSeqOneHammingIter<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
+    source: SSeqGen<N>,      // Original SSeq from which we need to generate values
     chars: &'static [u8; 5], // Whether it's ACGTN or acgtn
     position: usize,         // Index into SSeq where last base was mutated
     chars_index: usize,      // The last base which was used
     skip_n: bool,            // Whether to skip N bases or mutate them
 }
 
-impl SSeqOneHammingIter {
-    fn new(sseq: SSeq, opt: HammingIterOpt) -> Self {
+impl<N> SSeqOneHammingIter<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
+    fn new(sseq: SSeqGen<N>, opt: HammingIterOpt) -> Self {
         let chars = UPPER_ACGTN;
         SSeqOneHammingIter {
             source: sseq,
@@ -165,8 +148,12 @@ impl SSeqOneHammingIter {
     }
 }
 
-impl Iterator for SSeqOneHammingIter {
-    type Item = SSeq;
+impl<N> Iterator for SSeqOneHammingIter<N>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+{
+    type Item = SSeqGen<N>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.position >= self.source.len() {
@@ -189,110 +176,6 @@ impl Iterator for SSeqOneHammingIter {
             self.chars_index += 1;
             Some(next_sseq)
         }
-    }
-}
-
-impl Index<usize> for SSeq {
-    type Output = u8;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        if index >= self.length as usize {
-            panic!("index out of bounds")
-        }
-
-        &self.sequence[index]
-    }
-}
-
-impl IndexMut<usize> for SSeq {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        if index >= self.length as usize {
-            panic!("index out of bounds")
-        }
-
-        &mut self.sequence[index]
-    }
-}
-
-impl AsRef<[u8]> for SSeq {
-    fn as_ref(&self) -> &[u8] {
-        self.seq()
-    }
-}
-
-impl Into<String> for SSeq {
-    fn into(self) -> String {
-        String::from(str::from_utf8(self.seq()).unwrap())
-    }
-}
-
-impl Borrow<[u8]> for SSeq {
-    fn borrow(&self) -> &[u8] {
-        self.seq()
-    }
-}
-
-impl Hash for SSeq {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.seq().hash(state);
-    }
-}
-
-impl PartialEq for SSeq {
-    fn eq(&self, other: &SSeq) -> bool {
-        self.seq() == other.seq()
-    }
-}
-
-use std::fmt;
-
-impl fmt::Display for SSeq {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut s = String::new();
-        for pos in 0..self.len() {
-            s.push(self.sequence[pos] as char);
-        }
-        write!(f, "{}", s)
-    }
-}
-impl fmt::Debug for SSeq {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self, f)
-    }
-}
-
-impl Serialize for SSeq {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(std::str::from_utf8(self.seq()).unwrap())
-    }
-}
-
-impl<'de> Deserialize<'de> for SSeq {
-    fn deserialize<D>(deserializer: D) -> Result<SSeq, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_str(SSeqVisitor)
-    }
-}
-
-struct SSeqVisitor;
-
-impl<'de> Visitor<'de> for SSeqVisitor {
-    type Value = SSeq;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("An [ACGTN]* string")
-    }
-
-    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-    where
-        E: de::Error,
-    {
-        Ok(SSeq::new(value.as_bytes()))
     }
 }
 
