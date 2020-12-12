@@ -336,6 +336,12 @@ mod sseq_test {
     }
 
     #[test]
+    #[should_panic]
+    fn test_sseq_too_long() {
+        let _ = SSeq::new(b"GGGACCGTCGGTAAAGCTACAGTGAGGGATGTAGTGATGC");
+    }
+
+    #[test]
     fn test_as_bytes() {
         assert_eq!(SSeq::new(b"ACGT").as_bytes(), b"ACGT");
     }

@@ -1,5 +1,7 @@
 pub use generic_array::typenum;
 use generic_array::{ArrayLength, GenericArray};
+use itertools::EitherOrBoth;
+use itertools::Itertools;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
@@ -38,19 +40,31 @@ where
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic
     pub fn new(src: &[u8]) -> Self {
+        Self::from_iter(src)
+    }
+
+    pub fn from_iter<'a>(src: impl IntoIterator<Item = &'a u8>) -> Self {
         let mut bytes: GenericArray<u8, N> = GenericArray::default();
 
-        assert!(src.len() <= bytes.len());
-        T::validate_bytes(src);
-
-        for (l, r) in bytes.as_mut_slice().iter_mut().zip(src.iter()) {
-            *l = *r;
+        let mut len = 0;
+        for fuse in bytes.as_mut_slice().iter_mut().zip_longest(src.into_iter()) {
+            match fuse {
+                EitherOrBoth::Both(l, r) => *l = *r,
+                EitherOrBoth::Left(_) => break,
+                EitherOrBoth::Right(_) => panic!(
+                    "Input slice has more than {} bytes, which is the maximum for this ByteArray!",
+                    bytes.len()
+                ),
+            }
+            len += 1;
         }
-        ByteArray {
-            length: src.len() as u8,
+        let array = ByteArray {
+            length: len,
             bytes,
             phantom: PhantomData,
-        }
+        };
+        T::validate_bytes(array.as_bytes());
+        array
     }
 
     /// Returns a byte slice of the contents.
