@@ -394,4 +394,12 @@ mod sseq_test {
                 .map(|x| SSeq::new(x)),
         );
     }
+
+    #[test]
+    fn test_from_iter() {
+        let seq = SSeq::new(b"ACGT");
+        let _ = SSeq::from_iter(seq.as_bytes());
+        let seq_vec = seq.as_bytes().to_vec();
+        let _ = SSeq::from_iter(seq_vec.into_iter());
+    }
 }

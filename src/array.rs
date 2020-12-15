@@ -43,13 +43,17 @@ where
         Self::from_iter(src)
     }
 
-    pub fn from_iter<'a>(src: impl IntoIterator<Item = &'a u8>) -> Self {
+    pub fn from_iter<'a, C, D>(src: D) -> Self
+    where
+        C: Borrow<u8>,
+        D: IntoIterator<Item = C>,
+    {
         let mut bytes: GenericArray<u8, N> = GenericArray::default();
 
         let mut len = 0;
         for fuse in bytes.as_mut_slice().iter_mut().zip_longest(src.into_iter()) {
             match fuse {
-                EitherOrBoth::Both(l, r) => *l = *r,
+                EitherOrBoth::Both(l, r) => *l = *r.borrow(),
                 EitherOrBoth::Left(_) => break,
                 EitherOrBoth::Right(_) => panic!(
                     "Input slice has more than {} bytes, which is the maximum for this ByteArray!",
