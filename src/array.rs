@@ -1,4 +1,5 @@
 pub use generic_array::typenum;
+use generic_array::GenericArrayIter;
 use generic_array::{ArrayLength, GenericArray};
 use itertools::EitherOrBoth;
 use itertools::Itertools;
@@ -207,6 +208,20 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl<N, T> IntoIterator for ByteArray<N, T>
+where
+    N: ArrayLength<u8>,
+    N::ArrayType: Copy,
+    T: ArrayContent,
+{
+    type Item = u8;
+    type IntoIter = GenericArrayIter<u8, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.bytes.into_iter()
     }
 }
 
