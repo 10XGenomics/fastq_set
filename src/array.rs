@@ -42,7 +42,26 @@ where
         Self::from_iter(src)
     }
 
+    // If the input data is already validated, we can avoid checking it.
+    pub fn from_validated_iter<'a, C, D>(src: D) -> Self
+    where
+        C: Borrow<u8>,
+        D: IntoIterator<Item = C>,
+    {
+        ByteArray::base_from_iter(src)
+    }
+
     pub fn from_iter<'a, C, D>(src: D) -> Self
+    where
+        C: Borrow<u8>,
+        D: IntoIterator<Item = C>,
+    {
+        let array = ByteArray::base_from_iter(src);
+        T::validate_bytes(array.as_bytes());
+        array
+    }
+
+    fn base_from_iter<'a, C, D>(src: D) -> Self
     where
         C: Borrow<u8>,
         D: IntoIterator<Item = C>,
@@ -56,7 +75,7 @@ where
         }
         if src.next().is_some() {
             panic!(
-                "Error: Input iter exceeds capacity of {} bytes.",
+                "Input slice has more than {} bytes, which is the maximum for this ByteArray!",
                 bytes.len()
             );
         }
@@ -65,7 +84,6 @@ where
             bytes,
             phantom: PhantomData,
         };
-        T::validate_bytes(array.as_bytes());
         array
     }
 
