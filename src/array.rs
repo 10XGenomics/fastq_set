@@ -41,7 +41,22 @@ where
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic
     pub fn new(src: &[u8]) -> Self {
-        Self::from_iter(src)
+        let mut bytes: GenericArray<u8, N> = GenericArray::default();
+        if src.len() > bytes.len() {
+            panic!(
+                    "Input slice has more than {} bytes, which is the maximum for this ByteArray!",
+                    bytes.len()
+                )
+        }
+        T::validate_bytes(src);
+        for (l, r) in bytes.as_mut_slice().iter_mut().zip(src.iter()) {
+            *l = *r;
+        }
+        ByteArray {
+            length: src.len() as u8,
+            bytes,
+            phantom: PhantomData,
+        }
     }
 
     pub fn from_iter<'a, C, D>(src: D) -> Self
