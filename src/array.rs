@@ -1,8 +1,6 @@
 pub use generic_array::typenum;
 use generic_array::GenericArrayIter;
 use generic_array::{ArrayLength, GenericArray};
-use itertools::EitherOrBoth;
-use itertools::Itertools;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
@@ -49,19 +47,18 @@ where
         C: Borrow<u8>,
         D: IntoIterator<Item = C>,
     {
-        let mut bytes: GenericArray<u8, N> = GenericArray::default();
-
+        let mut src = src.into_iter().fuse();
+        let mut bytes = GenericArray::default();
         let mut len = 0;
-        for fuse in bytes.as_mut_slice().iter_mut().zip_longest(src.into_iter()) {
-            match fuse {
-                EitherOrBoth::Both(l, r) => *l = *r.borrow(),
-                EitherOrBoth::Left(_) => break,
-                EitherOrBoth::Right(_) => panic!(
-                    "Input slice has more than {} bytes, which is the maximum for this ByteArray!",
-                    bytes.len()
-                ),
-            }
+        for (l, r) in bytes.as_mut_slice().iter_mut().zip(&mut src) {
+            *l = *r.borrow();
             len += 1;
+        }
+        if src.next().is_some() {
+            panic!(
+                "Error: Input iter exceeds capacity of {} bytes.",
+                bytes.len()
+            );
         }
         let array = ByteArray {
             length: len,
