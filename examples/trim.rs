@@ -32,7 +32,7 @@ fn main() -> Result<(), Error> {
     let mut ntrimmed = 0;
     let mut total_reads = 0;
 
-    let reader = Reader::from_file(&input.input_fasta)?;
+    let reader = Reader::from_file(&input.input_fasta).unwrap();
     let mut writer = Writer::to_file(input.output_fasta)?;
     let mut trimmer = AdapterTrimmer::new(&input.adapter);
 

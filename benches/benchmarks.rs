@@ -1,13 +1,8 @@
 #[macro_use]
 extern crate criterion;
 
-use criterion::{Benchmark, Criterion, Throughput};
-use fastq_set::adapter_trimmer::{Adapter, ReadAdapterCatalog};
-use fastq_set::read_pair::WhichRead;
-use fastq_set::read_pair_iter::{InputFastqs, ReadPairIter};
-use fastq_set::FastqProcessor;
-use std::collections::HashSet;
-use std::fs::File;
+use criterion::Criterion;
+use fastq_set::read_pair_iter::ReadPairIter;
 use std::process::Command;
 
 fn simple_count(file: impl ToString) -> usize {
@@ -218,7 +213,7 @@ fn sseq_serde_bincode(c: &mut Criterion) {
     c.bench_function("bench-sseq-serde", |b| {
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
-        for i in 0..10_000 {
+        for _i in 0..10_000 {
             let s = fastq_set::sseq::SSeq::new(seq);
             sseqs.push(s);
         }

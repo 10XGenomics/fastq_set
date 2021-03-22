@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::hash::BuildHasher;
 use std::i32;
 use std::ops::Range;
@@ -910,8 +911,8 @@ mod tests {
         adapter_seq: impl ToString,
         end: WhichEnd,
         loc: AdapterLoc,
-        input_path: impl AsRef<Path>,
-        cutadapt_output_path: impl AsRef<Path>,
+        input_path: impl AsRef<Path> + Debug,
+        cutadapt_output_path: impl AsRef<Path> + Debug,
     ) {
         use bio::io::fasta::Reader;
 
