@@ -40,6 +40,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81cddc5f91628367664cc7c69714ff08deee8a3efc54623011c772544d7b2767"
+
+[[package]]
 name = "approx"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -103,10 +109,11 @@ dependencies = [
 
 [[package]]
 name = "bio"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1161c7b80eea668a884b4be136d83ef5175df5aaa6dcba482bdf4fbe1d046f2"
+checksum = "e5bf608c2f4e25edc48f85b8c93f4ef772fe4397d018f4aee88308f8d5864ffd"
 dependencies = [
+ "anyhow",
  "approx",
  "bio-types",
  "bit-set",
@@ -128,30 +135,28 @@ dependencies = [
  "num-traits",
  "ordered-float",
  "petgraph",
- "quick-error",
  "regex",
  "serde",
  "serde_derive",
- "snafu",
  "statrs",
  "strum",
  "strum_macros",
+ "thiserror",
  "triple_accel",
  "vec_map",
 ]
 
 [[package]]
 name = "bio-types"
-version = "0.7.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d4011aaa9f8bfece367ef7d23f23279710eacf7df462d92c5135eabeb82799b"
+checksum = "6b0decf3291fa83a9f26229d49e8bdf637291ab14451d315d6ac743aa7bf044f"
 dependencies = [
  "derive-new",
  "lazy_static",
- "quick-error",
  "regex",
- "serde",
- "serde_derive",
+ "strum_macros",
+ "thiserror",
 ]
 
 [[package]]
@@ -450,12 +455,6 @@ name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
-
-[[package]]
-name = "doc-comment"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "either"
@@ -1306,27 +1305,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
 
 [[package]]
-name = "snafu"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eab12d3c261b2308b0d80c26fffb58d17eba81a4be97890101f416b478c79ca7"
-dependencies = [
- "doc-comment",
- "snafu-derive",
-]
-
-[[package]]
-name = "snafu-derive"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1508efa03c362e23817f96cde18abed596a25219a8b2c66e8db33c03543d315b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "standback"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1395,15 +1373,15 @@ checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
 
 [[package]]
 name = "strum"
-version = "0.18.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57bd81eb48f4c437cadc685403cad539345bf703d78e63707418431cecd4522b"
+checksum = "7318c509b5ba57f18533982607f24070a55d353e90d4cae30c467cdb2ad5ac5c"
 
 [[package]]
 name = "strum_macros"
-version = "0.18.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87c85aa3f8ea653bfd3ddf25f7ee357ee4d204731f6aa9ad04002306f6e2774c"
+checksum = "d3992f8234362eea1ca37115b1bf9cec90dbbde166d7add10b7378e2c6c726a1"
 dependencies = [
  "heck",
  "proc-macro2",
