@@ -81,7 +81,7 @@ where
     /// Returns a 2-bit encoding of this sequence.
     pub fn encode_2bit_u32(self) -> u32 {
         let mut res: u32 = 0;
-        assert!(self.len() < 16);
+        assert!(self.len() <= 16);
 
         let seq = self.seq();
         for (bit_pos, str_pos) in (0..self.len()).rev().enumerate() {
