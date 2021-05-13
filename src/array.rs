@@ -32,7 +32,20 @@ where
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic
     pub fn new(src: &[u8]) -> Self {
-        Self::from_iter(src)
+        assert!(
+            src.len() <= N,
+            "Input slice has length {} which exceeds the capacity of {} bytes in the ByteArray",
+            src.len(),
+            N
+        );
+        T::validate_bytes(src);
+        let mut bytes = [0; N];
+        bytes[0..src.len()].copy_from_slice(&src);
+        ByteArray {
+            length: src.len() as u8,
+            bytes,
+            phantom: PhantomData,
+        }
     }
 
     pub fn from_iter<'a, C, D>(src: D) -> Self
