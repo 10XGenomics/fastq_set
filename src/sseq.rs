@@ -2,8 +2,7 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
-use crate::array::{typenum, ArrayContent, ByteArray};
-use generic_array::ArrayLength;
+use crate::array::{ArrayContent, ByteArray};
 use std::iter::Iterator;
 use std::str;
 
@@ -33,18 +32,14 @@ impl ArrayContent for SSeqContents {
 /// Fixed-sized container for a short DNA sequence, with capacity determined by type `N`.
 /// Used as a convenient container for barcode or UMI sequences.
 /// An `SSeqGen` is guaranteed to contain only "ACGTN" alphabets
-pub type SSeqGen<N> = ByteArray<N, SSeqContents>;
+pub type SSeqGen<const N: usize> = ByteArray<SSeqContents, N>;
 
 /// Fixed-sized container for a short DNA sequence, up to 23bp in length.
 /// Used as a convenient container for barcode or UMI sequences.
 /// An `SSeq` is guaranteed to contain only "ACGTN" alphabets
-pub type SSeq = SSeqGen<typenum::U23>;
+pub type SSeq = SSeqGen<23>;
 
-impl<N> SSeqGen<N>
-where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
-{
+impl<const N: usize> SSeqGen<N> {
     /// Returns a byte slice of this sequence's contents.
     /// A synonym for as_bytes().
     pub fn seq(&self) -> &[u8] {
@@ -116,11 +111,7 @@ pub enum HammingIterOpt {
 /// from an `SSeq`. `SSeq` is guaranteed to contain "ACGTN" alphabets.
 /// Positions containing "N" or "n" are mutated or skipped
 /// depending on the `HammingIterOpt`
-pub struct SSeqOneHammingIter<N>
-where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
-{
+pub struct SSeqOneHammingIter<const N: usize> {
     source: SSeqGen<N>,      // Original SSeq from which we need to generate values
     chars: &'static [u8; 5], // Whether it's ACGTN or acgtn
     position: usize,         // Index into SSeq where last base was mutated
@@ -128,11 +119,7 @@ where
     skip_n: bool,            // Whether to skip N bases or mutate them
 }
 
-impl<N> SSeqOneHammingIter<N>
-where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
-{
+impl<const N: usize> SSeqOneHammingIter<N> {
     fn new(sseq: SSeqGen<N>, opt: HammingIterOpt) -> Self {
         let chars = UPPER_ACGTN;
         SSeqOneHammingIter {
@@ -148,11 +135,7 @@ where
     }
 }
 
-impl<N> Iterator for SSeqOneHammingIter<N>
-where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
-{
+impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
     type Item = SSeqGen<N>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -200,7 +183,7 @@ mod sseq_test {
         let s8 = b"GAACNAGNTGGA";
 
         let mut seqs = vec![s1, s2, s3, s4, s5, s6, s7, s8];
-        let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::new(x)).collect();
+        let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::from_bytes(x)).collect();
 
         seqs.sort();
         sseqs.sort();
@@ -216,7 +199,7 @@ mod sseq_test {
             ref seqs_str in vec("[ACGTN]{0, 23}", 0usize..=10usize),
         ) {
             let mut seqs = seqs_str.iter().map(|s| s.clone().into_bytes()).collect_vec();
-            let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::new(x)).collect();
+            let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::from_bytes(x)).collect();
 
             seqs.sort();
             sseqs.sort();
@@ -229,19 +212,19 @@ mod sseq_test {
 
     #[test]
     fn dna_encode() {
-        let s1 = SSeq::new(b"AAAAA");
+        let s1 = SSeq::from_bytes(b"AAAAA");
         assert_eq!(s1.encode_2bit_u32(), 0);
 
-        let s1 = SSeq::new(b"AAAAT");
+        let s1 = SSeq::from_bytes(b"AAAAT");
         assert_eq!(s1.encode_2bit_u32(), 3);
 
-        let s1 = SSeq::new(b"AAACA");
+        let s1 = SSeq::from_bytes(b"AAACA");
         assert_eq!(s1.encode_2bit_u32(), 4);
 
-        let s1 = SSeq::new(b"AACAA");
+        let s1 = SSeq::from_bytes(b"AACAA");
         assert_eq!(s1.encode_2bit_u32(), 16);
 
-        let s1 = SSeq::new(b"AATA");
+        let s1 = SSeq::from_bytes(b"AATA");
         assert_eq!(s1.encode_2bit_u32(), 12);
     }
 
@@ -250,7 +233,7 @@ mod sseq_test {
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
         for _ in 0..4 {
-            let s = SSeq::new(seq);
+            let s = SSeq::from_bytes(seq);
             sseqs.push(s);
         }
 
@@ -262,7 +245,7 @@ mod sseq_test {
 
     #[test]
     fn test_serde_json() {
-        let seq = SSeq::new(b"AGCTAGTCAGTCAGTA");
+        let seq = SSeq::from_bytes(b"AGCTAGTCAGTCAGTA");
         let json_str = serde_json::to_string(&seq).unwrap();
         assert_eq!(json_str, r#""AGCTAGTCAGTCAGTA""#);
     }
@@ -272,7 +255,7 @@ mod sseq_test {
         fn prop_test_serde_sseq(
             ref seq in "[ACGTN]{0, 23}",
         ) {
-            let target = SSeq::new(seq.as_bytes());
+            let target = SSeq::from_bytes(seq.as_bytes());
             let encoded: Vec<u8> = bincode::serialize(&target).unwrap();
             let decoded: SSeq = bincode::deserialize(&encoded[..]).unwrap();
             prop_assert_eq!(target, decoded);
@@ -281,15 +264,28 @@ mod sseq_test {
         fn prop_test_serde_json_sseq(
             ref seq in "[ACGTN]{0, 23}",
         ) {
-            let target = SSeq::new(seq.as_bytes());
+            let target = SSeq::from_bytes(seq.as_bytes());
             let encoded = serde_json::to_string_pretty(&target).unwrap();
             let decoded: SSeq = serde_json::from_str(&encoded).unwrap();
             prop_assert_eq!(target, decoded);
         }
+
+        #[test]
+        fn prop_test_sseq_push(
+            ref seq1 in "[ACGTN]{0, 23}",
+            ref seq2 in "[ACGTN]{0, 23}",
+        ) {
+            if seq1.len() + seq2.len() <= 23 {
+                let mut s = SSeq::new();
+                s.push(seq1.as_bytes());
+                s.push(seq2.as_bytes());
+                assert_eq!(s, SSeq::from_iter(seq1.as_bytes().iter().chain(seq2.as_bytes().iter())));
+            }
+        }
     }
 
     fn test_hamming_helper(seq: &String, opt: HammingIterOpt, n: u8) {
-        let sseq = SSeq::new(seq.as_bytes());
+        let sseq = SSeq::from_bytes(seq.as_bytes());
         // Make sure that the hamming distance is 1 for all elements
         for neighbor in sseq.one_hamming_iter(opt) {
             assert_eq!(
@@ -326,78 +322,78 @@ mod sseq_test {
     #[test]
     #[should_panic]
     fn test_sseq_invalid_1() {
-        let _ = SSeq::new(b"ASDF");
+        let _ = SSeq::from_bytes(b"ASDF");
     }
 
     #[test]
     #[should_panic]
     fn test_sseq_invalid_2() {
-        let _ = SSeq::new(b"ag");
+        let _ = SSeq::from_bytes(b"ag");
     }
 
     #[test]
     #[should_panic]
     fn test_sseq_too_long() {
-        let _ = SSeq::new(b"GGGACCGTCGGTAAAGCTACAGTGAGGGATGTAGTGATGC");
+        let _ = SSeq::from_bytes(b"GGGACCGTCGGTAAAGCTACAGTGAGGGATGTAGTGATGC");
     }
 
     #[test]
     fn test_as_bytes() {
-        assert_eq!(SSeq::new(b"ACGT").as_bytes(), b"ACGT");
+        assert_eq!(SSeq::from_bytes(b"ACGT").as_bytes(), b"ACGT");
     }
 
     #[test]
     fn test_has_n() {
-        assert!(SSeq::new(b"ACGTN").has_n());
-        assert!(!SSeq::new(b"ACGT").has_n());
+        assert!(SSeq::from_bytes(b"ACGTN").has_n());
+        assert!(!SSeq::from_bytes(b"ACGT").has_n());
     }
 
     #[test]
     fn test_is_homopolymer() {
-        assert!(SSeq::new(b"AAAA").is_homopolymer());
-        assert!(!SSeq::new(b"ACGT").is_homopolymer());
+        assert!(SSeq::from_bytes(b"AAAA").is_homopolymer());
+        assert!(!SSeq::from_bytes(b"ACGT").is_homopolymer());
     }
 
     #[test]
     fn test_has_homopolymer_suffix() {
-        assert!(SSeq::new(b"ACGTAAAAA").has_homopolymer_suffix(b'A', 5));
-        assert!(!SSeq::new(b"ACGTTAAAA").has_homopolymer_suffix(b'A', 5));
-        assert!(SSeq::new(b"CCCCC").has_homopolymer_suffix(b'C', 5));
-        assert!(!SSeq::new(b"GGGG").has_homopolymer_suffix(b'G', 5));
+        assert!(SSeq::from_bytes(b"ACGTAAAAA").has_homopolymer_suffix(b'A', 5));
+        assert!(!SSeq::from_bytes(b"ACGTTAAAA").has_homopolymer_suffix(b'A', 5));
+        assert!(SSeq::from_bytes(b"CCCCC").has_homopolymer_suffix(b'C', 5));
+        assert!(!SSeq::from_bytes(b"GGGG").has_homopolymer_suffix(b'G', 5));
     }
 
     #[test]
     fn test_has_polyt_suffix() {
-        assert!(SSeq::new(b"CGCGTTTTT").has_polyt_suffix(5));
-        assert!(!SSeq::new(b"CGCGAAAAA").has_polyt_suffix(5));
+        assert!(SSeq::from_bytes(b"CGCGTTTTT").has_polyt_suffix(5));
+        assert!(!SSeq::from_bytes(b"CGCGAAAAA").has_polyt_suffix(5));
     }
 
     #[test]
     fn test_one_hamming_simple() {
         assert_equal(
-            SSeq::new(b"GAT")
+            SSeq::from_bytes(b"GAT")
                 .one_hamming_iter(HammingIterOpt::SkipNBase)
                 .collect_vec(),
             vec![
                 b"AAT", b"CAT", b"TAT", b"GCT", b"GGT", b"GTT", b"GAA", b"GAC", b"GAG",
             ]
             .into_iter()
-            .map(|x| SSeq::new(x)),
+            .map(|x| SSeq::from_bytes(x)),
         );
 
         assert_equal(
-            SSeq::new(b"GNT")
+            SSeq::from_bytes(b"GNT")
                 .one_hamming_iter(HammingIterOpt::SkipNBase)
                 .collect_vec(),
             vec![b"ANT", b"CNT", b"TNT", b"GNA", b"GNC", b"GNG"]
                 .into_iter()
-                .map(|x| SSeq::new(x)),
+                .map(|x| SSeq::from_bytes(x)),
         );
     }
 
     #[test]
     fn test_from_iter() {
-        let seq = SSeq::new(b"ACGT");
+        let seq = SSeq::from_bytes(b"ACGT");
         let _ = SSeq::from_iter(seq.as_bytes());
         let seq_vec = seq.as_bytes().to_vec();
         let _ = SSeq::from_iter(seq_vec.into_iter());

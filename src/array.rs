@@ -1,6 +1,3 @@
-pub use generic_array::typenum;
-use generic_array::GenericArrayIter;
-use generic_array::{ArrayLength, GenericArray};
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
@@ -18,28 +15,55 @@ pub trait ArrayContent {
 /// The capacity is determined by the type `N` and the contents are validates based on type `T`
 /// Typically used as a convenient container for barcode or UMI sequences or quality.
 #[derive(Clone, Copy, PartialOrd, Ord, Eq)]
-pub struct ByteArray<N, T>
+pub struct ByteArray<T, const N: usize>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
-    bytes: GenericArray<u8, N>,
+    bytes: [u8; N],
     length: u8,
     phantom: PhantomData<T>,
 }
 
-impl<N, T> ByteArray<N, T>
+impl<T, const N: usize> ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
+    pub fn new() -> Self {
+        ByteArray {
+            length: 0,
+            bytes: [0; N],
+            phantom: PhantomData,
+        }
+    }
+
+    /// Caller needs to ensure that the bytes are valid
+    pub fn push_unchecked(&mut self, src: &[u8]) {
+        let len = self.length as usize;
+        assert!(src.len() <= (N - len), "Input slice has length {} which exceeds the remaining capacity of {} bytes in the ByteArray", src.len(), N-len);
+        self.bytes[len..len + src.len()].copy_from_slice(&src);
+        self.length += src.len() as u8;
+    }
+
+    pub fn push(&mut self, src: &[u8]) {
+        T::validate_bytes(src);
+        self.push_unchecked(src);
+    }
+
     /// Create a new ByteArray from the given byte slice
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic
-    pub fn new(src: &[u8]) -> Self {
-        Self::from_iter(src)
+    pub fn from_bytes(src: &[u8]) -> Self {
+        let mut arr = Self::new();
+        arr.push(src);
+        arr
+    }
+
+    /// Create a new ByteArray from the given byte slice
+    /// Caller needs to ensure that the byte slice contains only valid alphabets as defined by ArrayContent trait
+    pub fn from_bytes_unchecked(src: &[u8]) -> Self {
+        let mut arr = Self::new();
+        arr.push_unchecked(src);
+        arr
     }
 
     pub fn from_iter<'a, C, D>(src: D) -> Self
@@ -47,10 +71,20 @@ where
         C: Borrow<u8>,
         D: IntoIterator<Item = C>,
     {
+        let array = ByteArray::from_iter_unchecked(src);
+        T::validate_bytes(array.as_bytes());
+        array
+    }
+
+    pub fn from_iter_unchecked<'a, C, D>(src: D) -> Self
+    where
+        C: Borrow<u8>,
+        D: IntoIterator<Item = C>,
+    {
         let mut src = src.into_iter().fuse();
-        let mut bytes = GenericArray::default();
+        let mut bytes = [0; N];
         let mut len = 0;
-        for (l, r) in bytes.as_mut_slice().iter_mut().zip(&mut src) {
+        for (l, r) in bytes.iter_mut().zip(&mut src) {
             *l = *r.borrow();
             len += 1;
         }
@@ -65,13 +99,12 @@ where
             bytes,
             phantom: PhantomData,
         };
-        T::validate_bytes(array.as_bytes());
         array
     }
 
     /// Returns a byte slice of the contents.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes.as_slice()[0..self.length as usize]
+        &self.bytes[0..self.length as usize]
     }
 
     /// Returns a str of the contents.
@@ -81,7 +114,7 @@ where
 
     /// Returns a mutable byte slice of the contents.
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        &mut self.bytes.as_mut_slice()[0..self.length as usize]
+        &mut self.bytes[0..self.length as usize]
     }
 
     /// Returns the length of this sequence, in bytes.
@@ -100,10 +133,8 @@ where
     }
 }
 
-impl<N, T> fmt::Display for ByteArray<N, T>
+impl<T, const N: usize> fmt::Display for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -111,10 +142,8 @@ where
     }
 }
 
-impl<N, T> fmt::Debug for ByteArray<N, T>
+impl<T, const N: usize> fmt::Debug for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -122,10 +151,8 @@ where
     }
 }
 
-impl<N, T> Index<usize> for ByteArray<N, T>
+impl<T, const N: usize> Index<usize> for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     type Output = u8;
@@ -139,10 +166,8 @@ where
     }
 }
 
-impl<N, T> IndexMut<usize> for ByteArray<N, T>
+impl<T, const N: usize> IndexMut<usize> for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
@@ -153,10 +178,8 @@ where
     }
 }
 
-impl<N, T> AsRef<[u8]> for ByteArray<N, T>
+impl<T, const N: usize> AsRef<[u8]> for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn as_ref(&self) -> &[u8] {
@@ -164,10 +187,8 @@ where
     }
 }
 
-impl<N, T> Into<String> for ByteArray<N, T>
+impl<T, const N: usize> Into<String> for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn into(self) -> String {
@@ -175,10 +196,8 @@ where
     }
 }
 
-impl<N, T> Borrow<[u8]> for ByteArray<N, T>
+impl<T, const N: usize> Borrow<[u8]> for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn borrow(&self) -> &[u8] {
@@ -186,10 +205,8 @@ where
     }
 }
 
-impl<N, T> Hash for ByteArray<N, T>
+impl<T, const N: usize> Hash for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -197,10 +214,8 @@ where
     }
 }
 
-impl<N, T> PartialEq for ByteArray<N, T>
+impl<T, const N: usize> PartialEq for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn eq(&self, other: &Self) -> bool {
@@ -208,24 +223,20 @@ where
     }
 }
 
-impl<N, T> IntoIterator for ByteArray<N, T>
+impl<T, const N: usize> IntoIterator for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     type Item = u8;
-    type IntoIter = GenericArrayIter<u8, N>;
+    type IntoIter = std::array::IntoIter<u8, N>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.bytes.into_iter()
+        std::array::IntoIter::new(self.bytes)
     }
 }
 
-impl<N, T> Serialize for ByteArray<N, T>
+impl<T, const N: usize> Serialize for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -236,10 +247,8 @@ where
     }
 }
 
-impl<'de, N, T> Deserialize<'de> for ByteArray<N, T>
+impl<'de, T, const N: usize> Deserialize<'de> for ByteArray<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -247,24 +256,20 @@ where
         D: Deserializer<'de>,
     {
         deserializer.deserialize_str(ByteArrayVisitor {
-            phantom_n: PhantomData,
             phantom_t: PhantomData,
         })
     }
 }
 
-struct ByteArrayVisitor<N, T> {
-    phantom_n: PhantomData<N>,
-    phantom_t: PhantomData<T>,
+struct ByteArrayVisitor<T, const N: usize> {
+    phantom_t: PhantomData<[T; N]>,
 }
 
-impl<'de, N, T> Visitor<'de> for ByteArrayVisitor<N, T>
+impl<'de, T, const N: usize> Visitor<'de> for ByteArrayVisitor<T, N>
 where
-    N: ArrayLength<u8>,
-    N::ArrayType: Copy,
     T: ArrayContent,
 {
-    type Value = ByteArray<N, T>;
+    type Value = ByteArray<T, N>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str(T::expected_contents())
@@ -274,6 +279,6 @@ where
     where
         E: de::Error,
     {
-        Ok(ByteArray::new(value.as_bytes()))
+        Ok(ByteArray::from_bytes(value.as_bytes()))
     }
 }

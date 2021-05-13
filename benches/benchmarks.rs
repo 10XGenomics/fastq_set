@@ -214,13 +214,13 @@ fn sseq_serde_bincode(c: &mut Criterion) {
         let seq = b"AGCTAGTCAGTCAGTA";
         let mut sseqs = Vec::new();
         for _i in 0..10_000 {
-            let s = fastq_set::sseq::SSeq::new(seq);
+            let s = fastq_set::sseq::SSeq::from_bytes(seq);
             sseqs.push(s);
         }
 
         b.iter(|| {
             let mut b = Vec::new();
-            bincode::serialize_into(&mut b, &sseqs);
+            bincode::serialize_into(&mut b, &sseqs).unwrap();
             assert!(b.len() > 0);
         })
     });
