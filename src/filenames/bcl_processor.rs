@@ -33,7 +33,7 @@ impl From<&str> for SampleIndexSpec {
         SampleIndexSpec::Sequences {
             indices: [index]
                 .iter()
-                .map(|ind| SSeq::new(ind.as_bytes()))
+                .map(|ind| SSeq::from_bytes(ind.as_bytes()))
                 .collect(),
             max_n: 1,
         }

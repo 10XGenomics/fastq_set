@@ -44,6 +44,10 @@ pretty_assertions = "0.6.1"
 name = "benchmarks"
 harness = false
 
+[[bench]]
+name = "array_bench"
+harness = false
+
 [dev-dependencies.proptest]
 version = "0.10"
 default-features = false

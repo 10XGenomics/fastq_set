@@ -28,7 +28,7 @@ impl<T, const N: usize> ByteArray<T, N>
 where
     T: ArrayContent,
 {
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         ByteArray {
             length: 0,
             bytes: [0; N],
@@ -36,34 +36,47 @@ where
         }
     }
 
-    pub fn push(&mut self, src: &[u8]) {
+    /// Caller needs to ensure that the bytes are valid
+    pub fn push_unchecked(&mut self, src: &[u8]) {
         let len = self.length as usize;
-        assert!(src.len() <= (N - len));
-        T::validate_bytes(src);
+        assert!(src.len() <= (N - len), "Input slice has length {} which exceeds the remaining capacity of {} bytes in the ByteArray", src.len(), N-len);
         self.bytes[len..len + src.len()].copy_from_slice(&src);
         self.length += src.len() as u8;
     }
+
+    pub fn push(&mut self, src: &[u8]) {
+        T::validate_bytes(src);
+        self.push_unchecked(src);
+    }
+
     /// Create a new ByteArray from the given byte slice
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic
-    pub fn new(src: &[u8]) -> Self {
-        assert!(
-            src.len() <= N,
-            "Input slice has length {} which exceeds the capacity of {} bytes in the ByteArray",
-            src.len(),
-            N
-        );
-        T::validate_bytes(src);
-        let mut bytes = [0; N];
-        bytes[0..src.len()].copy_from_slice(&src);
-        ByteArray {
-            length: src.len() as u8,
-            bytes,
-            phantom: PhantomData,
-        }
+    pub fn from_bytes(src: &[u8]) -> Self {
+        let mut arr = Self::new();
+        arr.push(src);
+        arr
+    }
+
+    /// Create a new ByteArray from the given byte slice
+    /// Caller needs to ensure that the byte slice contains only valid alphabets as defined by ArrayContent trait
+    pub fn from_bytes_unchecked(src: &[u8]) -> Self {
+        let mut arr = Self::new();
+        arr.push_unchecked(src);
+        arr
     }
 
     pub fn from_iter<'a, C, D>(src: D) -> Self
+    where
+        C: Borrow<u8>,
+        D: IntoIterator<Item = C>,
+    {
+        let array = ByteArray::from_iter_unchecked(src);
+        T::validate_bytes(array.as_bytes());
+        array
+    }
+
+    pub fn from_iter_unchecked<'a, C, D>(src: D) -> Self
     where
         C: Borrow<u8>,
         D: IntoIterator<Item = C>,
@@ -86,7 +99,6 @@ where
             bytes,
             phantom: PhantomData,
         };
-        T::validate_bytes(array.as_bytes());
         array
     }
 
@@ -267,6 +279,6 @@ where
     where
         E: de::Error,
     {
-        Ok(ByteArray::new(value.as_bytes()))
+        Ok(ByteArray::from_bytes(value.as_bytes()))
     }
 }
