@@ -2,7 +2,7 @@
 
 //! Sized, stack-allocated container for a short quality string.
 
-use crate::array::{typenum, ArrayContent, ByteArray};
+use crate::array::{ArrayContent, ByteArray};
 use std::iter::Iterator;
 use std::str;
 
@@ -31,12 +31,12 @@ impl ArrayContent for SQualityContents {
 /// Fixed-sized container for a short quality string, with capacity determined by the type `N`.
 /// Used as a convenient container for a barcode or UMI quality string.
 /// An `SQualityGen` is guaranteed to contain only valid quality characters.
-pub type SQualityGen<N> = ByteArray<N, SQualityContents>;
+pub type SQualityGen<const N: usize> = ByteArray<SQualityContents, N>;
 
 /// Fixed-sized container for a short quality string, up to 23bp in length.
 /// Used as a convenient container for a barcode or UMI quality string.
 /// An `SQuality` is guaranteed to contain only valid quality characters.
-pub type SQuality = SQualityGen<typenum::U23>;
+pub type SQuality = SQualityGen<23>;
 
 #[cfg(test)]
 mod squality_test {

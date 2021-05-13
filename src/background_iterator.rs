@@ -24,7 +24,7 @@ impl<T> BackgroundIterator<T> {
                         None => "unknown panic on BackgroundIterator worker thread".to_string(),
                     },
                 };
-                panic!(msg);
+                panic!("{}", msg);
             }
         }
     }
