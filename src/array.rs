@@ -28,6 +28,21 @@ impl<T, const N: usize> ByteArray<T, N>
 where
     T: ArrayContent,
 {
+    pub fn empty() -> Self {
+        ByteArray {
+            length: 0,
+            bytes: [0; N],
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn push(&mut self, src: &[u8]) {
+        let len = self.length as usize;
+        assert!(src.len() <= (N - len));
+        T::validate_bytes(src);
+        self.bytes[len..len + src.len()].copy_from_slice(&src);
+        self.length += src.len() as u8;
+    }
     /// Create a new ByteArray from the given byte slice
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic

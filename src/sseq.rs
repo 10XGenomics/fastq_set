@@ -269,6 +269,19 @@ mod sseq_test {
             let decoded: SSeq = serde_json::from_str(&encoded).unwrap();
             prop_assert_eq!(target, decoded);
         }
+
+        #[test]
+        fn prop_test_sseq_push(
+            ref seq1 in "[ACGTN]{0, 23}",
+            ref seq2 in "[ACGTN]{0, 23}",
+        ) {
+            if seq1.len() + seq2.len() <= 23 {
+                let mut s = SSeq::empty();
+                s.push(seq1.as_bytes());
+                s.push(seq2.as_bytes());
+                assert_eq!(s, SSeq::from_iter(seq1.as_bytes().iter().chain(seq2.as_bytes().iter())));
+            }
+        }
     }
 
     fn test_hamming_helper(seq: &String, opt: HammingIterOpt, n: u8) {
