@@ -4,7 +4,6 @@ use failure::Error;
 
 #[macro_use]
 extern crate serde_derive;
-use serde_json;
 
 use std::fs::File;
 

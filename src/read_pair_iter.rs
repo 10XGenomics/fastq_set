@@ -89,7 +89,7 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                     ErrorKind::InvalidData => {
                         let e = FastqError::FastqFormat {
                             message: e.to_string(),
-                            line: line,
+                            line,
                             file: path.as_ref().to_path_buf(),
                             backtrace: Backtrace::new(),
                         };
@@ -101,7 +101,7 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                         let e = FastqError::Io {
                             source: e,
                             file: path.as_ref().to_path_buf(),
-                            line: line,
+                            line,
                             backtrace: Backtrace::new(),
                         };
                         Err(e)
@@ -129,9 +129,9 @@ impl InputFastqs {
     pub fn change_dir(&self, new_dir: &Path) -> InputFastqs {
         InputFastqs {
             r1: InputFastqs::chng(&self.r1, new_dir),
-            r2: self.r2.as_ref().map(|r| InputFastqs::chng(&r, new_dir)),
-            i1: self.i1.as_ref().map(|r| InputFastqs::chng(&r, new_dir)),
-            i2: self.i2.as_ref().map(|r| InputFastqs::chng(&r, new_dir)),
+            r2: self.r2.as_ref().map(|r| InputFastqs::chng(r, new_dir)),
+            i1: self.i1.as_ref().map(|r| InputFastqs::chng(r, new_dir)),
+            i2: self.i2.as_ref().map(|r| InputFastqs::chng(r, new_dir)),
             r1_interleaved: self.r1_interleaved,
         }
     }
@@ -388,7 +388,7 @@ impl ReadPairIter {
                             });
                         }
 
-                        rec_num[idx] = rec_num[idx] + 1;
+                        rec_num[idx] += 1;
                     }
 
                     // If R1 is interleaved, read another entry
@@ -431,7 +431,7 @@ impl ReadPairIter {
                             });
                         }
 
-                        rec_num[idx] = rec_num[idx] + 1;
+                        rec_num[idx] += 1;
                     }
                 }
             }
@@ -447,7 +447,7 @@ impl ReadPairIter {
                 }
             }
 
-            if header_slices.len() > 0 {
+            if !header_slices.is_empty() {
                 for i in 1..header_slices.len() {
                     if header_slices[i].1 != header_slices[0].1 {
                         let msg = format!("FASTQ header mismatch detected at line {} of input files {:?} and {:?}",

@@ -106,9 +106,9 @@ fn read_pair_count(file: impl ToString) -> usize {
 //         .is_ok()
 // }
 
-const INTERLEAVED_LZ4_FASTQ: &'static str = "tests/rna_read/interleaved_2k.fastq.lz4";
-const INTERLEAVED_GZ_FASTQ: &'static str = "tests/rna_read/interleaved_2k.fastq.gz";
-const INTERLEAVED_FASTQ: &'static str = "tests/rna_read/interleaved_2k.fastq";
+const INTERLEAVED_LZ4_FASTQ: &str = "tests/rna_read/interleaved_2k.fastq.lz4";
+const INTERLEAVED_GZ_FASTQ: &str = "tests/rna_read/interleaved_2k.fastq.gz";
+const INTERLEAVED_FASTQ: &str = "tests/rna_read/interleaved_2k.fastq";
 // const INTERLEAVED_FASTQ_INSERT: &'static str = "tests/rna_read/interleaved_2k_insert.fastq";
 
 fn run_fastq_lz4_benchmark(c: &mut Criterion) {
@@ -221,7 +221,7 @@ fn sseq_serde_bincode(c: &mut Criterion) {
         b.iter(|| {
             let mut b = Vec::new();
             bincode::serialize_into(&mut b, &sseqs).unwrap();
-            assert!(b.len() > 0);
+            assert!(!b.is_empty());
         })
     });
 }
