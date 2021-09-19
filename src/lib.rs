@@ -17,8 +17,6 @@
     clippy::option_map_unit_fn
 )]
 
-use fastq;
-
 pub mod adapter_trimmer;
 pub mod array;
 pub mod background_iterator;

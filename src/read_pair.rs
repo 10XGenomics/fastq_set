@@ -772,7 +772,7 @@ mod tests {
     proptest! {
         #[test]
         fn prop_test_rprange_representation(
-            read in (0..4usize).prop_map(|r| WhichRead::from(r)),
+            read in (0..4usize).prop_map(WhichRead::from),
             offset in 0..MAX_RPRANGE_ENTRY,
             len in any::<usize>()
         ) {
@@ -788,7 +788,7 @@ mod tests {
     proptest! {
         #[test]
         fn prop_test_rprange_setter(
-            read in (0..4usize).prop_map(|r| WhichRead::from(r)),
+            read in (0..4usize).prop_map(WhichRead::from),
             offset in 0..MAX_RPRANGE_ENTRY,
             len in any::<usize>(),
             new_offset in 0..MAX_RPRANGE_ENTRY,

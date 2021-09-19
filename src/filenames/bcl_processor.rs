@@ -155,12 +155,14 @@ pub fn group_samples(
 
         match si_set_name_map.get(si_str) {
             Some(set_name) => {
-                let entry = by_sid.entry(set_name.to_string()).or_insert(Vec::new());
+                let entry = by_sid
+                    .entry((*set_name).to_string())
+                    .or_insert_with(Vec::new);
                 entry.push((f, input));
             }
             None => {
                 if include_unrec {
-                    let entry = by_sid.entry(f.si.clone()).or_insert(Vec::new());
+                    let entry = by_sid.entry(f.si.clone()).or_insert_with(Vec::new);
                     entry.push((f, input));
                 }
             }
@@ -242,18 +244,15 @@ fn try_parse_bclprocessor_file(filename: &str) -> Option<BclProcessorFile> {
     let re = "^read-([RI][A0-9])_si-([^_]+)_lane-([0-9]+)-chunk-([0-9]+).fastq(.gz|.lz4)?$";
     let re = regex::Regex::new(re).unwrap();
 
-    match re.captures(filename) {
-        None => None,
-        Some(caps) => Some(BclProcessorFile {
-            path: PathBuf::from(filename),
-            read: caps.get(1).unwrap().as_str().to_string(),
-            group: BclProcessorFileGroup {
-                si: caps.get(2).unwrap().as_str().to_string(),
-                lane: caps.get(3).unwrap().as_str().parse().unwrap(),
-                chunk: caps.get(4).unwrap().as_str().parse().unwrap(),
-            },
-        }),
-    }
+    re.captures(filename).map(|caps| BclProcessorFile {
+        path: PathBuf::from(filename),
+        read: caps.get(1).unwrap().as_str().to_string(),
+        group: BclProcessorFileGroup {
+            si: caps.get(2).unwrap().as_str().to_string(),
+            lane: caps.get(3).unwrap().as_str().parse().unwrap(),
+            chunk: caps.get(4).unwrap().as_str().parse().unwrap(),
+        },
+    })
 }
 
 #[cfg(test)]

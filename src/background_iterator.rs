@@ -18,7 +18,7 @@ impl<T> BackgroundIterator<T> {
                 // sender panicked - we will re-panic the panic.
                 // need to do a little dance here to get the panic message
                 let msg = match e.downcast_ref::<&'static str>() {
-                    Some(s) => s.to_string(),
+                    Some(s) => (*s).to_string(),
                     None => match e.downcast_ref::<String>() {
                         Some(s) => s.clone(),
                         None => "unknown panic on BackgroundIterator worker thread".to_string(),

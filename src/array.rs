@@ -40,7 +40,7 @@ where
     pub fn push_unchecked(&mut self, src: &[u8]) {
         let len = self.length as usize;
         assert!(src.len() <= (N - len), "Input slice has length {} which exceeds the remaining capacity of {} bytes in the ByteArray", src.len(), N-len);
-        self.bytes[len..len + src.len()].copy_from_slice(&src);
+        self.bytes[len..len + src.len()].copy_from_slice(src);
         self.length += src.len() as u8;
     }
 
@@ -94,12 +94,12 @@ where
                 bytes.len()
             );
         }
-        let array = ByteArray {
+
+        ByteArray {
             length: len,
             bytes,
             phantom: PhantomData,
-        };
-        array
+        }
     }
 
     /// Returns a byte slice of the contents.
