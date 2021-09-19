@@ -16,16 +16,11 @@ include = ["src/**/*", "LICENSE.txt", "README.md"]
 ordered-float = "1"
 flate2 = { version = "^1.0", features = ["zlib"], default-features = false }
 serde_derive = "*"
-serde_json = "*"
 serde = "*"
-serde_bytes = "*"
 bytes = { version = ">=0.5, <2", features = ["serde"] }
 failure = { version = "0.1", features = ["backtrace"] }
-glob = ">=0.3, <2"
 regex = { version = "1", default-features = false, features = ["std", "perf"] }
 lazy_static = "1"
-ahash = { version = ">=0.4, <0.8", default-features = false, features = ["std"] }
-log = "*"
 rand = ">=0.7, <2"
 rand_xorshift = ">=0.2"
 itertools = ">=0.8"
@@ -34,12 +29,13 @@ fastq = "^0.6"
 bio = ">=0.33.0, <2"
 
 [dev-dependencies]
-time = "*"
 file_diff = "1.0"
+glob = ">=0.3, <2"
 criterion = "0.3"
 bincode = "*"
 psutil = ">=2.0"
-pretty_assertions = "0.6.1"
+pretty_assertions = "0.7.2"
+serde_json = "*"
 
 [[bench]]
 name = "benchmarks"
@@ -50,7 +46,7 @@ name = "array_bench"
 harness = false
 
 [dev-dependencies.proptest]
-version = "0.10"
+version = "1"
 default-features = false
 # Enable all default features not known to break code coverage builds
 features = ["default-code-coverage"]
