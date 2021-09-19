@@ -10,7 +10,7 @@ use std::fs::File;
 
 use bio::io::fasta::{Reader, Writer};
 
-use time::Instant;
+use std::time::Instant;
 
 use std::env;
 
@@ -59,7 +59,7 @@ fn main() -> Result<(), Error> {
     let end = Instant::now();
     println!(
         "Elapsed time {:?} seconds for rust adapter trimmer.",
-        (end - start).as_seconds_f32()
+        (end - start).as_secs_f32()
     );
 
     Ok(())
