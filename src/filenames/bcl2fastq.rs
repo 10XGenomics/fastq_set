@@ -4,7 +4,7 @@ use super::FindFastqs;
 use crate::filenames::LaneMode;
 use crate::filenames::LaneSpec;
 use crate::read_pair_iter::InputFastqs;
-use failure::Error;
+use anyhow::Error;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;

@@ -1,4 +1,4 @@
-use failure::{format_err, Error};
+use anyhow::{format_err, Error};
 use serde::{Deserialize, Serialize};
 
 use crate::read_pair::{ReadPart, WhichRead};

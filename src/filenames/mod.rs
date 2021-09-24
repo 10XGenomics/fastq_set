@@ -5,11 +5,11 @@ pub mod bcl_processor;
 pub mod fastq_dir;
 
 use crate::read_pair_iter::InputFastqs;
+use anyhow::Error;
 pub use bcl2fastq::Bcl2FastqDef;
 use bcl2fastq::SampleNameSpec;
 pub use bcl_processor::BclProcessorFastqDef;
 use bcl_processor::SampleIndexSpec;
-use failure::Error;
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashSet;

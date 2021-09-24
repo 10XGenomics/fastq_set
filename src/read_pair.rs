@@ -4,8 +4,8 @@
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
 use crate::WhichEnd;
+use anyhow::{format_err, Error};
 use bytes::{Bytes, BytesMut};
-use failure::{format_err, Error};
 use fastq::{OwnedRecord, Record};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

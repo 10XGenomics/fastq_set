@@ -34,7 +34,7 @@ pub mod utils;
 use crate::read_pair_iter::{AnyReadPairIter, InputFastqs, ReadPairIter};
 pub use crate::squality::SQuality;
 pub use crate::sseq::SSeq;
-use failure::Error;
+use anyhow::Error;
 pub use fastq::OwnedRecord;
 pub use fastq::Record;
 pub use read_pair::WhichRead;

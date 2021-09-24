@@ -13,8 +13,7 @@ use bytes::{BufMut, BytesMut};
 use std::io::ErrorKind;
 use std::io::{self, BufRead, BufReader, Read, Seek, Write};
 
-use failure::Backtrace;
-use failure::Fail;
+use thiserror::Error;
 
 use rand::distributions::{Distribution, Uniform};
 use rand::SeedableRng;
@@ -22,30 +21,21 @@ use rand_xorshift::XorShiftRng;
 
 const GZ_BUF_SIZE: usize = 1 << 16;
 
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum FastqError {
-    #[fail(display = "{}: file: {:?}, line: {}", message, file, line)]
+    #[error("{message}: file: {file:?}, line: {line}")]
     FastqFormat {
         message: String,
         line: usize,
         file: PathBuf,
-        backtrace: Backtrace,
     },
-    #[fail(display = "Error opening FASTQ file '{:?}': {}", file, source)]
-    Open {
-        source: io::Error,
-        file: PathBuf,
-        backtrace: Backtrace,
-    },
-    #[fail(
-        display = "IO error in FASTQ file '{:?}', line: {}: {}",
-        file, line, source
-    )]
+    #[error("Error opening FASTQ file '{file:?}': {source}")]
+    Open { source: io::Error, file: PathBuf },
+    #[error("IO error in FASTQ file '{file:?}', line: {line}: {source}")]
     Io {
         source: io::Error,
         file: PathBuf,
         line: usize,
-        backtrace: Backtrace,
     },
 }
 
@@ -55,7 +45,6 @@ impl FastqError {
             message,
             line,
             file: path.as_ref().to_path_buf(),
-            backtrace: Backtrace::new(),
         }
     }
 }
@@ -73,7 +62,6 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                 let e = FastqError::Open {
                     source: e,
                     file: path.as_ref().to_path_buf(),
-                    backtrace: Backtrace::new(),
                 };
                 Err(e)
             }
@@ -91,7 +79,6 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                             message: e.to_string(),
                             line,
                             file: path.as_ref().to_path_buf(),
-                            backtrace: Backtrace::new(),
                         };
                         Err(e)
                     }
@@ -102,7 +89,6 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                             source: e,
                             file: path.as_ref().to_path_buf(),
                             line,
-                            backtrace: Backtrace::new(),
                         };
                         Err(e)
                     }
@@ -775,7 +761,7 @@ mod test_read_pair_iter {
     use itertools::Itertools;
 
     #[cfg(target_os = "linux")]
-    fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, failure::Error> {
+    fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, anyhow::Error> {
         let iter = ReadPairIter::new(
             Some("tests/read_pair_iter/vdj_micro_50k.fastq"),
             None,

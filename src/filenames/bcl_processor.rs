@@ -6,7 +6,7 @@ use crate::filenames::LaneSpec;
 use crate::read_pair_iter::InputFastqs;
 use crate::sample_index_map::SAMPLE_INDEX_MAP;
 use crate::sseq::SSeq;
-use failure::Error;
+use anyhow::Error;
 use itertools::Itertools;
 use regex;
 use serde::{Deserialize, Serialize};
