@@ -1,6 +1,6 @@
 //! Write `ReadPair` objects to a set of FASTQ files.
 
-use failure::{Error, ResultExt};
+use anyhow::{Context, Error};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -69,12 +69,12 @@ impl ReadPairWriter {
             if let Some(ref mut writer) = *writer_opt {
                 let which = WhichRead::read_types()[idx];
 
-                rec.write_fastq(which, writer).with_context(|_| {
+                rec.write_fastq(which, writer).with_context(|| {
                     format!("error writing fastq record to file: {:?}", paths[idx])
                 })?;
 
                 if which == WhichRead::R1 && self.r1_interleaved {
-                    rec.write_fastq(WhichRead::R2, writer).with_context(|_| {
+                    rec.write_fastq(WhichRead::R2, writer).with_context(|| {
                         format!("error writing fastq record to file: {:?}", paths[idx])
                     })?;
                 }

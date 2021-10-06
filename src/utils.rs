@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use failure::Error;
+use anyhow::Error;
 use flate2::write::GzEncoder;
 
 const GZ_BUF_SIZE: usize = 1 << 22;

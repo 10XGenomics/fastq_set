@@ -5,7 +5,7 @@ use crate::filenames::bcl_processor::{self, BclProcessorFileGroup};
 use crate::filenames::{LaneMode, LaneSpec};
 use crate::read_pair_iter::InputFastqs;
 use crate::sample_index_map::SAMPLE_INDEX_MAP;
-use failure::{format_err, Error, ResultExt};
+use anyhow::{format_err, Error};
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::path::Path;
@@ -179,12 +179,13 @@ impl FastqChecker {
         lanes: &Option<Vec<usize>>,
         help_text: &str,
     ) -> Result<HashSet<String>, Error> {
-        let bcl_dir = Bcl2FastqDir::new(&fastq_path).with_context(|e| {
-            format!(
+        let bcl_dir = Bcl2FastqDir::new(&fastq_path).map_err(|e| {
+            let context = format!(
                 "Error reading fastq directory {:?} due to:\n{}",
                 fastq_path.as_ref(),
                 e
-            )
+            );
+            e.context(context)
         })?;
 
         if bcl_dir.is_empty() {

@@ -1,6 +1,6 @@
 use fastq_set::adapter_trimmer::{Adapter, AdapterTrimmer};
 
-use failure::Error;
+use anyhow::Error;
 
 #[macro_use]
 extern crate serde_derive;

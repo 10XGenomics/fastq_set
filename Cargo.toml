@@ -1,6 +1,6 @@
 [package]
 name = "fastq_set"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Patrick Marks <patrick@10xgenomics.com>", "Sreenath Krishnan <sreenath.krishnan@10xgenomics.com>"]
 edition = "2018"
 license = "MIT"
@@ -18,7 +18,7 @@ flate2 = { version = "^1.0", features = ["zlib"], default-features = false }
 serde_derive = "*"
 serde = "*"
 bytes = { version = ">=0.5, <2", features = ["serde"] }
-failure = { version = "0.1", features = ["backtrace"] }
+anyhow = { version = "1", features = ["backtrace"] }
 regex = { version = "1", default-features = false, features = ["std", "perf"] }
 lazy_static = "1"
 rand = ">=0.7, <2"
@@ -27,6 +27,7 @@ itertools = ">=0.8"
 lz4 = "*"
 fastq = "^0.6"
 bio = ">=0.33.0, <2"
+thiserror = "1"
 
 [dev-dependencies]
 file_diff = "1.0"
