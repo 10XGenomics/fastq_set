@@ -228,10 +228,10 @@ where
     T: ArrayContent,
 {
     type Item = u8;
-    type IntoIter = std::array::IntoIter<u8, N>;
+    type IntoIter = std::iter::Take<std::array::IntoIter<u8, N>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        std::array::IntoIter::new(self.bytes)
+        std::array::IntoIter::new(self.bytes).take(self.length as usize)
     }
 }
 

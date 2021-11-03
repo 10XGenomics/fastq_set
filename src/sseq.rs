@@ -208,6 +208,14 @@ mod sseq_test {
                 assert_eq!(seqs[i], sseqs[i].seq());
             }
         }
+
+        #[test]
+        fn prop_test_into_iter(
+            ref seq_str in "[ACGTN]{0, 23}",
+        ) {
+            let seq = SSeq::from_bytes(seq_str.as_bytes());
+            assert_eq!(seq.len(), seq.into_iter().count())
+        }
     }
 
     #[test]
