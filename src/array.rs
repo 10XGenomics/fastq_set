@@ -223,17 +223,17 @@ where
     }
 }
 
-// impl<T, const N: usize> IntoIterator for ByteArray<T, N>
-// where
-//     T: ArrayContent,
-// {
-//     type Item = u8;
-//     type IntoIter = std::array::IntoIter<u8, N>;
+impl<T, const N: usize> IntoIterator for ByteArray<T, N>
+where
+    T: ArrayContent,
+{
+    type Item = u8;
+    type IntoIter = std::iter::Take<std::array::IntoIter<u8, N>>;
 
-//     fn into_iter(self) -> Self::IntoIter {
-//         std::array::IntoIter::new(self.bytes)
-//     }
-// }
+    fn into_iter(self) -> Self::IntoIter {
+        std::array::IntoIter::new(self.bytes).take(self.length as usize)
+    }
+}
 
 impl<T, const N: usize> Serialize for ByteArray<T, N>
 where
