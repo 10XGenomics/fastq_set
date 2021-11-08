@@ -4,18 +4,17 @@ use criterion::Criterion;
 use fastq_set::SSeq;
 
 fn run_benchmark(c: &mut Criterion) {
-    c.bench(
-        "bench-byte-array",
-        criterion::Benchmark::new("from-bytes", |b| {
-            b.iter(|| SSeq::from_bytes(b"AGTCCTCTGCATTTTG"))
-        })
-        .with_function("from-bytes-unchecked", |b| {
-            b.iter(|| SSeq::from_bytes_unchecked(b"AGTCCTCTGCATTTTG"))
-        })
-        .with_function("from-iter", |b| {
-            b.iter(|| SSeq::from_iter(b"AGTCCTCTGCATTTTG"))
-        }),
-    );
+    let mut group = c.benchmark_group("bench-byte-array");
+    group.bench_function("from-bytes", |b| {
+        b.iter(|| SSeq::from_bytes(b"AGTCCTCTGCATTTTG"))
+    });
+    group.bench_function("from-bytes-unchecked", |b| {
+        b.iter(|| SSeq::from_bytes_unchecked(b"AGTCCTCTGCATTTTG"))
+    });
+    group.bench_function("from-iter", |b| {
+        b.iter(|| SSeq::from_iter(b"AGTCCTCTGCATTTTG"))
+    });
+    group.finish();
 }
 
 criterion_group!(benches, run_benchmark);
