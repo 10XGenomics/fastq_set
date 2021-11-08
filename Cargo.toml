@@ -10,7 +10,7 @@ keywords = ["bioinformatics", "DNA", "sequencing"]
 readme = "README.md"
 include = ["src/**/*", "LICENSE.txt", "README.md"]
 
-
+resolver = "2"
 
 [dependencies]
 ordered-float = "1"
