@@ -30,11 +30,11 @@ impl InputFastqs {
         let read1 = iter
             .next()
             .transpose()?
-            .ok_or(format_err!("Empty fastq file: {:?}", self))?;
+            .ok_or_else(|| format_err!("Empty fastq file: {:?}", self))?;
 
         let header = read1
             .get(WhichRead::R1, ReadPart::Header)
-            .ok_or(format_err!("No Read1 in FASTQ data"))?;
+            .ok_or_else(|| format_err!("No Read1 in FASTQ data"))?;
 
         let header = std::str::from_utf8(header)?;
         let header_prefix = header.split(|x: char| x == ' ' || x == '/').next();

@@ -660,6 +660,13 @@ impl ReadPair {
         self.offsets[which as usize].seq_len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        !self
+            .offsets
+            .iter()
+            .any(|o| matches!(o.seq_len(), Some(x) if x != 0))
+    }
+
     /// Write read selected by `which` in FASTQ format to `writer`.
     /// This method will silently do nothing if the selected read doesn't exist.
     pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<(), Error> {
@@ -766,6 +773,7 @@ mod tests {
     #[should_panic]
     fn test_shrink_invalid_range_3() {
         let mut r = RpRange::new(WhichRead::R1, 10, Some(20));
+        #[allow(clippy::reversed_empty_ranges)]
         r.shrink(&(10..5));
     }
 
@@ -779,9 +787,9 @@ mod tests {
             // Make sure out internal compact representation is valid for random inputs
             let len = if len < MAX_RPRANGE_ENTRY { Some(len) } else { None };
             let rprange = RpRange::new(read, offset, len);
-            assert!(rprange.read() == read);
-            assert!(rprange.offset() == offset);
-            assert!(rprange.len() == len);
+            assert_eq!(rprange.read(), read);
+            assert_eq!(rprange.offset(), offset);
+            assert_eq!(rprange.len(), len);
         }
     }
 
@@ -800,8 +808,8 @@ mod tests {
             let mut rprange = RpRange::new(read, offset, len);
             rprange.set_offset(new_offset);
             rprange.set_len(new_len);
-            assert!(rprange.read() == read);
-            assert!(rprange.offset() == new_offset);
+            assert_eq!(rprange.read(), read);
+            assert_eq!(rprange.offset(), new_offset);
             assert_eq!(rprange.len(), Some(new_len));
         }
     }
@@ -822,15 +830,13 @@ mod tests {
                 if amount + old_offset < MAX_RPRANGE_ENTRY {
                     if end {
                         rprange.trim(WhichEnd::ThreePrime, amount);
-                        assert_eq!(rprange.read(), old_read);
                         assert_eq!(rprange.offset(), old_offset);
-                        assert_eq!(rprange.len(), Some(l-amount));
                     } else {
                         rprange.trim(WhichEnd::FivePrime, amount);
-                        assert_eq!(rprange.read(), old_read);
                         assert_eq!(rprange.offset(), old_offset + amount);
-                        assert_eq!(rprange.len(), Some(l-amount));
                     }
+                    assert_eq!(rprange.read(), old_read);
+                    assert_eq!(rprange.len(), Some(l-amount));
                 }
             } else if amount < (MAX_RPRANGE_ENTRY - old_offset) {
                 rprange.trim(WhichEnd::FivePrime, amount);

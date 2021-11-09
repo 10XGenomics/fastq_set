@@ -170,6 +170,7 @@ mod sseq_test {
     use proptest::collection::vec;
     use proptest::{prop_assert_eq, proptest};
     use std::collections::HashSet;
+    use std::iter::FromIterator;
 
     #[test]
     fn sort_test() {
@@ -292,7 +293,7 @@ mod sseq_test {
         }
     }
 
-    fn test_hamming_helper(seq: &String, opt: HammingIterOpt, n: u8) {
+    fn test_hamming_helper(seq: &str, opt: HammingIterOpt, n: u8) {
         let sseq = SSeq::from_bytes(seq.as_bytes());
         // Make sure that the hamming distance is 1 for all elements
         for neighbor in sseq.one_hamming_iter(opt) {

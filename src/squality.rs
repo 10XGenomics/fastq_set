@@ -70,9 +70,10 @@ mod squality_test {
 
     #[test]
     fn test_serde() {
-        let mut sseqs = Vec::new();
-        sseqs.push(SQuality::from_bytes(&VALID_CHARS[0..23]));
-        sseqs.push(SQuality::from_bytes(&VALID_CHARS[23..41]));
+        let sseqs = vec![
+            SQuality::from_bytes(&VALID_CHARS[0..23]),
+            SQuality::from_bytes(&VALID_CHARS[23..41]),
+        ];
 
         let mut buf = Vec::new();
         bincode::serialize_into(&mut buf, &sseqs).unwrap();

@@ -2,6 +2,7 @@
 extern crate criterion;
 use criterion::Criterion;
 use fastq_set::SSeq;
+use std::iter::FromIterator;
 
 fn run_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("bench-byte-array");

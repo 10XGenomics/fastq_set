@@ -217,11 +217,11 @@ impl ReadPairIter {
         file.read_exact(&mut buf[..]).fastq_err(p, 0)?;
         file.seek(std::io::SeekFrom::Start(0)).fastq_err(p, 0)?;
 
-        if &buf[0..2] == &[0x1F, 0x8B] {
+        if buf[0..2] == [0x1F, 0x8B] {
             let gz = flate2::read::MultiGzDecoder::new(file);
             let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, gz);
             Ok(Box::new(buf_reader))
-        } else if &buf[0..4] == &[0x04, 0x22, 0x4D, 0x18] {
+        } else if buf[0..4] == [0x04, 0x22, 0x4D, 0x18] {
             let lz = lz4::Decoder::new(file).fastq_err(p, 0)?;
             let buf_reader = BufReader::with_capacity(GZ_BUF_SIZE, lz);
             Ok(Box::new(buf_reader))
@@ -425,11 +425,13 @@ impl ReadPairIter {
             // check that headers of all reads match
             let mut header_slices = Vec::with_capacity(4);
 
-            let which = [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2];
-            for w in 0..4 {
-                if let Some(header) = rp.get(which[w], ReadPart::Header) {
+            for (i, w) in [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2]
+                .iter()
+                .enumerate()
+            {
+                if let Some(header) = rp.get(*w, ReadPart::Header) {
                     let prefix = header.split(|x| *x == b' ' || *x == b'/').next();
-                    header_slices.push((w, prefix));
+                    header_slices.push((i, prefix));
                 }
             }
 
