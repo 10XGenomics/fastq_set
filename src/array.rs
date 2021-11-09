@@ -3,6 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::iter::FromIterator;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
@@ -66,17 +67,7 @@ where
         arr
     }
 
-    pub fn from_iter<'a, C, D>(src: D) -> Self
-    where
-        C: Borrow<u8>,
-        D: IntoIterator<Item = C>,
-    {
-        let array = ByteArray::from_iter_unchecked(src);
-        T::validate_bytes(array.as_bytes());
-        array
-    }
-
-    pub fn from_iter_unchecked<'a, C, D>(src: D) -> Self
+    pub fn from_iter_unchecked<C, D>(src: D) -> Self
     where
         C: Borrow<u8>,
         D: IntoIterator<Item = C>,
@@ -130,6 +121,30 @@ where
     /// Returns an iterator over the bytes.
     pub fn iter(&self) -> std::slice::Iter<u8> {
         self.as_bytes().iter()
+    }
+}
+
+impl<T, const N: usize> Default for ByteArray<T, N>
+where
+    T: ArrayContent,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T, C, const N: usize> FromIterator<C> for ByteArray<T, N>
+where
+    T: ArrayContent,
+    C: Borrow<u8>,
+{
+    fn from_iter<D: IntoIterator<Item = C>>(src: D) -> Self
+    where
+        C: Borrow<u8>,
+    {
+        let array = ByteArray::from_iter_unchecked(src);
+        T::validate_bytes(array.as_bytes());
+        array
     }
 }
 
@@ -187,12 +202,12 @@ where
     }
 }
 
-impl<T, const N: usize> Into<String> for ByteArray<T, N>
+impl<T, const N: usize> From<ByteArray<T, N>> for String
 where
     T: ArrayContent,
 {
-    fn into(self) -> String {
-        String::from(self.as_str())
+    fn from(v: ByteArray<T, N>) -> String {
+        String::from(v.as_str())
     }
 }
 

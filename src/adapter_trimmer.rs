@@ -23,6 +23,7 @@ use bio::alignment::pairwise::{self, MatchParams, Scoring};
 use bio::alignment::sparse;
 use bio::alignment::sparse::HashMapFx;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -300,29 +301,37 @@ impl<'a> AdapterTrimmer<'a> {
                                 let dx = read.len() - p.last_match.0 as usize;
                                 let dy = self.adapter.seq.len() - p.last_match.1 as usize;
                                 // if (max(dx, dy) - min(dx, dy)) < 3 {
-                                if dx == dy {
-                                    scoring.xclip_suffix = pairwise::MIN_SCORE;
-                                    scoring.yclip_suffix = pairwise::MIN_SCORE;
-                                } else if dx > dy {
-                                    scoring.xclip_suffix = 0;
-                                    scoring.yclip_suffix = pairwise::MIN_SCORE;
-                                } else {
-                                    scoring.xclip_suffix = pairwise::MIN_SCORE;
-                                    scoring.yclip_suffix = 0;
+                                match dx.cmp(&dy) {
+                                    Ordering::Equal => {
+                                        scoring.xclip_suffix = pairwise::MIN_SCORE;
+                                        scoring.yclip_suffix = pairwise::MIN_SCORE;
+                                    }
+                                    Ordering::Greater => {
+                                        scoring.xclip_suffix = 0;
+                                        scoring.yclip_suffix = pairwise::MIN_SCORE;
+                                    }
+                                    Ordering::Less => {
+                                        scoring.xclip_suffix = pairwise::MIN_SCORE;
+                                        scoring.yclip_suffix = 0;
+                                    }
                                 }
                             }
                             WhichEnd::FivePrime => {
                                 let dx = p.first_match.0;
                                 let dy = p.first_match.1;
-                                if dx == dy {
-                                    scoring.xclip_prefix = pairwise::MIN_SCORE;
-                                    scoring.yclip_prefix = pairwise::MIN_SCORE;
-                                } else if dx > dy {
-                                    scoring.xclip_prefix = 0;
-                                    scoring.yclip_prefix = pairwise::MIN_SCORE;
-                                } else {
-                                    scoring.xclip_prefix = pairwise::MIN_SCORE;
-                                    scoring.yclip_prefix = 0;
+                                match dx.cmp(&dy) {
+                                    Ordering::Equal => {
+                                        scoring.xclip_prefix = pairwise::MIN_SCORE;
+                                        scoring.yclip_prefix = pairwise::MIN_SCORE;
+                                    }
+                                    Ordering::Greater => {
+                                        scoring.xclip_prefix = 0;
+                                        scoring.yclip_prefix = pairwise::MIN_SCORE;
+                                    }
+                                    Ordering::Less => {
+                                        scoring.xclip_prefix = pairwise::MIN_SCORE;
+                                        scoring.yclip_prefix = 0;
+                                    }
                                 }
                             }
                         }
