@@ -3,6 +3,7 @@
 //! Read a set of FASTQs, convert into an Iterator over ReadPairs.
 
 use serde::{Deserialize, Serialize};
+use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 
 use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
@@ -172,6 +173,13 @@ impl<'a, R: Record> Record for TrimRecord<'a, R> {
     }
 }
 
+struct ReadPairIterSet {
+    pub iters: [Option<RecordRefIter<Box<dyn BufRead + Send>>>; 4],
+    pub paths: [Option<PathBuf>; 4],
+    pub records_read: [usize; 4],
+    pub read_lengths: [usize; 4],
+}
+
 /// Read sequencing data from a parallel set of FASTQ files.
 /// Illumina sequencers typically emit a parallel set of FASTQ files, with one file
 /// for each read component taken by the sequencer. Up to 4 reads are possible (R1, R2, I1, and I2).
@@ -179,8 +187,6 @@ impl<'a, R: Record> Record for TrimRecord<'a, R> {
 /// as well as an interleaved R1/R2 file. Supports plain or gzipped FASTQ files, which
 /// will be detected based on the filename extension.
 pub struct ReadPairIter {
-    iters: [Option<RecordRefIter<Box<dyn BufRead + Send>>>; 4],
-    paths: [Option<PathBuf>; 4],
     // Each input file can interleave up to 2 -- declare those here
     r1_interleaved: bool,
     buffer: BytesMut,
@@ -188,8 +194,7 @@ pub struct ReadPairIter {
     uniform: Uniform<f64>,
     subsample_rate: f64,
     storage: ReadPairStorage,
-    records_read: [usize; 4],
-    read_lengths: [usize; 4],
+    iters: Box<ReadPairIterSet>,
 }
 
 impl ReadPairIter {
@@ -283,26 +288,28 @@ impl ReadPairIter {
         let buffer = BytesMut::with_capacity(BUF_SIZE);
 
         Ok(ReadPairIter {
-            paths,
-            iters,
             r1_interleaved,
             buffer,
             rand: XorShiftRng::seed_from_u64(0),
             uniform: Uniform::new(0.0, 1.0),
             subsample_rate: 1.0,
             storage: ReadPairStorage::default(),
-            records_read: [0; 4],
-            read_lengths: [std::usize::MAX; 4],
+            iters: Box::new(ReadPairIterSet {
+                paths,
+                iters,
+                records_read: [0; 4],
+                read_lengths: [std::usize::MAX; 4],
+            }),
         })
     }
 
     pub fn illumina_r1_trim_length(mut self, r1_length: Option<usize>) -> Self {
-        self.read_lengths[WhichRead::R1 as usize] = r1_length.unwrap_or(std::usize::MAX);
+        self.iters.read_lengths[WhichRead::R1 as usize] = r1_length.unwrap_or(std::usize::MAX);
         self
     }
 
     pub fn illumina_r2_trim_length(mut self, r2_length: Option<usize>) -> Self {
-        self.read_lengths[WhichRead::R2 as usize] = r2_length.unwrap_or(std::usize::MAX);
+        self.iters.read_lengths[WhichRead::R2 as usize] = r2_length.unwrap_or(std::usize::MAX);
         self
     }
 
@@ -328,18 +335,20 @@ impl ReadPairIter {
         }
 
         // need these local reference to avoid borrow checker problem
-        let paths = &self.paths;
-        let rec_num = &mut self.records_read;
+        let iters = self.iters.deref_mut();
+        let paths = &iters.paths;
+        let read_lengths = &iters.read_lengths;
+        let rec_num = &mut iters.records_read;
+        let iters = &mut iters.iters;
 
         let mut rp = MutReadPair::empty(&mut self.buffer).storage(self.storage);
-
         loop {
             let sample = self.uniform.sample(&mut self.rand) < self.subsample_rate;
 
             // Track which reader was the first to finish.
             let mut iter_ended = [false; 4];
 
-            for (idx, iter_opt) in self.iters.iter_mut().enumerate() {
+            for (idx, iter_opt) in iters.iter_mut().enumerate() {
                 if let Some(ref mut iter) = *iter_opt {
                     iter.advance()
                         .fastq_err(paths[idx].as_ref().unwrap(), rec_num[idx] * 4)?;
@@ -367,7 +376,7 @@ impl ReadPairIter {
 
                         if sample {
                             let which = WhichRead::read_types()[idx];
-                            let read_length = self.read_lengths[which as usize];
+                            let read_length = read_lengths[which as usize];
                             record.map(|r| {
                                 let tr = TrimRecord::new(&r, read_length);
                                 rp.push_read(&tr, which)
@@ -389,7 +398,7 @@ impl ReadPairIter {
                             let msg = "Input FASTQ file was input as interleaved R1 and R2, but contains an odd number of records".to_string();
                             let e = FastqError::format(
                                 msg,
-                                self.paths[idx].as_ref().unwrap(),
+                                paths[idx].as_ref().unwrap(),
                                 rec_num[idx] * 4,
                             );
                             return Err(e);
@@ -410,7 +419,7 @@ impl ReadPairIter {
 
                         if sample {
                             let which = WhichRead::read_types()[idx + 1];
-                            let read_length = self.read_lengths[which as usize];
+                            let read_length = read_lengths[which as usize];
                             record.map(|r| {
                                 let tr = TrimRecord::new(&r, read_length);
                                 rp.push_read(&tr, which)
@@ -440,13 +449,13 @@ impl ReadPairIter {
                     if header_slices[i].1 != header_slices[0].1 {
                         let msg = format!("FASTQ header mismatch detected at line {} of input files {:?} and {:?}",
                                 rec_num[0] * 4,
-                                self.paths[header_slices[0].0].as_ref().unwrap(),
-                                self.paths[header_slices[i].0].as_ref().unwrap()
+                                paths[header_slices[0].0].as_ref().unwrap(),
+                                paths[header_slices[i].0].as_ref().unwrap()
                             );
 
                         let e = FastqError::format(
                             msg,
-                            self.paths[header_slices[0].0].as_ref().unwrap(),
+                            paths[header_slices[0].0].as_ref().unwrap(),
                             rec_num[i] * 4,
                         );
                         return Err(e);
@@ -459,7 +468,7 @@ impl ReadPairIter {
                 // Are there any incomplete iterators?
                 let any_not_complete = iter_ended
                     .iter()
-                    .zip(self.paths.iter())
+                    .zip(paths.iter())
                     .any(|(ended, path)| path.is_some() && !ended);
 
                 if any_not_complete {
@@ -467,7 +476,7 @@ impl ReadPairIter {
                     let ended_index = iter_ended.iter().enumerate().find(|(_, v)| **v).unwrap().0;
 
                     let msg = "Input FASTQ file ended prematurely";
-                    let path = self.paths[ended_index].as_ref().unwrap();
+                    let path = paths[ended_index].as_ref().unwrap();
                     let e = FastqError::format(msg.to_string(), path, rec_num[ended_index] * 4);
                     return Err(e);
                 } else {
