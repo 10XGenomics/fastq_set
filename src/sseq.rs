@@ -160,6 +160,14 @@ impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
             Some(next_sseq)
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.position >= self.source.len() {
+            (0, Some(0))
+        } else {
+            (0, Some(self.source.len() - self.position))
+        }
+    }
 }
 
 #[cfg(test)]

@@ -41,6 +41,7 @@ pub enum FastqError {
 }
 
 impl FastqError {
+    #[cold]
     pub fn format(message: String, path: impl AsRef<Path>, line: usize) -> FastqError {
         FastqError::FastqFormat {
             message,
@@ -51,25 +52,27 @@ impl FastqError {
 }
 
 trait FileIoError<T> {
-    fn open_err(self, path: impl AsRef<Path>) -> Result<T, FastqError>;
-    fn fastq_err(self, path: impl AsRef<Path>, line: usize) -> Result<T, FastqError>;
+    fn open_err(self, path: impl Into<PathBuf>) -> Result<T, FastqError>;
+    fn fastq_err(self, path: impl Into<PathBuf>, line: usize) -> Result<T, FastqError>;
 }
 
 impl<T> FileIoError<T> for Result<T, std::io::Error> {
-    fn open_err(self, path: impl AsRef<Path>) -> Result<T, FastqError> {
+    #[cold]
+    fn open_err(self, path: impl Into<PathBuf>) -> Result<T, FastqError> {
         match self {
             Ok(v) => Ok(v),
             Err(e) => {
                 let e = FastqError::Open {
                     source: e,
-                    file: path.as_ref().to_path_buf(),
+                    file: path.into(),
                 };
                 Err(e)
             }
         }
     }
 
-    fn fastq_err(self, path: impl AsRef<Path>, line: usize) -> Result<T, FastqError> {
+    #[cold]
+    fn fastq_err(self, path: impl Into<PathBuf>, line: usize) -> Result<T, FastqError> {
         match self {
             Ok(v) => Ok(v),
             Err(e) => {
@@ -79,7 +82,7 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                         let e = FastqError::FastqFormat {
                             message: e.to_string(),
                             line,
-                            file: path.as_ref().to_path_buf(),
+                            file: path.into(),
                         };
                         Err(e)
                     }
@@ -88,7 +91,7 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
                     _ => {
                         let e = FastqError::Io {
                             source: e,
-                            file: path.as_ref().to_path_buf(),
+                            file: path.into(),
                             line,
                         };
                         Err(e)
@@ -129,7 +132,9 @@ impl InputFastqs {
 
         let mut new_path = new_dir.to_path_buf();
         new_path.push(file_name);
-        new_path.to_string_lossy().to_string()
+        // Panic if the new path is not valid UTF-8-encoded unicode, because
+        // the alternative is to return an incorrect path.
+        new_path.to_str().unwrap().to_string()
     }
 }
 
@@ -159,16 +164,20 @@ impl<'a, R: Record> Record for TrimRecord<'a, R> {
         self.inner.head()
     }
     fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<usize> {
-        let mut written = 0;
         // TODO(lhepler): the fundamental impl in fastq here is busted, write may not write all
         // bytes...
-        written += writer.write(b"@")?;
-        written += writer.write(self.head())?;
-        written += writer.write(b"\n")?;
-        written += writer.write(self.seq())?;
-        written += writer.write(b"\n+\n")?;
-        written += writer.write(self.qual())?;
-        written += writer.write(b"\n")?;
+        const FMT_BYTES: usize = b"@\n\n+\n\n".len();
+        let head = self.head();
+        let seq = self.seq();
+        let qual = self.qual();
+        let written = FMT_BYTES + head.len() + seq.len() + qual.len();
+        writer.write_all(b"@")?;
+        writer.write_all(head)?;
+        writer.write_all(b"\n")?;
+        writer.write_all(seq)?;
+        writer.write_all(b"\n+\n")?;
+        writer.write_all(qual)?;
+        writer.write_all(b"\n")?;
         Ok(written)
     }
 }
@@ -213,12 +222,11 @@ impl ReadPairIter {
     /// Open a FASTQ file that is uncompressed, gzipped compressed, or lz4 compressed.
     /// The extension of the file is ignored & the filetype is determined by looking
     /// for magic bytes at the of the file
-    fn open_fastq(p: impl AsRef<Path>) -> Result<Box<dyn BufRead + Send>, FastqError> {
-        let p = p.as_ref();
-
-        let mut file = std::fs::File::open(p).fastq_err(p, 0)?;
-
-        let mut buf = vec![0u8; 4];
+    fn open_fastq_from_file(
+        p: &Path,
+        mut file: std::fs::File,
+    ) -> Result<Box<dyn BufRead + Send>, FastqError> {
+        let mut buf = [0u8; 4];
         file.read_exact(&mut buf[..]).fastq_err(p, 0)?;
         file.seek(std::io::SeekFrom::Start(0)).fastq_err(p, 0)?;
 
@@ -235,16 +243,22 @@ impl ReadPairIter {
             Ok(Box::new(buf_reader))
         } else {
             let msg =
-            "FASTQ file does not appear to be valid. Input FASTQ file must be gzip or lz4 compressed, or must begin with the '@' symbol".to_string();
+        "FASTQ file does not appear to be valid. Input FASTQ file must be gzip or lz4 compressed, or must begin with the '@' symbol".to_string();
             let e = FastqError::format(msg, p, 0);
             Err(e)
         }
     }
 
     /// Open a (possibly gzip or lz4 compressed) FASTQ file & read some records to confirm the format looks good.
-    fn open_fastq_confirm_fmt(p: impl AsRef<Path>) -> Result<Box<dyn BufRead + Send>, FastqError> {
-        let p = p.as_ref();
-        let reader = Self::open_fastq(p)?;
+    fn open_fastq_confirm_fmt(p: &Path) -> Result<Box<dyn BufRead + Send>, FastqError> {
+        let mut file = std::fs::File::open(p).fastq_err(p, 0)?;
+        // Clone the file descriptor so we can read the file header.
+        // The alternative would be to open the file at that path a second time,
+        // but that would be less performant (because it wouldn't share i/o
+        // cache as effectively, and because it would involve more round trips
+        // to the underlying fileystem) and also technically incorrect
+        // since the file at that path could have changed.
+        let reader = Self::open_fastq_from_file(p, file.try_clone().open_err(p)?)?;
         let parser = fastq::Parser::new(reader);
 
         // make sure we can successfully read some records
@@ -260,7 +274,8 @@ impl ReadPairIter {
         }
 
         // re-open file so we re-read the initial records
-        Self::open_fastq(p)
+        file.seek(std::io::SeekFrom::Start(0)).fastq_err(p, 0)?;
+        Self::open_fastq_from_file(p, file)
     }
 
     /// Open a `ReadPairIter` given of FASTQ files.
@@ -273,15 +288,30 @@ impl ReadPairIter {
         i2: Option<P>,
         r1_interleaved: bool,
     ) -> Result<ReadPairIter, FastqError> {
+        Self::_new(
+            [
+                r1.as_ref().map(P::as_ref),
+                r2.as_ref().map(P::as_ref),
+                i1.as_ref().map(P::as_ref),
+                i2.as_ref().map(P::as_ref),
+            ],
+            r1_interleaved,
+        )
+    }
+
+    fn _new(
+        in_paths: [Option<&Path>; 4],
+        r1_interleaved: bool,
+    ) -> Result<ReadPairIter, FastqError> {
         let mut iters = [None, None, None, None];
         let mut paths = [None, None, None, None];
 
-        for (idx, r) in [r1, r2, i1, i2].iter().enumerate() {
-            if let Some(ref p) = *r {
+        for (idx, r) in IntoIterator::into_iter(in_paths).enumerate() {
+            if let Some(p) = r {
                 let rdr = Self::open_fastq_confirm_fmt(p)?;
                 let parser = fastq::Parser::new(rdr);
                 iters[idx] = Some(parser.ref_iter());
-                paths[idx] = Some(p.as_ref().to_path_buf());
+                paths[idx] = Some(p.to_path_buf());
             }
         }
 
@@ -343,7 +373,10 @@ impl ReadPairIter {
 
         let mut rp = MutReadPair::empty(&mut self.buffer).storage(self.storage);
         loop {
-            let sample = self.uniform.sample(&mut self.rand) < self.subsample_rate;
+            // If we're subsampling, decide whether or not we'll be skipping
+            // this record.
+            let sample = self.subsample_rate >= 1.0
+                || self.uniform.sample(&mut self.rand) < self.subsample_rate;
 
             // Track which reader was the first to finish.
             let mut iter_ended = [false; 4];
@@ -355,10 +388,6 @@ impl ReadPairIter {
 
                     {
                         let record = iter.get();
-                        // track which reader finished
-                        if record.is_none() {
-                            iter_ended[idx] = true;
-                        }
 
                         // Check for non-ACGTN characters
                         if let Some(ref rec) = record {
@@ -372,15 +401,15 @@ impl ReadPairIter {
                                 );
                                 return Err(e);
                             }
-                        }
-
-                        if sample {
-                            let which = WhichRead::read_types()[idx];
-                            let read_length = read_lengths[which as usize];
-                            record.map(|r| {
-                                let tr = TrimRecord::new(&r, read_length);
+                            if sample {
+                                let which = WhichRead::read_types()[idx];
+                                let read_length = read_lengths[which as usize];
+                                let tr = TrimRecord::new(rec, read_length);
                                 rp.push_read(&tr, which)
-                            });
+                            }
+                        } else {
+                            // track which reader finished
+                            iter_ended[idx] = true;
                         }
 
                         rec_num[idx] += 1;
@@ -392,7 +421,26 @@ impl ReadPairIter {
                         iter.advance()
                             .fastq_err(paths[idx].as_ref().unwrap(), (rec_num[idx] + 1) * 4)?;
                         let record = iter.get();
-                        if record.is_none() {
+
+                        // Check for non-ACGTN characters
+                        if let Some(ref rec) = record {
+                            if !fastq::Record::validate_dnan(rec) {
+                                let msg = "FASTQ contains sequence base with character other than [ACGTN].".to_string();
+                                let e = FastqError::format(
+                                    msg,
+                                    paths[idx].as_ref().unwrap(),
+                                    rec_num[idx] * 4,
+                                );
+                                return Err(e);
+                            }
+
+                            if sample {
+                                let which = WhichRead::read_types()[idx + 1];
+                                let read_length = read_lengths[which as usize];
+                                let tr = TrimRecord::new(rec, read_length);
+                                rp.push_read(&tr, which)
+                            }
+                        } else {
                             // We should only hit this if the FASTQ has an odd
                             // number of records. Throw an error
                             let msg = "Input FASTQ file was input as interleaved R1 and R2, but contains an odd number of records".to_string();
@@ -402,28 +450,6 @@ impl ReadPairIter {
                                 rec_num[idx] * 4,
                             );
                             return Err(e);
-                        }
-
-                        // Check for non-ACGTN characters
-                        if let Some(ref rec) = record {
-                            if !fastq::Record::validate_dnan(rec) {
-                                let msg = "FASTQ contains sequence base with character other than [ACGTN].";
-                                let e = FastqError::format(
-                                    msg.to_string(),
-                                    paths[idx].as_ref().unwrap(),
-                                    rec_num[idx] * 4,
-                                );
-                                return Err(e);
-                            }
-                        }
-
-                        if sample {
-                            let which = WhichRead::read_types()[idx + 1];
-                            let read_length = read_lengths[which as usize];
-                            record.map(|r| {
-                                let tr = TrimRecord::new(&r, read_length);
-                                rp.push_read(&tr, which)
-                            });
                         }
 
                         rec_num[idx] += 1;
@@ -464,20 +490,16 @@ impl ReadPairIter {
             }
 
             // At least one of the readers got to the end -- make sure they all did.
-            if iter_ended.iter().any(|x| *x) {
+            if let Some((ended_index, _)) = iter_ended.iter().enumerate().find(|(_, &v)| v) {
                 // Are there any incomplete iterators?
-                let any_not_complete = iter_ended
-                    .iter()
+                let any_not_complete = IntoIterator::into_iter(iter_ended)
                     .zip(paths.iter())
-                    .any(|(ended, path)| path.is_some() && !ended);
+                    .any(|(ended, path)| !ended && path.is_some());
 
                 if any_not_complete {
-                    // Index of a finished iterator
-                    let ended_index = iter_ended.iter().enumerate().find(|(_, v)| **v).unwrap().0;
-
-                    let msg = "Input FASTQ file ended prematurely";
+                    let msg = "Input FASTQ file ended prematurely".to_string();
                     let path = paths[ended_index].as_ref().unwrap();
-                    let e = FastqError::format(msg.to_string(), path, rec_num[ended_index] * 4);
+                    let e = FastqError::format(msg, path, rec_num[ended_index] * 4);
                     return Err(e);
                 } else {
                     return Ok(None);
@@ -496,12 +518,7 @@ impl Iterator for ReadPairIter {
 
     /// Iterate over ReadPair objects
     fn next(&mut self) -> Option<Result<ReadPair, FastqError>> {
-        // Convert Result<Option<_>, Error> to Option<Result<_, Error>>
-        match self.get_next() {
-            Ok(Some(v)) => Some(Ok(v)),
-            Ok(None) => None,
-            Err(v) => Some(Err(v)),
-        }
+        self.get_next().transpose()
     }
 }
 

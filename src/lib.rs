@@ -9,7 +9,7 @@
 //! UMI sequences.
 //! * Flexible read trimming inspired by `cutadapt`
 
-#![deny(warnings)]
+#![deny(warnings, unused)]
 // Allowed clippy lints
 #![allow(
     clippy::range_plus_one,
@@ -29,7 +29,7 @@ pub mod read_pair_writer;
 pub mod sample_index_map;
 pub mod squality;
 pub mod sseq;
-pub mod utils;
+mod utils;
 
 use crate::read_pair_iter::{AnyReadPairIter, InputFastqs, ReadPairIter};
 pub use crate::squality::SQuality;
@@ -38,6 +38,7 @@ use anyhow::Error;
 pub use fastq::OwnedRecord;
 pub use fastq::Record;
 pub use read_pair::WhichRead;
+use read_pair_iter::FastqError;
 use serde::{Deserialize, Serialize};
 
 /// A trait for objects that carry alignable sequence data.
@@ -232,11 +233,10 @@ where
 
     /// Iterate over ReadType objects.
     fn next(&mut self) -> Option<Self::Item> {
-        match self.read_pair_iter.next() {
-            Some(Ok(read)) => Some(Ok(self.processor.process_read(read))), // Processed Read
-            Some(Err(e)) => Some(Err(e.into())),                           // IO Error
-            None => None,                                                  // End of fastq
-        }
+        self.read_pair_iter.next().map(|rr| {
+            rr.map(|read| self.processor.process_read(read))
+                .map_err(FastqError::into)
+        })
     }
 }
 

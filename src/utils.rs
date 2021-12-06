@@ -13,10 +13,10 @@ use flate2::write::GzEncoder;
 const GZ_BUF_SIZE: usize = 1 << 22;
 
 /// Open a (possibly gzipped) file into a BufReader.
-pub(crate) fn write_with_gz<P: AsRef<Path>>(p: P) -> Result<Box<dyn Write>, Error> {
-    let w = File::create(p.as_ref())?;
+pub(crate) fn write_with_gz(p: &Path) -> Result<Box<dyn Write>, Error> {
+    let w = File::create(p)?;
 
-    let ext = p.as_ref().extension().unwrap();
+    let ext = p.extension().unwrap();
 
     if ext == "gz" {
         let gz = GzEncoder::new(w, flate2::Compression::fast());

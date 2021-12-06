@@ -47,9 +47,9 @@ impl ReadPairWriter {
         let mut writers = [None, None, None, None];
         let mut paths = [None, None, None, None];
 
-        for (idx, r) in [r1, r2, i1, i2].iter().enumerate() {
-            if let Some(ref p) = *r {
-                let wtr = utils::write_with_gz(p)?;
+        for (idx, r) in IntoIterator::into_iter([r1, r2, i1, i2]).enumerate() {
+            if let Some(ref p) = r {
+                let wtr = utils::write_with_gz(p.as_ref())?;
                 writers[idx] = Some(wtr);
                 paths[idx] = Some(p.as_ref().to_path_buf());
             }
