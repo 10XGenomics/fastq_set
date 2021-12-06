@@ -789,6 +789,26 @@ mod test_read_pair_iter {
     use itertools::Itertools;
 
     #[cfg(target_os = "linux")]
+    fn page_size() -> u64 {
+        use std::convert::TryInto;
+
+        unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) }
+            .try_into()
+            .unwrap()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn get_rss_pages() -> u64 {
+        std::fs::read_to_string("/proc/self/statm")
+            .unwrap()
+            .split_ascii_whitespace()
+            .nth(1)
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+    }
+
+    #[cfg(target_os = "linux")]
     fn test_mem_single(every: usize, storage: ReadPairStorage) -> Result<u64, anyhow::Error> {
         let iter = ReadPairIter::new(
             Some("tests/read_pair_iter/vdj_micro_50k.fastq"),
@@ -800,31 +820,33 @@ mod test_read_pair_iter {
         .unwrap()
         .storage(storage);
 
-        let rss_before = psutil::process::Process::new(std::process::id())?
-            .memory_info()?
-            .rss();
-        let rp = iter.step_by(every).collect_vec();
+        let step_by = iter.step_by(every);
+        let rss_before = get_rss_pages();
+        let rp = step_by.collect_vec();
+        let rss_after = get_rss_pages();
         let elements = rp.len();
-        let rss_after = psutil::process::Process::new(std::process::id())?
-            .memory_info()?
-            .rss();
 
         drop(rp);
-        let rss_after_drop = psutil::process::Process::new(std::process::id())?
-            .memory_info()?
-            .rss();
+        let rss_after_drop = get_rss_pages();
 
+        // BUG: This test is incorrect.  Process RSS usage will generally not go
+        // down after a deallocation, because most malloc implementations
+        // will hang on to recently-freed memory for a little while in case
+        // it can be reused for subsequent allications.  So rss_used, measured
+        // this way, will almost always show 0.
         let rss_used = rss_after.saturating_sub(rss_after_drop);
+
+        let ps = page_size();
         println!(
             "{:<10} {:<10} {:<12} {:<12} {:<12} {:<12}",
             every,
             elements,
-            rss_before / 1024,
-            rss_after / 1024,
-            rss_used / 1024,
-            rss_after_drop / 1024
+            ps * rss_before / 1024,
+            ps * rss_after / 1024,
+            ps * rss_used / 1024,
+            ps * rss_after_drop / 1024
         );
-        Ok(rss_used)
+        Ok(ps * rss_used)
     }
 
     #[cfg(target_os = "linux")]
@@ -843,7 +865,7 @@ mod test_read_pair_iter {
         let max_used_rss = 7 * 1024 * 1024 / (every as u64);
         assert!(
             used_rss <= max_used_rss,
-            "Used {} bytes whereas max is {}",
+            "Used {} kB whereas max is {}",
             used_rss,
             max_used_rss
         );
