@@ -162,10 +162,32 @@ impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        if self.position >= self.source.len() {
-            (0, Some(0))
+        let positions = self.source.len().saturating_sub(self.position);
+
+        if self.skip_n {
+            // The number of sequences remaining if none of the source characters
+            // are N - 3 mutations per position.  We assume that if the
+            // char_index is >= 0 we may have skipped one already for this
+            // position.
+            let no_ns_remaining = positions
+                .saturating_mul(N_BASE_INDEX - 1)
+                .saturating_sub(self.chars_index.saturating_sub(1));
+            (0, Some(no_ns_remaining))
         } else {
-            (0, Some(self.source.len() - self.position))
+            // The lower bound is the number of positions times 3, with the
+            // assusmption that the matching character hasn't yet been passed.
+            // The upper bound is if they're all Ns so we get 4 for each
+            // position.
+            (
+                positions
+                    .saturating_mul(N_BASE_INDEX - 1)
+                    .saturating_sub(self.chars_index),
+                Some(
+                    positions
+                        .saturating_mul(N_BASE_INDEX)
+                        .saturating_sub(self.chars_index.saturating_sub(1)),
+                ),
+            )
         }
     }
 }
@@ -191,7 +213,7 @@ mod sseq_test {
         let s7 = b"AACCATAGCCGGNATC";
         let s8 = b"GAACNAGNTGGA";
 
-        let mut seqs = vec![s1, s2, s3, s4, s5, s6, s7, s8];
+        let mut seqs = [s1, s2, s3, s4, s5, s6, s7, s8];
         let mut sseqs: Vec<SSeq> = seqs.iter().map(|x| SSeq::from_bytes(x)).collect();
 
         seqs.sort();
@@ -199,6 +221,34 @@ mod sseq_test {
 
         for i in 0..seqs.len() {
             assert_eq!(seqs[i], sseqs[i].seq());
+        }
+    }
+
+    #[test]
+    fn size_hint_test() {
+        let s1: &[u8] = b"ACNGTA";
+        let s2 = b"CATC";
+        let s3 = b"T";
+        let s4 = b"";
+        let s5 = b"A";
+        let s6 = b"AA";
+        let s7 = b"NNN";
+
+        for seq in [s1, s2, s3, s4, s5, s6, s7] {
+            for opt in [HammingIterOpt::MutateNBase, HammingIterOpt::SkipNBase] {
+                let iter = SSeq::from_bytes(seq).one_hamming_iter(opt);
+                let (lower, upper) = iter.size_hint();
+                let actual = iter.count();
+                assert!(lower <= actual);
+                assert!(upper.unwrap() >= actual);
+                let mut iter = SSeq::from_bytes(seq).one_hamming_iter(opt);
+                if iter.next().is_some() {
+                    let (lower, upper) = iter.size_hint();
+                    let actual = iter.count();
+                    assert!(lower <= actual);
+                    assert!(upper.unwrap() >= actual);
+                }
+            }
         }
     }
 
