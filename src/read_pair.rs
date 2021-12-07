@@ -68,7 +68,7 @@ whichread_from!(usize);
 whichread_from!(u32);
 
 impl WhichRead {
-    pub fn read_types() -> [WhichRead; 4] {
+    pub const fn read_types() -> [WhichRead; 4] {
         [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2]
     }
 }

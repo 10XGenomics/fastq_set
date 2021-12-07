@@ -34,7 +34,7 @@ file_diff = "1.0"
 glob = ">=0.3, <2"
 criterion = "0.3"
 bincode = "*"
-psutil = ">=2.0"
+libc = ">=0.2"
 pretty_assertions = "0.7.2"
 serde_json = "*"
 
@@ -49,5 +49,4 @@ harness = false
 [dev-dependencies.proptest]
 version = "1"
 default-features = false
-# Enable all default features not known to break code coverage builds
-features = ["default-code-coverage"]
+features = ["std"]

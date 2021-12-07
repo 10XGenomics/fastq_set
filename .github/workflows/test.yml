@@ -37,6 +37,7 @@ jobs:
             -W rust_2018_compatibility
             -W rust_2021_compatibility
             -W unused
+      - uses: EmbarkStudios/cargo-deny-action@v1      
       - name: Build
         run: cargo build --release
       - name: Unit tests
