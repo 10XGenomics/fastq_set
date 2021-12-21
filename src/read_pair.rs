@@ -252,10 +252,20 @@ impl RpRange {
     // Slice the input to the range [offset, offset + len).
     fn slice<'a>(&self, input: &'a [u8]) -> Option<&'a [u8]> {
         let o = self.offset();
-        match self.len() {
-            Some(l) if o + l <= input.len() => Some(&input[o..o + l]),
-            None if o <= input.len() => Some(&input[o..]),
-            _ => None,
+        if let Some(l) = self.len() {
+            if o + l < input.len() {
+                Some(&input[o..o + l])
+            } else if o < input.len() {
+                Some(&input[o..])
+            } else {
+                None
+            }
+        } else {
+            if o < input.len() {
+                Some(&input[o..])
+            } else {
+                None
+            }
         }
     }
 
