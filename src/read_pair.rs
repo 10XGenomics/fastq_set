@@ -260,12 +260,10 @@ impl RpRange {
             } else {
                 None
             }
+        } else if o < input.len() {
+            Some(&input[o..])
         } else {
-            if o < input.len() {
-                Some(&input[o..])
-            } else {
-                None
-            }
+            None
         }
     }
 
