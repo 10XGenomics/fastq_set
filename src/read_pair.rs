@@ -723,11 +723,11 @@ mod tests {
         let r1 = RpRange::new(WhichRead::R1, 0, Some(5));
         assert_eq!(r1.slice(data), Some(&data[..]));
         let r2 = RpRange::new(WhichRead::R1, 0, Some(6));
-        assert_eq!(r2.slice(data), None);
+        assert_eq!(r2.slice(data), Some(&data[..]));
         let r3 = RpRange::new(WhichRead::R1, 0, None);
         assert_eq!(r3.slice(data), Some(&data[..]));
         let r4 = RpRange::new(WhichRead::R1, 5, None);
-        assert_eq!(r4.slice(data), Some(&[][..]));
+        assert_eq!(r4.slice(data), None);
         let r5 = RpRange::new(WhichRead::R1, 6, None);
         assert_eq!(r5.slice(data), None);
     }
