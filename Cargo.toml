@@ -35,7 +35,7 @@ glob = ">=0.3, <2"
 criterion = "0.3"
 bincode = "*"
 libc = ">=0.2"
-pretty_assertions = "0.7.2"
+pretty_assertions = "1.1.0"
 serde_json = "*"
 
 [[bench]]
