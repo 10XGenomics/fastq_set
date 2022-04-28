@@ -15,7 +15,7 @@ impl ArrayContent for SQualityContents {
     fn validate_bytes(seq: &[u8]) {
         for (i, &c) in seq.iter().enumerate() {
             let q = c as i16 - 33;
-            if !(0..42).contains(&q) {
+            if !(0..94).contains(&q) {
                 panic!(
                     "Invalid quality value {} ASCII character {} at position {}",
                     q, c, i
