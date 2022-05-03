@@ -65,7 +65,7 @@ mod squality_test {
     #[test]
     #[should_panic]
     fn test_sseq_invalid_quality_2() {
-        let _ = SQuality::new(b"GHIJK");
+        let _ = SQuality::new(b" HIJK");
     }
 
     #[test]
