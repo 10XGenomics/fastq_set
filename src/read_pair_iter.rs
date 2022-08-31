@@ -146,7 +146,7 @@ struct TrimRecord<'a, R: Record> {
     trim: usize,
 }
 
-impl<'a, 'b, R: Record> TrimRecord<'a, R> {
+impl<'a, R: Record> TrimRecord<'a, R> {
     fn new(inner: &'a R, trim: usize) -> Self {
         let trim = trim.min(inner.seq().len());
         TrimRecord { inner, trim }

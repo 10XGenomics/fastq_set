@@ -100,7 +100,7 @@ const MIN_PATH_SCORE: i32 = -5;
 /// assert_eq!(serde_json::from_str::<AdapterLoc>(r#""non_internal""#).unwrap(), AdapterLoc::NonInternal);
 /// assert_eq!(serde_json::from_str::<AdapterLoc>(r#""anchored""#).unwrap(), AdapterLoc::Anchored);
 /// ```
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AdapterLoc {
     /// Look for the full adapter sequence anywhere in the read.
     /// The adapter could be completely inside the read, or could be a prefix.
@@ -142,7 +142,7 @@ pub enum AdapterLoc {
 /// assert_eq!(adapter.seq, "TTTCTTATATGGG".to_string());
 /// ```
 ///
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Adapter {
     pub name: String,
     pub end: WhichEnd,

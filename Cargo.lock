@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "fastq_set"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "anyhow",
  "bincode",
