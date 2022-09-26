@@ -110,7 +110,7 @@ dependencies = [
  "newtype_derive",
  "num-integer",
  "num-traits",
- "ordered-float",
+ "ordered-float 2.10.0",
  "petgraph",
  "rand",
  "regex",
@@ -440,7 +440,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "lz4",
- "ordered-float",
+ "ordered-float 3.1.0",
  "pretty_assertions",
  "proptest",
  "rand",
@@ -816,6 +816,15 @@ name = "ordered-float"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "ordered-float"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98ffdb14730ed2ef599c65810c15b000896e21e8776b512de0db0c3d7335cc2a"
 dependencies = [
  "num-traits",
 ]
