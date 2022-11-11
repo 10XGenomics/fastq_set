@@ -356,12 +356,12 @@ impl<'a> AdapterTrimmer<'a> {
                         Some(TrimResult {
                             adapter_range: alignment.xstart..alignment.xend,
                             trim_range: match self.adapter.end {
-                                WhichEnd::ThreePrime => (alignment.xstart..alignment.xlen),
-                                WhichEnd::FivePrime => (0..alignment.xend),
+                                WhichEnd::ThreePrime => alignment.xstart..alignment.xlen,
+                                WhichEnd::FivePrime => 0..alignment.xend,
                             },
                             retain_range: match self.adapter.end {
-                                WhichEnd::ThreePrime => (0..alignment.xstart),
-                                WhichEnd::FivePrime => (alignment.xend..alignment.xlen),
+                                WhichEnd::ThreePrime => 0..alignment.xstart,
+                                WhichEnd::FivePrime => alignment.xend..alignment.xlen,
                             },
                             score: alignment.score,
                         })
