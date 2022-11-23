@@ -39,16 +39,13 @@ fn main() -> Result<(), Error> {
         let record = record.unwrap();
         let seq = record.seq();
 
-        let trimmed_seq;
-        match trimmer.find(seq) {
+        let trimmed_seq = match trimmer.find(seq) {
             Some(result) => {
                 ntrimmed += 1;
-                trimmed_seq = &seq[result.retain_range];
+                &seq[result.retain_range]
             }
-            None => {
-                trimmed_seq = seq;
-            }
-        }
+            None => seq,
+        };
         writer.write(record.id(), record.desc(), trimmed_seq)?;
         total_reads += 1;
     }
