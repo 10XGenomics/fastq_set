@@ -440,7 +440,6 @@ dependencies = [
  "lazy_static",
  "libc",
  "lz4",
- "ordered-float",
  "pretty_assertions",
  "proptest",
  "rand",
