@@ -65,7 +65,7 @@ impl<const N: usize> SSeqGen<N> {
 
     /// Returns true if the last n characters of this sequence are the specified homopolymer.
     pub fn has_homopolymer_suffix(&self, c: u8, n: usize) -> bool {
-        self.len() as usize >= n && self.iter().rev().take(n).all(|&x| x == c)
+        self.len() >= n && self.iter().rev().take(n).all(|&x| x == c)
     }
 
     /// Returns true if the last n characters of this sequence are T.
@@ -80,7 +80,7 @@ impl<const N: usize> SSeqGen<N> {
 
         let seq = self.seq();
         for (bit_pos, str_pos) in (0..self.len()).rev().enumerate() {
-            let byte: u32 = match seq[str_pos as usize] {
+            let byte: u32 = match seq[str_pos] {
                 b'A' => 0,
                 b'C' => 1,
                 b'G' => 2,
