@@ -218,7 +218,8 @@ impl FastqChecker {
                 if available_and_requested.is_empty() {
                     // Need to find a least one of the requested samples in this folder
                     let msg = format_err!(
-                        "Requested sample(s) not found in fastq directory. Available samples:\n{}",
+                        "Requested sample(s) not found in fastq directory {:?}\nAvailable samples:\n{}",
+                        fastq_path.as_ref(),
                         available_samples_str
                     );
                     return Err(msg);
