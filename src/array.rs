@@ -50,6 +50,34 @@ where
         self.push_unchecked(src);
     }
 
+    /// Remove the element at pos and return it
+    pub fn remove(&mut self, pos: usize) -> u8 {
+        let val = self[pos];
+        self.as_mut_bytes().split_at_mut(pos).1.rotate_left(1);
+        self.length -= 1;
+        val
+    }
+
+    ///Insert the element at pos without validating
+    ///
+    /// Panics if the capacity is full or if the pos is > self.len()
+    pub fn insert_unchecked(&mut self, pos: usize, byte: u8) {
+        let curr_len = self.len();
+        assert!(
+            curr_len <= (N - 1),
+            "No remaining capacity to insert a byte into the ByteArray",
+        );
+        assert!(
+            pos <= curr_len,
+            "Cannot insert at position {} that is more that the array length {}.",
+            pos,
+            curr_len
+        );
+        self.length += 1;
+        self.as_mut_bytes().split_at_mut(pos).1.rotate_right(1);
+        self[pos] = byte;
+    }
+
     /// Create a new ByteArray from the given byte slice
     /// The byte slice should contain only valid alphabets as defined by ArrayContent trait
     /// otherwise this function will panic
@@ -109,12 +137,12 @@ where
     }
 
     /// Returns the length of this sequence, in bytes.
-    pub fn len(self) -> usize {
+    pub fn len(&self) -> usize {
         self.length as usize
     }
 
     /// Returns true if self has a length of zero bytes.
-    pub fn is_empty(self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.length == 0
     }
 
