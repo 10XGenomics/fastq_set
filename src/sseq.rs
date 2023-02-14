@@ -96,9 +96,56 @@ impl<const N: usize> SSeqGen<N> {
         res
     }
 
-    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter<N> {
-        SSeqOneHammingIter::new(self, opt)
+    /// Iterator over sequences one substitution (hamming distance) away.
+    pub fn one_hamming_iter(&self, opt: HammingIterOpt) -> SSeqOneHammingIter<N> {
+        SSeqOneHammingIter::new(*self, opt)
     }
+
+    /// Iterator over sequences one deletion away.
+    pub fn one_deletion_iter(&self) -> impl Iterator<Item = Self> + '_ {
+        (0..self.len()).map(move |i| {
+            let mut seq = *self;
+            seq.remove(i);
+            seq
+        })
+    }
+
+    /// Iterator over sequences one insertion away. The length of the sequence
+    /// must be less than the capacity so that there is room for 1 insertion.
+    pub fn one_insertion_iter(&self, opt: InsertionIterOpt) -> impl Iterator<Item = Self> + '_ {
+        let last_index = N_BASE_INDEX
+            + match opt {
+                InsertionIterOpt::IncludeNBase => 1,
+                InsertionIterOpt::ExcludeNBase => 0,
+            };
+        (0..=self.len()).flat_map(move |pos| {
+            UPPER_ACGTN[0..last_index].iter().map(move |base| {
+                let mut seq = *self;
+                seq.insert_unchecked(pos, *base);
+                seq
+            })
+        })
+    }
+
+    /// Iterator over sequences one edit distance away. The length of the sequence
+    /// must be less than the capacity so that there is room for 1 insertion.
+    pub fn one_edit_iter(
+        &self,
+        ham: HammingIterOpt,
+        ins: InsertionIterOpt,
+    ) -> impl Iterator<Item = Self> + '_ {
+        self.one_hamming_iter(ham)
+            .chain(self.one_deletion_iter())
+            .chain(self.one_insertion_iter(ins))
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum InsertionIterOpt {
+    // Insert N bases
+    IncludeNBase,
+    // Do not insert N bases
+    ExcludeNBase,
 }
 
 #[derive(Copy, Clone)]
@@ -112,19 +159,16 @@ pub enum HammingIterOpt {
 /// Positions containing "N" or "n" are mutated or skipped
 /// depending on the `HammingIterOpt`
 pub struct SSeqOneHammingIter<const N: usize> {
-    source: SSeqGen<N>,      // Original SSeq from which we need to generate values
-    chars: &'static [u8; 5], // Whether it's ACGTN or acgtn
-    position: usize,         // Index into SSeq where last base was mutated
-    chars_index: usize,      // The last base which was used
-    skip_n: bool,            // Whether to skip N bases or mutate them
+    source: SSeqGen<N>, // Original SSeq from which we need to generate values
+    position: usize,    // Index into SSeq where last base was mutated
+    chars_index: usize, // The last base which was used
+    skip_n: bool,       // Whether to skip N bases or mutate them
 }
 
 impl<const N: usize> SSeqOneHammingIter<N> {
     fn new(sseq: SSeqGen<N>, opt: HammingIterOpt) -> Self {
-        let chars = UPPER_ACGTN;
         SSeqOneHammingIter {
             source: sseq,
-            chars,
             position: 0,
             chars_index: 0,
             skip_n: match opt {
@@ -143,19 +187,19 @@ impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
             return None;
         }
         let base_at_pos = self.source[self.position];
-        if (self.skip_n && base_at_pos == self.chars[N_BASE_INDEX])
+        if (self.skip_n && base_at_pos == UPPER_ACGTN[N_BASE_INDEX])
             || (self.chars_index >= N_BASE_INDEX)
         {
             // this is an "N" or we went through the ACGT bases already at this position
             self.position += 1;
             self.chars_index = 0;
             self.next()
-        } else if base_at_pos == self.chars[self.chars_index] {
+        } else if base_at_pos == UPPER_ACGTN[self.chars_index] {
             self.chars_index += 1;
             self.next()
         } else {
             let mut next_sseq = self.source;
-            next_sseq[self.position] = self.chars[self.chars_index];
+            next_sseq[self.position] = UPPER_ACGTN[self.chars_index];
             self.chars_index += 1;
             Some(next_sseq)
         }
@@ -198,7 +242,7 @@ mod sseq_test {
     use bincode;
     use itertools::{assert_equal, Itertools};
     use proptest::collection::vec;
-    use proptest::{prop_assert_eq, proptest};
+    use proptest::{prop_assert, prop_assert_eq, proptest};
     use std::collections::HashSet;
     use std::iter::FromIterator;
 
@@ -384,6 +428,47 @@ mod sseq_test {
             test_hamming_helper(&seq, HammingIterOpt::SkipNBase, b'N');
             test_hamming_helper(&seq, HammingIterOpt::MutateNBase, b'N');
         }
+
+        #[test]
+        fn prop_test_one_deletion_iter(
+            seq in "[ACGTN]{0, 23}", // 0 and 23 are inclusive bounds
+        ) {
+            prop_assert_eq!(SSeq::from_bytes(seq.as_bytes()).one_deletion_iter().count(), seq.len());
+            prop_assert!(SSeq::from_bytes(seq.as_bytes()).one_deletion_iter().all(|s| s.len() == seq.len()-1));
+        }
+
+        #[test]
+        fn prop_test_insertion(
+            seq in "[ACGTN]{0, 22}", // 0 and 22 are inclusive bounds
+            pos in 0usize..22usize,
+            base_index in 0usize..5usize,
+        ) {
+            let pos = if seq.is_empty() { 0 } else { pos % seq.len() };
+            let mut sseq = SSeq::from_bytes(seq.as_bytes());
+            let base = UPPER_ACGTN[base_index];
+            sseq.insert_unchecked(pos, base);
+            prop_assert_eq!(sseq[pos], base);
+            prop_assert_eq!(sseq.len(), seq.len() + 1);
+
+        }
+
+        #[test]
+        fn prop_test_one_insertion_iter(
+            seq in "[ACGTN]{0, 22}", // 0 and 22 are inclusive bounds
+        ) {
+            prop_assert_eq!(
+                SSeq::from_bytes(seq.as_bytes())
+                    .one_insertion_iter(InsertionIterOpt::ExcludeNBase)
+                    .count(),
+                4 * (seq.len() + 1)
+            );
+            prop_assert_eq!(
+                SSeq::from_bytes(seq.as_bytes())
+                    .one_insertion_iter(InsertionIterOpt::IncludeNBase)
+                    .count(),
+                5 * (seq.len() + 1)
+            );
+        }
     }
 
     #[test]
@@ -455,6 +540,59 @@ mod sseq_test {
             vec![b"ANT", b"CNT", b"TNT", b"GNA", b"GNC", b"GNG"]
                 .into_iter()
                 .map(|x| SSeq::from_bytes(x)),
+        );
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut seq = SSeq::from_bytes(b"GCAT");
+        assert_eq!(seq.remove(2), b'A');
+        assert_eq!(seq, SSeq::from_bytes(b"GCT"));
+    }
+
+    #[test]
+    fn test_insert() {
+        let mut seq = SSeq::from_bytes(b"GCAT");
+        seq.insert_unchecked(2, b'G');
+        assert_eq!(seq, SSeq::from_bytes(b"GCGAT"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_insert_panic_out_of_capacity() {
+        let mut seq = SSeq::from_bytes(b"AGCTTTGCGTTAGGCAGGTTTAC");
+        seq.insert_unchecked(2, b'G');
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_insert_panic_bad_index() {
+        let mut seq = SSeq::from_bytes(b"AG");
+        seq.insert_unchecked(10, b'G');
+    }
+
+    #[test]
+    fn test_one_deletion() {
+        assert_equal(
+            SSeq::from_bytes(b"GAT").one_deletion_iter().collect_vec(),
+            vec![b"AT", b"GT", b"GA"]
+                .into_iter()
+                .map(|x| SSeq::from_bytes(x)),
+        );
+    }
+
+    #[test]
+    fn test_one_insertion() {
+        assert_equal(
+            SSeq::from_bytes(b"GA")
+                .one_insertion_iter(InsertionIterOpt::ExcludeNBase)
+                .collect_vec(),
+            vec![
+                b"AGA", b"CGA", b"GGA", b"TGA", b"GAA", b"GCA", b"GGA", b"GTA", b"GAA", b"GAC",
+                b"GAG", b"GAT",
+            ]
+            .into_iter()
+            .map(|x| SSeq::from_bytes(x)),
         );
     }
 
