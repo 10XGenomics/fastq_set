@@ -16,9 +16,7 @@ impl ArrayContent for SQualityContents {
         for (i, &c) in seq.iter().enumerate() {
             let q = c as i16 - 33;
             if !(0..94).contains(&q) {
-                panic!(
-                    "Invalid quality value {q} ASCII character {c} at position {i}"
-                );
+                panic!("Invalid quality value {q} ASCII character {c} at position {i}");
             }
         }
     }

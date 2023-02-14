@@ -543,15 +543,9 @@ mod tests_from_tenkit {
             },
             InputFastqs {
                 r1: format!("{path}/test_sample_suffix_S1_L001_R1_001.fastq.gz"),
-                r2: Some(format!(
-                    "{path}/test_sample_suffix_S1_L001_R3_001.fastq.gz"
-                )),
-                i1: Some(format!(
-                    "{path}/test_sample_suffix_S1_L001_R2_001.fastq.gz"
-                )),
-                i2: Some(format!(
-                    "{path}/test_sample_suffix_S1_L001_I1_001.fastq.gz"
-                )),
+                r2: Some(format!("{path}/test_sample_suffix_S1_L001_R3_001.fastq.gz")),
+                i1: Some(format!("{path}/test_sample_suffix_S1_L001_R2_001.fastq.gz")),
+                i2: Some(format!("{path}/test_sample_suffix_S1_L001_I1_001.fastq.gz")),
                 r1_interleaved: false,
             },
         ];
