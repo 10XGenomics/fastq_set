@@ -122,7 +122,7 @@ mod test {
         };
 
         let info = fq.get_header_info()?.unwrap();
-        println!("info: {:?}", info);
+        println!("info: {info:?}");
 
         // This is an example of a wierd customer FASTQ adapter from MGI
         // this checks that we cna parse the 4th field correctly if
@@ -144,7 +144,7 @@ mod test {
         };
 
         let info = fq.get_header_info()?;
-        println!("info: {:?}", info);
+        println!("info: {info:?}");
         assert_eq!(info, None);
 
         Ok(())
@@ -161,7 +161,7 @@ mod test {
         };
 
         let info = fq.get_header_info()?;
-        println!("info: {:?}", info);
+        println!("info: {info:?}");
         assert_eq!(info, None);
 
         Ok(())

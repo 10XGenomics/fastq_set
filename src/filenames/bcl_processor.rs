@@ -350,28 +350,24 @@ mod tests_from_tenkit {
         let fqs = query.find_fastqs()?;
         let expected = vec![
             InputFastqs {
-                r1: format!("{}/read-RA_si-ACAGCAAC_lane-001-chunk-001.fastq.gz", path),
+                r1: format!("{path}/read-RA_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"),
                 r2: None,
                 i1: Some(format!(
-                    "{}/read-I1_si-ACAGCAAC_lane-001-chunk-001.fastq.gz",
-                    path
+                    "{path}/read-I1_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"
                 )),
                 i2: Some(format!(
-                    "{}/read-I2_si-ACAGCAAC_lane-001-chunk-001.fastq.gz",
-                    path
+                    "{path}/read-I2_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"
                 )),
                 r1_interleaved: true,
             },
             InputFastqs {
-                r1: format!("{}/read-RA_si-ACAGCAAC_lane-002-chunk-000.fastq.gz", path),
+                r1: format!("{path}/read-RA_si-ACAGCAAC_lane-002-chunk-000.fastq.gz"),
                 r2: None,
                 i1: Some(format!(
-                    "{}/read-I1_si-ACAGCAAC_lane-002-chunk-000.fastq.gz",
-                    path
+                    "{path}/read-I1_si-ACAGCAAC_lane-002-chunk-000.fastq.gz"
                 )),
                 i2: Some(format!(
-                    "{}/read-I2_si-ACAGCAAC_lane-002-chunk-000.fastq.gz",
-                    path
+                    "{path}/read-I2_si-ACAGCAAC_lane-002-chunk-000.fastq.gz"
                 )),
                 r1_interleaved: true,
             },

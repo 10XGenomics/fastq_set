@@ -306,9 +306,7 @@ impl RpRange {
         use std::cmp::{max, min};
         assert!(
             self.read() == other.read(),
-            "Self = {:?} and other = {:?} does not have the same read",
-            self,
-            other
+            "Self = {self:?} and other = {other:?} does not have the same read"
         );
 
         let self_offset = self.offset();
@@ -370,15 +368,13 @@ impl RpRange {
     pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
         assert!(
             shrink_range.start <= shrink_range.end,
-            "RpRange shrink() expects a valid range with start<=end. Received {:?}",
-            shrink_range
+            "RpRange shrink() expects a valid range with start<=end. Received {shrink_range:?}"
         );
 
         if let Some(len) = self.len() {
             assert!(
                 shrink_range.end <= len,
-                "Attempting to shrink more than the current length. shrink_range = {:?}, RpRange = {:?}",
-                shrink_range, self,
+                "Attempting to shrink more than the current length. shrink_range = {shrink_range:?}, RpRange = {self:?}",
             );
         }
 
