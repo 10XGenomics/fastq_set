@@ -790,8 +790,6 @@ mod test_read_pair_iter {
 
     #[cfg(target_os = "linux")]
     fn page_size() -> u64 {
-        use std::convert::TryInto;
-
         unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) }
             .try_into()
             .unwrap()
@@ -865,9 +863,7 @@ mod test_read_pair_iter {
         let max_used_rss = 7 * 1024 * 1024 / (every as u64);
         assert!(
             used_rss <= max_used_rss,
-            "Used {} kB whereas max is {}",
-            used_rss,
-            max_used_rss
+            "Used {used_rss} kB whereas max is {max_used_rss}"
         );
     }
 }
