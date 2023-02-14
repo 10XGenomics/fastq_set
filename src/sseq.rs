@@ -97,12 +97,12 @@ impl<const N: usize> SSeqGen<N> {
     }
 
     /// Iterator over sequences one substitution (hamming distance) away.
-    pub fn one_hamming_iter(self, opt: HammingIterOpt) -> SSeqOneHammingIter<N> {
-        SSeqOneHammingIter::new(self, opt)
+    pub fn one_hamming_iter(&self, opt: HammingIterOpt) -> SSeqOneHammingIter<N> {
+        SSeqOneHammingIter::new(*self, opt)
     }
 
     /// Iterator over sequences one deletion away.
-    pub fn one_deletion_iter(&self) -> impl Iterator<Item = Self> {
+    pub fn one_deletion_iter(&self) -> impl Iterator<Item = Self> + '_ {
         (0..self.len()).map(move |i| {
             let mut seq = *self;
             seq.remove(i);
@@ -112,7 +112,7 @@ impl<const N: usize> SSeqGen<N> {
 
     /// Iterator over sequences one insertion away. The length of the sequence
     /// must be less than the capacity so that there is room for 1 insertion.
-    pub fn one_insertion_iter(self, opt: InsertionIterOpt) -> impl Iterator<Item = Self> {
+    pub fn one_insertion_iter(&self, opt: InsertionIterOpt) -> impl Iterator<Item = Self> + '_ {
         let last_index = N_BASE_INDEX
             + match opt {
                 InsertionIterOpt::IncludeNBase => 1,
@@ -120,7 +120,7 @@ impl<const N: usize> SSeqGen<N> {
             };
         (0..=self.len()).flat_map(move |pos| {
             UPPER_ACGTN[0..last_index].iter().map(move |base| {
-                let mut seq = self;
+                let mut seq = *self;
                 seq.insert_unchecked(pos, *base);
                 seq
             })
@@ -130,10 +130,10 @@ impl<const N: usize> SSeqGen<N> {
     /// Iterator over sequences one edit distance away. The length of the sequence
     /// must be less than the capacity so that there is room for 1 insertion.
     pub fn one_edit_iter(
-        self,
+        &self,
         ham: HammingIterOpt,
         ins: InsertionIterOpt,
-    ) -> impl Iterator<Item = Self> {
+    ) -> impl Iterator<Item = Self> + '_ {
         self.one_hamming_iter(ham)
             .chain(self.one_deletion_iter())
             .chain(self.one_insertion_iter(ins))
@@ -555,6 +555,20 @@ mod sseq_test {
         let mut seq = SSeq::from_bytes(b"GCAT");
         seq.insert_unchecked(2, b'G');
         assert_eq!(seq, SSeq::from_bytes(b"GCGAT"));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_insert_panic_out_of_capacity() {
+        let mut seq = SSeq::from_bytes(b"AGCTTTGCGTTAGGCAGGTTTAC");
+        seq.insert_unchecked(2, b'G');
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_insert_panic_bad_index() {
+        let mut seq = SSeq::from_bytes(b"AG");
+        seq.insert_unchecked(10, b'G');
     }
 
     #[test]
