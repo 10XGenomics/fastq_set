@@ -65,7 +65,7 @@ where
         let curr_len = self.len();
         assert!(
             curr_len <= (N - 1),
-            "No remaining capacity to insert a byte into the ByteArray",
+            "No remaining capacity to insert a byte into ByteArray (N={N}).",
         );
         assert!(
             pos <= curr_len,

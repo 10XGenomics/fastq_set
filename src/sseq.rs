@@ -102,16 +102,16 @@ impl<const N: usize> SSeqGen<N> {
     }
 
     /// Iterator over sequences one deletion away.
-    pub fn one_deletion_iter(self) -> impl Iterator<Item = Self> {
+    pub fn one_deletion_iter(&self) -> impl Iterator<Item = Self> {
         (0..self.len()).map(move |i| {
-            let mut seq = self;
+            let mut seq = *self;
             seq.remove(i);
             seq
         })
     }
 
     /// Iterator over sequences one insertion away. The length of the sequence
-    /// should be less than the capacity so that there is room for 1 insertion
+    /// must be less than the capacity so that there is room for 1 insertion.
     pub fn one_insertion_iter(self, opt: InsertionIterOpt) -> impl Iterator<Item = Self> {
         let last_index = N_BASE_INDEX
             + match opt {
@@ -128,7 +128,7 @@ impl<const N: usize> SSeqGen<N> {
     }
 
     /// Iterator over sequences one edit distance away. The length of the sequence
-    /// should be less than the capacity so that there is room for 1 insertion.
+    /// must be less than the capacity so that there is room for 1 insertion.
     pub fn one_edit_iter(
         self,
         ham: HammingIterOpt,
