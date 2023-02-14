@@ -69,9 +69,7 @@ where
         );
         assert!(
             pos <= curr_len,
-            "Cannot insert at position {} that is more that the array length {}.",
-            pos,
-            curr_len
+            "Cannot insert at position {pos} that is more that the array length {curr_len}.",
         );
         self.length += 1;
         self.as_mut_bytes().split_at_mut(pos).1.rotate_right(1);
