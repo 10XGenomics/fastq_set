@@ -50,7 +50,7 @@ fn main() -> Result<(), Error> {
         total_reads += 1;
     }
     writer.flush()?;
-    println!("Trimmed {}/{} reads", ntrimmed, total_reads);
+    println!("Trimmed {ntrimmed}/{total_reads} reads");
 
     let end = Instant::now();
     println!(

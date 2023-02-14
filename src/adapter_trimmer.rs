@@ -234,8 +234,7 @@ impl<'a> AdapterTrimmer<'a> {
     pub fn new(adapter: &'a Adapter) -> Self {
         assert!(
             adapter.seq.len() >= KMER_LEN,
-            "Adapter sequence cannot be shorter than {}",
-            KMER_LEN
+            "Adapter sequence cannot be shorter than {KMER_LEN}"
         );
 
         let cut_scores = CutScores::new(adapter.end, adapter.location);
@@ -741,10 +740,7 @@ impl<'a> ReadAdapterCatalog<'a> {
         match read {
             WhichRead::R1 => self.read1_trimmers.push(trimmer),
             WhichRead::R2 => self.read2_trimmers.push(trimmer),
-            _ => panic!(
-                "ReadAdapterCatalog push() can only accept R1/R2. Found {:?}",
-                read
-            ),
+            _ => panic!("ReadAdapterCatalog push() can only accept R1/R2. Found {read:?}"),
         }
     }
 
@@ -756,10 +752,9 @@ impl<'a> ReadAdapterCatalog<'a> {
         match read {
             WhichRead::R1 => &mut self.read1_trimmers,
             WhichRead::R2 => &mut self.read2_trimmers,
-            _ => panic!(
-                "ReadAdapterCatalog get_mut_trimmer() can only accept R1/R2. Found {:?}",
-                read
-            ),
+            _ => {
+                panic!("ReadAdapterCatalog get_mut_trimmer() can only accept R1/R2. Found {read:?}")
+            }
         }
     }
 }
@@ -980,8 +975,8 @@ mod tests {
         let concordance =
             (correct_trimmed as f64) / (correct_trimmed as f64 + inconsistent_trimmed as f64);
 
-        println!("{:?}", adapter);
-        println!("Reads not trimmed {}/{}", correct_untrimmed, total);
+        println!("{adapter:?}");
+        println!("Reads not trimmed {correct_untrimmed}/{total}");
         println!("Sensitivity {:.2}%", 100.0 * sensitivity);
         println!("PPV         {:.2}%", 100.0 * ppv);
         println!("Concordance {:.2}%", 100.0 * concordance);

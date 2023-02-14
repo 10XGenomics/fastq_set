@@ -1,8 +1,11 @@
 [package]
 name = "fastq_set"
 version = "0.5.3"
-authors = ["Patrick Marks <patrick@10xgenomics.com>", "Sreenath Krishnan <sreenath.krishnan@10xgenomics.com>"]
-edition = "2018"
+authors = [
+    "Patrick Marks <patrick@10xgenomics.com>",
+    "Sreenath Krishnan <sreenath.krishnan@10xgenomics.com>",
+]
+edition = "2021"
 license = "MIT"
 description = "Utilities for reading groups of FASTQ files from different sequencing reads of the same library molecule. Encodes filename conventions used by `bcl2fastq` from Illumina"
 repository = "https://github.com/10XGenomics/fastq_set"

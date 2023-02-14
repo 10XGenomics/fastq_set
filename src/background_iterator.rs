@@ -105,7 +105,7 @@ mod test {
         for v in bg_iter {
             sum += v;
         }
-        println!("sum :{}", sum);
+        println!("sum :{sum}");
     }
 
     #[test]

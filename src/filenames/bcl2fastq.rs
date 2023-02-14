@@ -409,9 +409,9 @@ mod test {
         let fqs = query.find_fastqs()?;
         // NOTE: R3 is not used
         let expected = vec![InputFastqs {
-            r1: format!("{}/test_sample_S1_R1_001.fastq.gz", path),
-            r2: Some(format!("{}/test_sample_S1_R2_001.fastq.gz", path)),
-            i1: Some(format!("{}/test_sample_S1_I1_001.fastq.gz", path)),
+            r1: format!("{path}/test_sample_S1_R1_001.fastq.gz"),
+            r2: Some(format!("{path}/test_sample_S1_R2_001.fastq.gz")),
+            i1: Some(format!("{path}/test_sample_S1_I1_001.fastq.gz")),
             i2: None,
             r1_interleaved: false,
         }];
@@ -438,10 +438,10 @@ mod tests_from_tenkit {
 
         let fqs = query.find_fastqs()?;
         let expected = vec![InputFastqs {
-            r1: format!("{}/test_sample_S1_L001_R1_001.fastq.gz", path),
-            r2: Some(format!("{}/test_sample_S1_L001_R3_001.fastq.gz", path)),
-            i1: Some(format!("{}/test_sample_S1_L001_R2_001.fastq.gz", path)),
-            i2: Some(format!("{}/test_sample_S1_L001_I1_001.fastq.gz", path)),
+            r1: format!("{path}/test_sample_S1_L001_R1_001.fastq.gz"),
+            r2: Some(format!("{path}/test_sample_S1_L001_R3_001.fastq.gz")),
+            i1: Some(format!("{path}/test_sample_S1_L001_R2_001.fastq.gz")),
+            i2: Some(format!("{path}/test_sample_S1_L001_I1_001.fastq.gz")),
             r1_interleaved: false,
         }];
         assert_eq!(fqs, expected);
@@ -461,17 +461,17 @@ mod tests_from_tenkit {
         let fqs = query.find_fastqs()?;
         let expected = vec![
             InputFastqs {
-                r1: format!("{}/s1/test_sample_S1_L001_R1_001.fastq.gz", path),
-                r2: Some(format!("{}/s1/test_sample_S1_L001_R3_001.fastq.gz", path)),
-                i1: Some(format!("{}/s1/test_sample_S1_L001_R2_001.fastq.gz", path)),
-                i2: Some(format!("{}/s1/test_sample_S1_L001_I1_001.fastq.gz", path)),
+                r1: format!("{path}/s1/test_sample_S1_L001_R1_001.fastq.gz"),
+                r2: Some(format!("{path}/s1/test_sample_S1_L001_R3_001.fastq.gz")),
+                i1: Some(format!("{path}/s1/test_sample_S1_L001_R2_001.fastq.gz")),
+                i2: Some(format!("{path}/s1/test_sample_S1_L001_I1_001.fastq.gz")),
                 r1_interleaved: false,
             },
             InputFastqs {
-                r1: format!("{}/s2/test_sample_S2_L001_R1_001.fastq.gz", path),
-                r2: Some(format!("{}/s2/test_sample_S2_L001_R3_001.fastq.gz", path)),
-                i1: Some(format!("{}/s2/test_sample_S2_L001_R2_001.fastq.gz", path)),
-                i2: Some(format!("{}/s2/test_sample_S2_L001_I1_001.fastq.gz", path)),
+                r1: format!("{path}/s2/test_sample_S2_L001_R1_001.fastq.gz"),
+                r2: Some(format!("{path}/s2/test_sample_S2_L001_R3_001.fastq.gz")),
+                i1: Some(format!("{path}/s2/test_sample_S2_L001_R2_001.fastq.gz")),
+                i2: Some(format!("{path}/s2/test_sample_S2_L001_I1_001.fastq.gz")),
                 r1_interleaved: false,
             },
         ];
@@ -491,10 +491,10 @@ mod tests_from_tenkit {
 
         let fqs = query.find_fastqs()?;
         let expected = vec![InputFastqs {
-            r1: format!("{}/s1/test_sample2_S1_L001_R1_001.fastq.gz", path),
-            r2: Some(format!("{}/s1/test_sample2_S1_L001_R3_001.fastq.gz", path)),
-            i1: Some(format!("{}/s1/test_sample2_S1_L001_R2_001.fastq.gz", path)),
-            i2: Some(format!("{}/s1/test_sample2_S1_L001_I1_001.fastq.gz", path)),
+            r1: format!("{path}/s1/test_sample2_S1_L001_R1_001.fastq.gz"),
+            r2: Some(format!("{path}/s1/test_sample2_S1_L001_R3_001.fastq.gz")),
+            i1: Some(format!("{path}/s1/test_sample2_S1_L001_R2_001.fastq.gz")),
+            i2: Some(format!("{path}/s1/test_sample2_S1_L001_I1_001.fastq.gz")),
             r1_interleaved: false,
         }];
         assert_eq!(fqs, expected);
@@ -512,10 +512,10 @@ mod tests_from_tenkit {
             };
             let fqs = query.find_fastqs()?;
             let expected = vec![InputFastqs {
-                r1: format!("{}/{}_S1_L001_R1_001.fastq.gz", path, s),
-                r2: Some(format!("{}/{}_S1_L001_R3_001.fastq.gz", path, s)),
-                i1: Some(format!("{}/{}_S1_L001_R2_001.fastq.gz", path, s)),
-                i2: Some(format!("{}/{}_S1_L001_I1_001.fastq.gz", path, s)),
+                r1: format!("{path}/{s}_S1_L001_R1_001.fastq.gz"),
+                r2: Some(format!("{path}/{s}_S1_L001_R3_001.fastq.gz")),
+                i1: Some(format!("{path}/{s}_S1_L001_R2_001.fastq.gz")),
+                i2: Some(format!("{path}/{s}_S1_L001_I1_001.fastq.gz")),
                 r1_interleaved: false,
             }];
             assert_eq!(fqs, expected);
@@ -535,26 +535,17 @@ mod tests_from_tenkit {
         let fqs = query.find_fastqs()?;
         let expected = vec![
             InputFastqs {
-                r1: format!("{}/test_sample_S1_L001_R1_001.fastq.gz", path),
-                r2: Some(format!("{}/test_sample_S1_L001_R3_001.fastq.gz", path)),
-                i1: Some(format!("{}/test_sample_S1_L001_R2_001.fastq.gz", path)),
-                i2: Some(format!("{}/test_sample_S1_L001_I1_001.fastq.gz", path)),
+                r1: format!("{path}/test_sample_S1_L001_R1_001.fastq.gz"),
+                r2: Some(format!("{path}/test_sample_S1_L001_R3_001.fastq.gz")),
+                i1: Some(format!("{path}/test_sample_S1_L001_R2_001.fastq.gz")),
+                i2: Some(format!("{path}/test_sample_S1_L001_I1_001.fastq.gz")),
                 r1_interleaved: false,
             },
             InputFastqs {
-                r1: format!("{}/test_sample_suffix_S1_L001_R1_001.fastq.gz", path),
-                r2: Some(format!(
-                    "{}/test_sample_suffix_S1_L001_R3_001.fastq.gz",
-                    path
-                )),
-                i1: Some(format!(
-                    "{}/test_sample_suffix_S1_L001_R2_001.fastq.gz",
-                    path
-                )),
-                i2: Some(format!(
-                    "{}/test_sample_suffix_S1_L001_I1_001.fastq.gz",
-                    path
-                )),
+                r1: format!("{path}/test_sample_suffix_S1_L001_R1_001.fastq.gz"),
+                r2: Some(format!("{path}/test_sample_suffix_S1_L001_R3_001.fastq.gz")),
+                i1: Some(format!("{path}/test_sample_suffix_S1_L001_R2_001.fastq.gz")),
+                i2: Some(format!("{path}/test_sample_suffix_S1_L001_I1_001.fastq.gz")),
                 r1_interleaved: false,
             },
         ];

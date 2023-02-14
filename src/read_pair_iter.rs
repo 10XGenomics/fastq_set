@@ -228,7 +228,7 @@ impl ReadPairIter {
     ) -> Result<Box<dyn BufRead + Send>, FastqError> {
         let mut buf = [0u8; 4];
         file.read_exact(&mut buf[..]).fastq_err(p, 0)?;
-        file.seek(std::io::SeekFrom::Start(0)).fastq_err(p, 0)?;
+        file.rewind().fastq_err(p, 0)?;
 
         if buf[0..2] == [0x1F, 0x8B] {
             let gz = flate2::read::MultiGzDecoder::new(file);
@@ -274,7 +274,7 @@ impl ReadPairIter {
         }
 
         // re-open file so we re-read the initial records
-        file.seek(std::io::SeekFrom::Start(0)).fastq_err(p, 0)?;
+        file.rewind().fastq_err(p, 0)?;
         Self::open_fastq_from_file(p, file)
     }
 
@@ -627,7 +627,7 @@ mod test_read_pair_iter {
         .unwrap();
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
-        println!("res: {:?}", res);
+        println!("res: {res:?}");
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 3);
     }
@@ -692,8 +692,8 @@ mod test_read_pair_iter {
         assert!(res.is_err());
 
         let e = res.err().unwrap();
-        println!("debug: {:?}", e);
-        println!("display: {}", e);
+        println!("debug: {e:?}");
+        println!("display: {e}");
     }
 
     #[test]
@@ -790,8 +790,6 @@ mod test_read_pair_iter {
 
     #[cfg(target_os = "linux")]
     fn page_size() -> u64 {
-        use std::convert::TryInto;
-
         unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) }
             .try_into()
             .unwrap()
@@ -865,9 +863,7 @@ mod test_read_pair_iter {
         let max_used_rss = 7 * 1024 * 1024 / (every as u64);
         assert!(
             used_rss <= max_used_rss,
-            "Used {} kB whereas max is {}",
-            used_rss,
-            max_used_rss
+            "Used {used_rss} kB whereas max is {max_used_rss}"
         );
     }
 }

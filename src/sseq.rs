@@ -20,7 +20,7 @@ impl ArrayContent for SSeqContents {
     fn validate_bytes(seq: &[u8]) {
         for (i, &s) in seq.iter().enumerate() {
             if !UPPER_ACGTN.iter().any(|&c| c == s) {
-                panic!("Non ACGTN character {} at position {}", s, i);
+                panic!("Non ACGTN character {s} at position {i}");
             };
         }
     }
