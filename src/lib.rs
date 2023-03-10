@@ -241,7 +241,7 @@ where
 }
 
 /// Which end of a transcript reads come from
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum WhichEnd {
     #[serde(rename = "three_prime")]
     ThreePrime,
