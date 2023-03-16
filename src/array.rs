@@ -55,6 +55,7 @@ where
         let val = self[pos];
         self.as_mut_bytes().split_at_mut(pos).1.rotate_left(1);
         self.length -= 1;
+        self.bytes[self.length as usize] = 0;
         val
     }
 
