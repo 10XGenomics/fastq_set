@@ -144,15 +144,14 @@ impl<const N: usize> SSeqGen<N> {
 
 #[derive(Copy, Clone)]
 pub enum InsertionIterOpt {
-    // Insert N bases in addition to ACGT
+    /// Insert N bases in addition to ACGT
     IncludeNBase,
-    // Do not insert N bases. Only insert ACGT
+    /// Do not insert N bases. Only insert ACGT
     ExcludeNBase,
 }
 
 /// Helper struct used to represent a subset of ACGTN characters
 #[derive(Clone, Copy)]
-
 pub struct SSeqChars(SSeqGen<5>);
 
 impl SSeqChars {
@@ -184,14 +183,14 @@ impl SSeqChars {
 
 #[derive(Copy, Clone)]
 pub enum HammingIterOpt {
-    // Mutate the N base. The allowed mutations at each base is ACGT
+    /// Mutate the N base. The allowed mutations at each base is ACGT
     MutateNBase,
-    // Don't mutate the N base. The allowed mutations for other bases are ACGT
+    /// Don't mutate the N base. The allowed mutations for other bases are ACGT
     SkipNBase,
     Custom {
-        // Characters to skip.
+        /// Characters to skip.
         skip_chars: SSeqChars,
-        // Allowed mutations for each base.
+        /// Allowed mutations for each base.
         mutation_chars: SSeqChars,
     },
 }
@@ -217,11 +216,16 @@ impl HammingIterOpt {
 /// Positions containing "N" or "n" are mutated or skipped
 /// depending on the `HammingIterOpt`
 pub struct SSeqOneHammingIter<const N: usize> {
-    source: SSeqGen<N>,    // Original SSeq from which we need to generate values
-    position: usize,       // Index into SSeq where last base was mutated
-    chars: SSeqChars,      // Characters used for mutation
-    chars_index: usize,    // The last base which was used
-    skip_chars: SSeqChars, // Characters to skip
+    /// Original SSeq from which we need to generate values
+    source: SSeqGen<N>,
+    /// Index into SSeq where last base was mutated
+    position: usize,
+    /// Characters used for mutation
+    chars: SSeqChars,
+    /// The last base which was used
+    chars_index: usize,
+    /// Characters to skip
+    skip_chars: SSeqChars,
 }
 
 impl<const N: usize> SSeqOneHammingIter<N> {
@@ -473,7 +477,7 @@ mod sseq_test {
             match opt {
                 HammingIterOpt::SkipNBase => 3 * non_n,
                 HammingIterOpt::MutateNBase => 3 * non_n + 4 * n_bases,
-                _ => unreachable!(),
+                _ => unimplemented!(),
             }
         );
     }
