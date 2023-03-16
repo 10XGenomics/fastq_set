@@ -246,7 +246,7 @@ impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
         let base_at_pos = self.source[self.position];
         let skip_pos = self.skip_chars.contains(&base_at_pos);
         if skip_pos || (self.chars_index >= self.chars.len()) {
-            // this is an "N" or we went through the ACGT bases already at this position
+            // Skip this position or we have exhausted all mutations for this position
             self.position += 1;
             self.chars_index = 0;
             self.next()
