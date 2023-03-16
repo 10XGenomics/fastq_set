@@ -243,6 +243,7 @@ mod sseq_test {
     use itertools::{assert_equal, Itertools};
     use proptest::collection::vec;
     use proptest::{prop_assert, prop_assert_eq, proptest};
+    use std::cmp::Ordering;
     use std::collections::HashSet;
     use std::iter::FromIterator;
 
@@ -547,6 +548,7 @@ mod sseq_test {
     fn test_remove() {
         let mut seq = SSeq::from_bytes(b"GCAT");
         assert_eq!(seq.remove(2), b'A');
+        assert_eq!(seq.cmp(&SSeq::from_bytes(b"GCT")), Ordering::Equal,);
         assert_eq!(seq, SSeq::from_bytes(b"GCT"));
     }
 
