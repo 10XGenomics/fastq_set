@@ -54,6 +54,7 @@ where
     pub fn remove(&mut self, pos: usize) -> u8 {
         let val = self[pos];
         self.as_mut_bytes().split_at_mut(pos).1.rotate_left(1);
+        self.bytes[N - 1] = 0;
         self.length -= 1;
         val
     }
