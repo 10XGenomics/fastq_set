@@ -2,6 +2,8 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
+use itertools::Itertools;
+
 use crate::array::{ArrayContent, ByteArray};
 use std::iter::Iterator;
 use std::str;
@@ -142,16 +144,72 @@ impl<const N: usize> SSeqGen<N> {
 
 #[derive(Copy, Clone)]
 pub enum InsertionIterOpt {
-    // Insert N bases
+    // Insert N bases in addition to ACGT
     IncludeNBase,
-    // Do not insert N bases
+    // Do not insert N bases. Only insert ACGT
     ExcludeNBase,
+}
+
+/// Helper struct used to represent a subset of ACGTN characters
+#[derive(Clone, Copy)]
+
+pub struct SSeqChars(SSeqGen<5>);
+
+impl SSeqChars {
+    pub fn new(chars: &[u8]) -> Self {
+        SSeqChars(SSeqGen::from_iter(chars.iter().unique()))
+    }
+    pub fn actg() -> Self {
+        SSeqChars(SSeqGen::from_bytes_unchecked(b"ACGT"))
+    }
+    pub fn actgn() -> Self {
+        SSeqChars(SSeqGen::from_bytes_unchecked(b"ACGTN"))
+    }
+    pub fn n() -> Self {
+        SSeqChars(SSeqGen::from_bytes_unchecked(b"N"))
+    }
+    pub fn none() -> Self {
+        SSeqChars(SSeqGen::new())
+    }
+    pub fn contains(&self, char: &u8) -> bool {
+        self.0.as_bytes().contains(char)
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 #[derive(Copy, Clone)]
 pub enum HammingIterOpt {
+    // Mutate the N base. The allowed mutations at each base is ACGT
     MutateNBase,
+    // Don't mutate the N base. The allowed mutations for other bases are ACGT
     SkipNBase,
+    Custom {
+        // Characters to skip.
+        skip_chars: SSeqChars,
+        // Allowed mutations for each base.
+        mutation_chars: SSeqChars,
+    },
+}
+
+impl HammingIterOpt {
+    fn skip_chars(self) -> SSeqChars {
+        match self {
+            HammingIterOpt::SkipNBase => SSeqChars::n(),
+            HammingIterOpt::MutateNBase => SSeqChars::none(),
+            HammingIterOpt::Custom { skip_chars, .. } => skip_chars,
+        }
+    }
+    fn mutation_chars(self) -> SSeqChars {
+        match self {
+            HammingIterOpt::SkipNBase | HammingIterOpt::MutateNBase => SSeqChars::actg(),
+            HammingIterOpt::Custom { mutation_chars, .. } => mutation_chars,
+        }
+    }
 }
 
 /// An iterator over sequences which are one hamming distance away
@@ -159,10 +217,11 @@ pub enum HammingIterOpt {
 /// Positions containing "N" or "n" are mutated or skipped
 /// depending on the `HammingIterOpt`
 pub struct SSeqOneHammingIter<const N: usize> {
-    source: SSeqGen<N>, // Original SSeq from which we need to generate values
-    position: usize,    // Index into SSeq where last base was mutated
-    chars_index: usize, // The last base which was used
-    skip_n: bool,       // Whether to skip N bases or mutate them
+    source: SSeqGen<N>,    // Original SSeq from which we need to generate values
+    position: usize,       // Index into SSeq where last base was mutated
+    chars: SSeqChars,      // Characters used for mutation
+    chars_index: usize,    // The last base which was used
+    skip_chars: SSeqChars, // Characters to skip
 }
 
 impl<const N: usize> SSeqOneHammingIter<N> {
@@ -170,11 +229,9 @@ impl<const N: usize> SSeqOneHammingIter<N> {
         SSeqOneHammingIter {
             source: sseq,
             position: 0,
+            chars: opt.mutation_chars(),
             chars_index: 0,
-            skip_n: match opt {
-                HammingIterOpt::SkipNBase => true,
-                HammingIterOpt::MutateNBase => false,
-            },
+            skip_chars: opt.skip_chars(),
         }
     }
 }
@@ -187,19 +244,18 @@ impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
             return None;
         }
         let base_at_pos = self.source[self.position];
-        if (self.skip_n && base_at_pos == UPPER_ACGTN[N_BASE_INDEX])
-            || (self.chars_index >= N_BASE_INDEX)
-        {
+        let skip_pos = self.skip_chars.contains(&base_at_pos);
+        if skip_pos || (self.chars_index >= self.chars.len()) {
             // this is an "N" or we went through the ACGT bases already at this position
             self.position += 1;
             self.chars_index = 0;
             self.next()
-        } else if base_at_pos == UPPER_ACGTN[self.chars_index] {
+        } else if base_at_pos == self.chars.0[self.chars_index] {
             self.chars_index += 1;
             self.next()
         } else {
             let mut next_sseq = self.source;
-            next_sseq[self.position] = UPPER_ACGTN[self.chars_index];
+            next_sseq[self.position] = self.chars.0[self.chars_index];
             self.chars_index += 1;
             Some(next_sseq)
         }
@@ -208,27 +264,27 @@ impl<const N: usize> Iterator for SSeqOneHammingIter<N> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         let positions = self.source.len().saturating_sub(self.position);
 
-        if self.skip_n {
+        if !self.skip_chars.is_empty() {
             // The number of sequences remaining if none of the source characters
-            // are N - 3 mutations per position.  We assume that if the
-            // char_index is >= 0 we may have skipped one already for this
+            // are in skip_chars = self.chars.len() mutations per position.
+            // We assume that if the char_index is >= 0 we may have skipped one already for this
             // position.
-            let no_ns_remaining = positions
-                .saturating_mul(N_BASE_INDEX - 1)
+            let no_skip_remaining = positions
+                .saturating_mul(self.chars.len().min(4))
                 .saturating_sub(self.chars_index.saturating_sub(1));
-            (0, Some(no_ns_remaining))
+            (0, Some(no_skip_remaining))
         } else {
-            // The lower bound is the number of positions times 3, with the
-            // assusmption that the matching character hasn't yet been passed.
+            // The lower bound is the number of positions times self.chars.len()-1, with the
+            // assumption that the matching character hasn't yet been passed.
             // The upper bound is if they're all Ns so we get 4 for each
             // position.
             (
                 positions
-                    .saturating_mul(N_BASE_INDEX - 1)
+                    .saturating_mul(self.chars.len().saturating_sub(1))
                     .saturating_sub(self.chars_index),
                 Some(
                     positions
-                        .saturating_mul(N_BASE_INDEX)
+                        .saturating_mul(self.chars.len().min(4))
                         .saturating_sub(self.chars_index.saturating_sub(1)),
                 ),
             )
@@ -417,6 +473,7 @@ mod sseq_test {
             match opt {
                 HammingIterOpt::SkipNBase => 3 * non_n,
                 HammingIterOpt::MutateNBase => 3 * non_n + 4 * n_bases,
+                _ => unreachable!(),
             }
         );
     }
@@ -604,5 +661,29 @@ mod sseq_test {
         let _ = SSeq::from_iter(seq.as_bytes());
         let seq_vec = seq.as_bytes().to_vec();
         let _ = SSeq::from_iter(seq_vec.into_iter());
+    }
+
+    #[test]
+    fn test_hamming_custom() {
+        let seq = SSeq::from_bytes(b"AN");
+        assert_equal(
+            seq.one_hamming_iter(HammingIterOpt::Custom {
+                skip_chars: SSeqChars::n(),
+                mutation_chars: SSeqChars::actgn(),
+            }),
+            ["CN", "GN", "TN", "NN"]
+                .into_iter()
+                .map(|x| SSeq::from_bytes(x.as_bytes())),
+        );
+
+        assert_equal(
+            seq.one_hamming_iter(HammingIterOpt::Custom {
+                skip_chars: SSeqChars::new(b"A"),
+                mutation_chars: SSeqChars::actg(),
+            }),
+            ["AA", "AC", "AG", "AT"]
+                .into_iter()
+                .map(|x| SSeq::from_bytes(x.as_bytes())),
+        );
     }
 }
