@@ -5,11 +5,10 @@ use crate::filenames::bcl_processor::{self, BclProcessorFileGroup};
 use crate::filenames::{LaneMode, LaneSpec};
 use crate::read_pair_iter::InputFastqs;
 use crate::sample_index_map::SAMPLE_INDEX_MAP;
-use anyhow::{format_err, Error};
+use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use std::collections::HashSet;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// TODO: This should be moved to rust-utils
 pub struct Bcl2FastqDir {
@@ -20,19 +19,16 @@ pub struct Bcl2FastqDir {
 }
 
 impl Bcl2FastqDir {
-    pub fn new(fastq_path: impl AsRef<Path>) -> Result<Self, Error> {
-        let fastq_path: PathBuf = fastq_path.as_ref().into();
+    pub fn new(fastq_path: impl AsRef<Path>) -> Result<Self> {
+        let fastq_path = PathBuf::from(fastq_path.as_ref());
         if !fastq_path.exists() {
-            return Err(format_err!(
-                "Fastq path {} does not exist",
-                fastq_path.display()
-            ));
+            bail!("{} does not exist", fastq_path.display());
         }
+
         let fastq_data = bcl2fastq::find_flowcell_fastqs(&fastq_path)?;
 
         if fastq_data.is_empty() {
-            // The caller chooses what to do if the directory has
-            // no fastq files
+            // The caller chooses what to do if the directory has no fastq files.
             return Ok(Bcl2FastqDir {
                 fastq_path,
                 fastq_data,
@@ -51,13 +47,11 @@ impl Bcl2FastqDir {
             .exactly_one()
         {
             Ok(val) => val,
-            Err(_) => {
-                return Err(format_err!(
-                "Some files in the fastq path {} are split by lane, while some are not. This is \
-                not supported.",
+            Err(_) => bail!(
+                "Some files in the fastq path {} are split by lane, while some are not. \
+                 This is not supported.",
                 fastq_path.display()
-            ))
-            }
+            ),
         };
 
         let samples = fastq_data.iter().map(|(g, _)| g.sample.clone()).collect();
@@ -121,17 +115,17 @@ pub struct BclProcessorDir {
 }
 
 impl BclProcessorDir {
-    pub fn new(fastq_path: impl AsRef<Path>) -> Result<Self, Error> {
-        let fastq_path: PathBuf = fastq_path.as_ref().into();
+    pub fn new(fastq_path: impl AsRef<Path>) -> Result<Self> {
+        let fastq_path = PathBuf::from(fastq_path.as_ref());
         if !fastq_path.exists() {
-            return Err(format_err!(
-                "Fastq path {} does not exist",
-                fastq_path.display()
-            ));
+            bail!("{} does not exist", fastq_path.display());
         }
+
         let fastq_data = bcl_processor::find_flowcell_fastqs(&fastq_path)?;
-        let sample_indices = fastq_data.iter().map(|(g, _)| g.si.clone()).collect();
-        let lanes = fastq_data.iter().map(|(g, _)| g.lane).collect();
+        let (sample_indices, lanes) = fastq_data
+            .iter()
+            .map(|(x, _)| (x.si.clone(), x.lane))
+            .unzip();
         Ok(BclProcessorDir {
             fastq_path,
             fastq_data,
@@ -139,9 +133,11 @@ impl BclProcessorDir {
             lanes,
         })
     }
+
     pub fn is_empty(&self) -> bool {
         self.fastq_data.is_empty()
     }
+
     pub fn contains_index(&self, index: &str) -> bool {
         if let Some(seqs) = SAMPLE_INDEX_MAP.get(index) {
             seqs.iter().any(|&seq| self.sample_indices.contains(seq))
@@ -149,6 +145,7 @@ impl BclProcessorDir {
             self.sample_indices.contains(index)
         }
     }
+
     pub fn contains_lane(&self, lane: usize) -> bool {
         self.lanes.contains(&lane)
     }
@@ -178,18 +175,11 @@ impl FastqChecker {
         requested_samples: &Option<Vec<String>>,
         lanes: &Option<Vec<usize>>,
         help_text: &str,
-    ) -> Result<HashSet<String>, Error> {
-        let bcl_dir = Bcl2FastqDir::new(&fastq_path).map_err(|e| {
-            let context = format!(
-                "Error reading fastq directory {:?} due to:\n{}",
-                fastq_path.as_ref(),
-                e
-            );
-            e.context(context)
-        })?;
-
+    ) -> Result<HashSet<String>> {
+        let fastq_path = fastq_path.as_ref();
+        let bcl_dir = Bcl2FastqDir::new(fastq_path).context("Reading FASTQ directory")?;
         if bcl_dir.is_empty() {
-            return Err(format_err!("{}", help_text));
+            bail!(help_text.to_string());
         }
 
         // >=1 samples due to the check above
@@ -200,12 +190,10 @@ impl FastqChecker {
             None => {
                 // there should be exactly one sample present
                 if available_samples.len() > 1 {
-                    let msg = format_err!(
+                    bail!(
                         "The --sample argument must be specified if multiple samples were \
-                    demultiplexed in a run folder.  Available samples:\n{}",
-                        available_samples_str
+                         demultiplexed in a run folder.  Available samples:\n{available_samples_str}",
                     );
-                    return Err(msg);
                 }
                 SampleNameSpec::Names(available_samples.clone())
             }
@@ -217,12 +205,10 @@ impl FastqChecker {
                     .collect();
                 if available_and_requested.is_empty() {
                     // Need to find a least one of the requested samples in this folder
-                    let msg = format_err!(
-                        "Requested sample(s) not found in fastq directory {:?}\nAvailable samples:\n{}",
-                        fastq_path.as_ref(),
-                        available_samples_str
+                    bail!(
+                        "Requested sample(s) not found in fastq directory {fastq_path:?}\n\
+                         Available samples:\n{available_samples_str}",
                     );
-                    return Err(msg);
                 }
                 SampleNameSpec::Names(available_and_requested)
             }
@@ -234,11 +220,11 @@ impl FastqChecker {
         };
 
         if bcl_dir
-        .filtered_fastq_data(&sample_name_spec, &lane_spec)
-        .count() // .next().is_none() would be better?
-        == 0
+            .filtered_fastq_data(&sample_name_spec, &lane_spec)
+            .next()
+            .is_none()
         {
-            return Err(format_err!("{}", help_text));
+            bail!(help_text.to_string());
         }
 
         Ok(match sample_name_spec {

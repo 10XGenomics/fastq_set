@@ -1,8 +1,7 @@
-use anyhow::{format_err, Error};
-use serde::{Deserialize, Serialize};
-
 use crate::read_pair::{ReadPart, WhichRead};
 use crate::read_pair_iter::{InputFastqs, ReadPairIter};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 pub struct IlluminaHeaderInfo {
@@ -24,17 +23,17 @@ impl Default for IlluminaHeaderInfo {
 }
 
 impl InputFastqs {
-    pub fn get_header_info(&self) -> Result<Option<IlluminaHeaderInfo>, Error> {
+    pub fn get_header_info(&self) -> Result<Option<IlluminaHeaderInfo>> {
         let mut iter = ReadPairIter::from_fastq_files(self)?;
 
         let read1 = iter
             .next()
             .transpose()?
-            .ok_or_else(|| format_err!("Empty fastq file: {:?}", self))?;
+            .ok_or_else(|| anyhow!("Empty fastq file: {self:?}"))?;
 
         let header = read1
             .get(WhichRead::R1, ReadPart::Header)
-            .ok_or_else(|| format_err!("No Read1 in FASTQ data"))?;
+            .ok_or_else(|| anyhow!("No Read1 in FASTQ data"))?;
 
         let header = std::str::from_utf8(header)?;
         let header_prefix = header.split(|x: char| x == ' ' || x == '/').next();
@@ -85,7 +84,7 @@ mod test {
     use crate::InputFastqs;
 
     #[test]
-    fn test_parse_fastq_info() -> Result<(), Error> {
+    fn test_parse_fastq_info() -> Result<()> {
         let path = "tests/filenames/bcl2fastq";
 
         let query = Bcl2FastqDef {
@@ -112,7 +111,7 @@ mod test {
     }
 
     #[test]
-    fn weird_header_info() -> Result<(), Error> {
+    fn weird_header_info() -> Result<()> {
         let fq = InputFastqs {
             r1: "tests/read_pair_iter/weird-header-R1.fastq".to_string(),
             r2: Some("tests/read_pair_iter/weird-header-R2.fastq".to_string()),
@@ -134,7 +133,7 @@ mod test {
     }
 
     #[test]
-    fn weird_header2_info() -> Result<(), Error> {
+    fn weird_header2_info() -> Result<()> {
         let fq = InputFastqs {
             r1: "tests/read_pair_iter/weird-header2-R1.fastq".to_string(),
             r2: Some("tests/read_pair_iter/weird-header2-R2.fastq".to_string()),
@@ -151,7 +150,7 @@ mod test {
     }
 
     #[test]
-    fn weird_header_csi_1376() -> Result<(), Error> {
+    fn weird_header_csi_1376() -> Result<()> {
         let fq = InputFastqs {
             r1: "tests/read_pair_iter/csi-1376-R1.fastq".to_string(),
             r2: Some("tests/read_pair_iter/csi-1376-R2.fastq".to_string()),

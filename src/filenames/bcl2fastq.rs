@@ -1,10 +1,9 @@
 //! Utilities for finding groups of FASTQ produced by `bcl2fastq` from Illumina.
 
 use super::FindFastqs;
-use crate::filenames::LaneMode;
-use crate::filenames::LaneSpec;
+use crate::filenames::{LaneMode, LaneSpec};
 use crate::read_pair_iter::InputFastqs;
-use anyhow::Error;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -64,7 +63,7 @@ pub struct Bcl2FastqDef {
 }
 
 impl FindFastqs for Bcl2FastqDef {
-    fn find_fastqs(&self) -> Result<Vec<InputFastqs>, Error> {
+    fn find_fastqs(&self) -> Result<Vec<InputFastqs>> {
         let all_fastqs = find_flowcell_fastqs(&self.fastq_path)?;
 
         let mut res = Vec::new();
@@ -158,22 +157,14 @@ impl IlmnFastqFile {
 }
 
 /// Find all the bcl2fastq FASTQ files present in `path`.
-fn get_bcl2fastq_files(path: impl AsRef<Path>) -> Result<Vec<(IlmnFastqFile, PathBuf)>, Error> {
-    let mut res = Vec::new();
-    let dir_files = std::fs::read_dir(path)?;
-
-    for f in dir_files {
-        let path = f?.path();
-
-        match IlmnFastqFile::new(&path) {
-            None => (),
-            Some(parsed) => {
-                res.push((parsed, path));
-            }
-        }
-    }
-
-    Ok(res)
+fn get_bcl2fastq_files(path: impl AsRef<Path>) -> Result<Vec<(IlmnFastqFile, PathBuf)>> {
+    let path = path.as_ref();
+    std::fs::read_dir(path)
+        .with_context(|| path.display().to_string())?
+        .map_ok(|f| f.path())
+        .filter_map_ok(|f| IlmnFastqFile::new(&f).map(|x| (x, f)))
+        .try_collect()
+        .with_context(|| path.display().to_string())
 }
 
 /// Find all the sets of bcl2fastq FASTQ files present in `path` as well as directories directly
@@ -181,7 +172,7 @@ fn get_bcl2fastq_files(path: impl AsRef<Path>) -> Result<Vec<(IlmnFastqFile, Pat
 /// `InputFastqs`, along with a representative `IlmnFastqFile` struct.
 pub fn find_flowcell_fastqs(
     path: impl AsRef<Path>,
-) -> Result<Vec<(IlmnFastqFileGroup, InputFastqs)>, Error> {
+) -> Result<Vec<(IlmnFastqFileGroup, InputFastqs)>> {
     let mut res = Vec::new();
 
     let mut files = get_bcl2fastq_files(&path)?;
@@ -332,7 +323,7 @@ mod test {
     }
 
     #[test]
-    fn query_bcl2fastq() -> Result<(), Error> {
+    fn query_bcl2fastq() -> Result<()> {
         let path = "tests/filenames/bcl2fastq";
 
         let query = Bcl2FastqDef {
@@ -355,7 +346,7 @@ mod test {
     }
 
     #[test]
-    fn query_bcl2fastq_lz4() -> Result<(), Error> {
+    fn query_bcl2fastq_lz4() -> Result<()> {
         let path = "tests/filenames/bcl2fastq_lz4";
 
         let query = Bcl2FastqDef {
@@ -378,7 +369,7 @@ mod test {
     }
 
     #[test]
-    fn query_bcl2fastq_lanes() -> Result<(), Error> {
+    fn query_bcl2fastq_lanes() -> Result<()> {
         let path = "tests/filenames/bcl2fastq";
 
         let query = Bcl2FastqDef {
@@ -397,7 +388,7 @@ mod test {
     }
 
     #[test]
-    fn test_bcl2fastq_no_lane_split() -> Result<(), Error> {
+    fn test_bcl2fastq_no_lane_split() -> Result<()> {
         let path = "tests/filenames/bcl2fastq_no_lane_split";
 
         let query = Bcl2FastqDef {
@@ -427,7 +418,7 @@ mod tests_from_tenkit {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_find_input_fastq_files_bcl2fastq_demult() -> Result<(), Error> {
+    fn test_find_input_fastq_files_bcl2fastq_demult() -> Result<()> {
         let path = "tests/filenames/bcl2fastq_2";
 
         let query = Bcl2FastqDef {
@@ -449,7 +440,7 @@ mod tests_from_tenkit {
     }
 
     #[test]
-    fn test_find_input_fastq_files_bc2fastq_demult_project_1() -> Result<(), Error> {
+    fn test_find_input_fastq_files_bc2fastq_demult_project_1() -> Result<()> {
         let path = "tests/filenames/project_dir";
 
         let query = Bcl2FastqDef {
@@ -480,7 +471,7 @@ mod tests_from_tenkit {
     }
 
     #[test]
-    fn test_find_input_fastq_files_bc2fastq_demult_project_2() -> Result<(), Error> {
+    fn test_find_input_fastq_files_bc2fastq_demult_project_2() -> Result<()> {
         let path = "tests/filenames/project_dir";
 
         let query = Bcl2FastqDef {
@@ -502,7 +493,7 @@ mod tests_from_tenkit {
     }
 
     #[test]
-    fn test_sample_name_verification() -> Result<(), Error> {
+    fn test_sample_name_verification() -> Result<()> {
         let path = "tests/filenames/tenkit91";
         for &s in ["test_sample", "test_sample_suffix"].iter() {
             let query = Bcl2FastqDef {
@@ -524,7 +515,7 @@ mod tests_from_tenkit {
     }
 
     #[test]
-    fn test_sample_name_any() -> Result<(), Error> {
+    fn test_sample_name_any() -> Result<()> {
         let path = "tests/filenames/tenkit91";
 
         let query = Bcl2FastqDef {

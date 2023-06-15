@@ -2,23 +2,17 @@
 
 //! Read a set of FASTQs, convert into an Iterator over ReadPairs.
 
-use serde::{Deserialize, Serialize};
-use std::ops::DerefMut;
-use std::path::{Path, PathBuf};
-
 use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
-use fastq::{self, Record, RecordRefIter};
-
 use bytes::{BufMut, BytesMut};
-
-use std::io::ErrorKind;
-use std::io::{self, BufRead, BufReader, Read, Seek, Write};
-
-use thiserror::Error;
-
+use fastq::{self, Record, RecordRefIter};
 use rand::distributions::{Distribution, Uniform};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
+use serde::{Deserialize, Serialize};
+use std::io::{self, BufRead, BufReader, ErrorKind, Read, Seek, Write};
+use std::ops::DerefMut;
+use std::path::{Path, PathBuf};
+use thiserror::Error;
 
 const GZ_BUF_SIZE: usize = 1 << 16;
 
@@ -30,13 +24,15 @@ pub enum FastqError {
         line: usize,
         file: PathBuf,
     },
-    #[error("Error opening FASTQ file '{file:?}': {source}")]
-    Open { source: io::Error, file: PathBuf },
-    #[error("IO error in FASTQ file '{file:?}', line: {line}: {source}")]
+
+    #[error("Error opening FASTQ file '{}'", file.display())]
+    Open { file: PathBuf, source: io::Error },
+
+    #[error("IO error in FASTQ file '{}', line: {line}", file.display())]
     Io {
-        source: io::Error,
         file: PathBuf,
         line: usize,
+        source: io::Error,
     },
 }
 
@@ -63,8 +59,8 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
             Ok(v) => Ok(v),
             Err(e) => {
                 let e = FastqError::Open {
-                    source: e,
                     file: path.into(),
+                    source: e,
                 };
                 Err(e)
             }
@@ -78,24 +74,17 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
             Err(e) => {
                 match e.kind() {
                     // convert InvalidData into a FastqFormat error
-                    ErrorKind::InvalidData => {
-                        let e = FastqError::FastqFormat {
-                            message: e.to_string(),
-                            line,
-                            file: path.into(),
-                        };
-                        Err(e)
-                    }
-
+                    ErrorKind::InvalidData => Err(FastqError::FastqFormat {
+                        message: e.to_string(),
+                        line,
+                        file: path.into(),
+                    }),
                     // convert everything else to the Io case
-                    _ => {
-                        let e = FastqError::Io {
-                            source: e,
-                            file: path.into(),
-                            line,
-                        };
-                        Err(e)
-                    }
+                    _ => Err(FastqError::Io {
+                        file: path.into(),
+                        line,
+                        source: e,
+                    }),
                 }
             }
         }

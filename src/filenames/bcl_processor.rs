@@ -1,12 +1,11 @@
 //! Utilities for finding groups of FASTQ produced by the legacy `demux` pipeline from 10x Genomics.
 
 use super::FindFastqs;
-use crate::filenames::LaneMode;
-use crate::filenames::LaneSpec;
+use crate::filenames::{LaneMode, LaneSpec};
 use crate::read_pair_iter::InputFastqs;
 use crate::sample_index_map::SAMPLE_INDEX_MAP;
 use crate::sseq::SSeq;
-use anyhow::Error;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use regex;
 use serde::{Deserialize, Serialize};
@@ -68,7 +67,7 @@ pub struct BclProcessorFastqDef {
 }
 
 impl FindFastqs for BclProcessorFastqDef {
-    fn find_fastqs(&self) -> Result<Vec<InputFastqs>, Error> {
+    fn find_fastqs(&self) -> Result<Vec<InputFastqs>> {
         // get all the files in the directory
         let all_fastq_sets = find_flowcell_fastqs(&self.fastq_path)?;
         let mut res = Vec::new();
@@ -174,13 +173,12 @@ pub fn group_samples(
 
 pub fn find_flowcell_fastqs(
     path: impl AsRef<Path>,
-) -> Result<Vec<(BclProcessorFileGroup, InputFastqs)>, Error> {
-    let mut res = Vec::new();
-
-    let mut files = get_demux_files(path)?;
-    files.sort();
-
-    for (group, files) in &files.into_iter().group_by(|(info, _)| info.group.clone()) {
+) -> Result<Vec<(BclProcessorFileGroup, InputFastqs)>> {
+    let demux_files = get_demux_files(path.as_ref())?
+        .into_iter()
+        .sorted()
+        .group_by(|(info, _)| info.group.clone());
+    let flowcell_fastqs = demux_files.into_iter().map(|(group, files)| {
         let my_files: Vec<_> = files.collect();
 
         let ra = my_files
@@ -192,10 +190,7 @@ pub fn find_flowcell_fastqs(
             .clone()
             .into_iter()
             .find(|(info, _)| info.read == "I1");
-        let i2 = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "I2");
+        let i2 = my_files.into_iter().find(|(info, _)| info.read == "I2");
 
         let fastqs = crate::read_pair_iter::InputFastqs {
             r1: ra.1.to_str().unwrap().to_string(),
@@ -204,30 +199,17 @@ pub fn find_flowcell_fastqs(
             i2: i2.map(|x| x.1.to_str().unwrap().to_string()),
             r1_interleaved: true,
         };
-
-        res.push((group, fastqs));
-    }
-
-    Ok(res)
+        (group, fastqs)
+    });
+    Ok(flowcell_fastqs.collect())
 }
 
-fn get_demux_files(path: impl AsRef<Path>) -> Result<Vec<(BclProcessorFile, PathBuf)>, Error> {
-    let mut res = Vec::new();
-    let dir_files = std::fs::read_dir(path)?;
-
-    for f in dir_files {
-        let ent = f?;
-        let path = ent.path();
-
-        match try_parse(path) {
-            None => (),
-            Some(v) => {
-                res.push(v);
-            }
-        }
-    }
-
-    Ok(res)
+fn get_demux_files(path: &Path) -> Result<Vec<(BclProcessorFile, PathBuf)>> {
+    std::fs::read_dir(path)
+        .with_context(|| path.display().to_string())?
+        .filter_map_ok(|x| try_parse(x.path()))
+        .try_collect()
+        .with_context(|| path.display().to_string())
 }
 
 fn try_parse(f: PathBuf) -> Option<(BclProcessorFile, PathBuf)> {
@@ -279,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn load_dir() -> Result<(), Error> {
+    fn load_dir() -> Result<()> {
         let path = "tests/filenames/bcl_processor";
         let fastqs = find_flowcell_fastqs(path)?;
         assert_eq!(fastqs.len(), 44);
@@ -287,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn query_all_lanes() -> Result<(), Error> {
+    fn query_all_lanes() -> Result<()> {
         let path = "tests/filenames/bcl_processor";
 
         let query = BclProcessorFastqDef {
@@ -302,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn query_one_lane() -> Result<(), Error> {
+    fn query_one_lane() -> Result<()> {
         let path = "tests/filenames/bcl_processor";
 
         let query = BclProcessorFastqDef {
@@ -338,7 +320,7 @@ mod tests_from_tenkit {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_find_input_fastq_files_10x_preprocess() -> Result<(), Error> {
+    fn test_find_input_fastq_files_10x_preprocess() -> Result<()> {
         let path = "tests/filenames/bcl_processor_2";
 
         let query = BclProcessorFastqDef {
