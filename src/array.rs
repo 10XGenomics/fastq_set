@@ -146,7 +146,7 @@ where
     }
 
     /// Returns an iterator over the bytes.
-    pub fn iter(&self) -> std::slice::Iter<u8> {
+    pub fn iter(&self) -> std::slice::Iter<'_, u8> {
         self.as_bytes().iter()
     }
 }
@@ -313,7 +313,7 @@ where
 {
     type Value = ByteArray<T, N>;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(T::expected_contents())
     }
 

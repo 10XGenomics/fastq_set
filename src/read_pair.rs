@@ -4,14 +4,13 @@
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
 use crate::WhichEnd;
-use anyhow::{format_err, Error};
+use anyhow::{bail, Result};
 use bytes::{Bytes, BytesMut};
 use fastq::{OwnedRecord, Record};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt;
 use std::io::Write;
-use std::ops;
+use std::{fmt, ops};
 
 /// Pointers into a buffer that identify the positions of lines from a FASTQ record
 /// header exists at buf[start .. head], seq exists at buf[head .. seq], etc.
@@ -85,16 +84,16 @@ impl fmt::Display for WhichRead {
 }
 
 impl std::str::FromStr for WhichRead {
-    type Err = Error;
+    type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "R1" => Ok(WhichRead::R1),
-            "R2" => Ok(WhichRead::R2),
-            "I1" => Ok(WhichRead::I1),
-            "I2" => Ok(WhichRead::I2),
-            _ => Err(format_err!("could not parse WhichRead from '{}'", s)),
-        }
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(match s {
+            "R1" => WhichRead::R1,
+            "R2" => WhichRead::R2,
+            "I1" => WhichRead::I1,
+            "I2" => WhichRead::I2,
+            _ => bail!("could not parse WhichRead from '{s}'"),
+        })
     }
 }
 
@@ -455,7 +454,7 @@ impl RpRange {
 /// Storage patterns for a read pair. There are two
 /// options which is a compromise between performance
 /// and memory usage.
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy, Default)]
 pub enum ReadPairStorage {
     /// Multiple `ReadPair` objects will be backed slices into
     /// the same buffer. This reductes the allocation overhead.
@@ -471,13 +470,8 @@ pub enum ReadPairStorage {
     /// filtering reads. However this will have inferior performance
     /// compared to `ReadPairStorage::SharedBuffer` due to higher
     /// [de]allocation overhead
+    #[default]
     PerReadAllocation,
-}
-
-impl Default for ReadPairStorage {
-    fn default() -> Self {
-        ReadPairStorage::PerReadAllocation
-    }
 }
 
 /// Helper struct used during construction of a ReadPair. The data for the ReadPair is
@@ -604,13 +598,13 @@ impl ReadPair {
         read.and_then(|r| rp_range.slice(r))
     }
 
-    pub fn check_range(&self, range: &RpRange, region_name: &str) -> Result<(), Error> {
+    pub fn check_range(&self, range: &RpRange, region_name: &str) -> Result<()> {
         let req_len = range.offset() + range.len().unwrap_or(0);
 
         match self.get(range.read(), ReadPart::Seq) {
             Some(read) => {
                 if read.len() < req_len {
-                    let e = format_err!(
+                    bail!(
                         "{} is expected in positions {}-{} in Read {}, but read is {} bp long.",
                         region_name,
                         range.offset(),
@@ -618,19 +612,14 @@ impl ReadPair {
                         range.read(),
                         read.len()
                     );
-                    Err(e)
                 } else {
                     Ok(())
                 }
             }
-            None => {
-                let e = format_err!(
-                    "{} is missing from FASTQ. Read {} is not present.",
-                    region_name,
-                    range.read()
-                );
-                Err(e)
-            }
+            None => bail!(
+                "{region_name} is missing from FASTQ. Read {} is not present.",
+                range.read()
+            ),
         }
     }
 
@@ -665,7 +654,7 @@ impl ReadPair {
 
     /// Write read selected by `which` in FASTQ format to `writer`.
     /// This method will silently do nothing if the selected read doesn't exist.
-    pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<(), Error> {
+    pub fn write_fastq<W: Write>(&self, which: WhichRead, writer: &mut W) -> Result<()> {
         if self.offsets[which as usize].exists {
             let head = self.get(which, ReadPart::Header).unwrap();
             writer.write_all(b"@")?;
