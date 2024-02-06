@@ -185,7 +185,12 @@ pub fn find_flowcell_fastqs(
             .clone()
             .into_iter()
             .find(|(info, _)| info.read == "RA")
-            .expect("couldn't find RA read");
+            .unwrap_or_else(|| {
+                panic!(
+                    "couldn't find RA read for the following group:\n{:#?}\n The files found are: {:#?}",
+                    group, my_files
+                )
+            });
         let i1 = my_files
             .clone()
             .into_iter()
