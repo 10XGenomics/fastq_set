@@ -351,12 +351,25 @@ mod tests_from_tenkit {
 
     #[test]
     fn test_ra_missing() -> Result<()> {
+        let path = "tests/filenames/bcl_processor_3";
         let query = BclProcessorFastqDef {
-            fastq_path: "/mnt/analysis/marsoc/pipestances/HLVVHDSX3/BCL_PROCESSOR_PD/HLVVHDSX3/2020.0623.2-0/outs/fastq_path".to_string(),
-            sample_index_spec: "CTCAACCAGG".into(),
+            fastq_path: path.to_string(),
+            sample_index_spec: "ACAGCAAC".into(),
             lane_spec: LaneSpec::Lanes(vec![1, 2].into_iter().collect()),
         };
-        let _ = query.find_fastqs()?;
+        let fastqs = query.find_fastqs()?;
+        let expected = vec![InputFastqs {
+            r1: format!("{path}/read-RA_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"),
+            r2: None,
+            i1: Some(format!(
+                "{path}/read-I1_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"
+            )),
+            i2: Some(format!(
+                "{path}/read-I2_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"
+            )),
+            r1_interleaved: true,
+        }];
+        assert_eq!(fastqs, expected);
 
         Ok(())
     }
