@@ -143,6 +143,7 @@ impl BclProcessorFile {
                 })
         })
     }
+
     fn path_string(&self) -> String {
         self.full_path.to_str().unwrap().to_string()
     }
