@@ -123,6 +123,10 @@ pub struct BclProcessorFile {
 }
 
 impl BclProcessorFile {
+    /// Create a new `BclProcessorFile` from a full path to a FASTQ file.
+    ///
+    /// Returns `None` if the path is not a file or the filename does not
+    /// match the expected pattern.
     fn new(full_path: &Path) -> Option<Self> {
         let re = "^read-([RI][A0-9])_si-([^_]+)_lane-([0-9]+)-chunk-([0-9]+).fastq(.gz|.lz4)?$";
         let re = regex::Regex::new(re).unwrap();
