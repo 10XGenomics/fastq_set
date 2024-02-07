@@ -664,7 +664,7 @@ mod sseq_test {
         let seq = SSeq::from_bytes(b"ACGT");
         let _ = SSeq::from_iter(seq.as_bytes());
         let seq_vec = seq.as_bytes().to_vec();
-        let _ = SSeq::from_iter(seq_vec.into_iter());
+        let _ = SSeq::from_iter(seq_vec);
     }
 
     #[test]

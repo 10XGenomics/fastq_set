@@ -10,7 +10,6 @@ use itertools::Itertools;
 use regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// Different ways to specify the sample index for `BclProcessorFastqDef`.
@@ -120,12 +119,33 @@ impl BclProcessorFileGroup {
 pub struct BclProcessorFile {
     pub group: BclProcessorFileGroup,
     pub read: String,
-    pub path: PathBuf,
+    pub full_path: PathBuf,
 }
 
-impl fmt::Display for BclProcessorFile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.path)
+impl BclProcessorFile {
+    /// Create a new `BclProcessorFile` from a full path to a FASTQ file.
+    ///
+    /// Returns `None` if the path is not a file or the filename does not
+    /// match the expected pattern.
+    fn new(full_path: &Path) -> Option<Self> {
+        let re = "^read-([RI][A0-9])_si-([^_]+)_lane-([0-9]+)-chunk-([0-9]+).fastq(.gz|.lz4)?$";
+        let re = regex::Regex::new(re).unwrap();
+        full_path.file_name().and_then(|filename| {
+            re.captures(filename.to_str().unwrap())
+                .map(|caps| BclProcessorFile {
+                    full_path: full_path.into(),
+                    read: caps.get(1).unwrap().as_str().to_string(),
+                    group: BclProcessorFileGroup {
+                        si: caps.get(2).unwrap().as_str().to_string(),
+                        lane: caps.get(3).unwrap().as_str().parse().unwrap(),
+                        chunk: caps.get(4).unwrap().as_str().parse().unwrap(),
+                    },
+                })
+        })
+    }
+
+    fn path_string(&self) -> String {
+        self.full_path.to_str().unwrap().to_string()
     }
 }
 
@@ -174,67 +194,41 @@ pub fn group_samples(
 pub fn find_flowcell_fastqs(
     path: impl AsRef<Path>,
 ) -> Result<Vec<(BclProcessorFileGroup, InputFastqs)>> {
-    let demux_files = get_demux_files(path.as_ref())?
+    Ok(get_demux_files(path.as_ref())?
         .into_iter()
         .sorted()
-        .group_by(|(info, _)| info.group.clone());
-    let flowcell_fastqs = demux_files.into_iter().map(|(group, files)| {
-        let my_files: Vec<_> = files.collect();
+        .group_by(|info| info.group.clone())
+        .into_iter()
+        .filter_map(|(group, group_files)| {
+            let group_files: Vec<_> = group_files.collect();
 
-        let ra = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "RA")
-            .expect("couldn't find RA read");
-        let i1 = my_files
-            .clone()
-            .into_iter()
-            .find(|(info, _)| info.read == "I1");
-        let i2 = my_files.into_iter().find(|(info, _)| info.read == "I2");
+            group_files
+                .iter()
+                // ignore groups that don't have an RA file
+                .find(|info| info.read == "RA")
+                .map(|ra| {
+                    let i1 = group_files.iter().find(|info| info.read == "I1");
+                    let i2 = group_files.iter().find(|info| info.read == "I2");
 
-        let fastqs = crate::read_pair_iter::InputFastqs {
-            r1: ra.1.to_str().unwrap().to_string(),
-            r2: None,
-            i1: i1.map(|x| x.1.to_str().unwrap().to_string()),
-            i2: i2.map(|x| x.1.to_str().unwrap().to_string()),
-            r1_interleaved: true,
-        };
-        (group, fastqs)
-    });
-    Ok(flowcell_fastqs.collect())
+                    let fastqs = crate::read_pair_iter::InputFastqs {
+                        r1: ra.path_string(),
+                        r2: None,
+                        i1: i1.map(BclProcessorFile::path_string),
+                        i2: i2.map(BclProcessorFile::path_string),
+                        r1_interleaved: true,
+                    };
+                    (group, fastqs)
+                })
+        })
+        .collect())
 }
 
-fn get_demux_files(path: &Path) -> Result<Vec<(BclProcessorFile, PathBuf)>> {
+fn get_demux_files(path: &Path) -> Result<Vec<BclProcessorFile>> {
     std::fs::read_dir(path)
         .with_context(|| path.display().to_string())?
-        .filter_map_ok(|x| try_parse(x.path()))
+        .filter_map_ok(|x| BclProcessorFile::new(&x.path()))
         .try_collect()
         .with_context(|| path.display().to_string())
-}
-
-fn try_parse(f: PathBuf) -> Option<(BclProcessorFile, PathBuf)> {
-    match f.file_name() {
-        Some(s) => {
-            let r = try_parse_bclprocessor_file(s.to_str().unwrap());
-            r.map(|v| (v, f))
-        }
-        None => None,
-    }
-}
-
-fn try_parse_bclprocessor_file(filename: &str) -> Option<BclProcessorFile> {
-    let re = "^read-([RI][A0-9])_si-([^_]+)_lane-([0-9]+)-chunk-([0-9]+).fastq(.gz|.lz4)?$";
-    let re = regex::Regex::new(re).unwrap();
-
-    re.captures(filename).map(|caps| BclProcessorFile {
-        path: PathBuf::from(filename),
-        read: caps.get(1).unwrap().as_str().to_string(),
-        group: BclProcessorFileGroup {
-            si: caps.get(2).unwrap().as_str().to_string(),
-            lane: caps.get(3).unwrap().as_str().parse().unwrap(),
-            chunk: caps.get(4).unwrap().as_str().parse().unwrap(),
-        },
-    })
 }
 
 #[cfg(test)]
@@ -245,10 +239,10 @@ mod tests {
     fn bcl_fn() {
         let f1 = "read-RA_si-TTAGCGAT_lane-002-chunk-001.fastq.gz";
 
-        let bcl = try_parse_bclprocessor_file(f1).unwrap();
+        let bcl = BclProcessorFile::new(Path::new(f1)).unwrap();
 
         let truth = BclProcessorFile {
-            path: PathBuf::from(f1),
+            full_path: PathBuf::from(f1),
             read: "RA".to_string(),
             group: BclProcessorFileGroup {
                 si: "TTAGCGAT".to_string(),
@@ -356,6 +350,31 @@ mod tests_from_tenkit {
         ];
 
         assert_eq!(fqs, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ra_missing() -> Result<()> {
+        let path = "tests/filenames/bcl_processor_3";
+        let query = BclProcessorFastqDef {
+            fastq_path: path.to_string(),
+            sample_index_spec: "ACAGCAAC".into(),
+            lane_spec: LaneSpec::Lanes(vec![1, 2].into_iter().collect()),
+        };
+        let fastqs = query.find_fastqs()?;
+        let expected = vec![InputFastqs {
+            r1: format!("{path}/read-RA_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"),
+            r2: None,
+            i1: Some(format!(
+                "{path}/read-I1_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"
+            )),
+            i2: Some(format!(
+                "{path}/read-I2_si-ACAGCAAC_lane-001-chunk-001.fastq.gz"
+            )),
+            r1_interleaved: true,
+        }];
+        assert_eq!(fastqs, expected);
 
         Ok(())
     }

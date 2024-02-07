@@ -90,7 +90,7 @@ mod test {
     #[test]
     #[should_panic]
     fn panic_bg_iter() {
-        let v = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         let iter = (0..11usize).map(move |i| {
             if v[i] == 5 {
@@ -110,7 +110,7 @@ mod test {
 
     #[test]
     fn bg_iter() {
-        let v = vec![5; 10];
+        let v = [5; 10];
 
         let iter = (0..10usize).map(move |i| v[i]);
 
