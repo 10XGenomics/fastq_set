@@ -149,6 +149,20 @@ impl BclProcessorDir {
     pub fn contains_lane(&self, lane: usize) -> bool {
         self.lanes.contains(&lane)
     }
+
+    pub fn contains_index_with_lane(&self, index: &str, lane: usize) -> bool {
+        if let Some(seqs) = SAMPLE_INDEX_MAP.get(index) {
+            seqs.iter().any(|&seq| {
+                self.fastq_data
+                    .iter()
+                    .any(|(x, _)| x.si == seq && x.lane == lane)
+            })
+        } else {
+            self.fastq_data
+                .iter()
+                .any(|(x, _)| x.si == index && x.lane == lane)
+        }
+    }
 }
 
 const FQ_HELP: &str = r#"No input FASTQs were found for the requested parameters.
