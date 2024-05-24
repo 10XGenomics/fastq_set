@@ -589,6 +589,22 @@ mod test_read_pair_iter {
     }
 
     #[test]
+    fn test_single_ended_correct() {
+        let it = ReadPairIter::new(
+            Some("tests/read_pair_iter/good-RA-single-end.fastq"),
+            None,
+            None,
+            None,
+            true,
+        )
+        .unwrap();
+
+        let res: Result<Vec<ReadPair>, FastqError> = it.collect();
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().len(), 8);
+    }
+
+    #[test]
     fn test_mgi() {
         let it = ReadPairIter::new(
             Some("tests/read_pair_iter/slash1.fastq"),
