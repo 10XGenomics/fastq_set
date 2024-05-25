@@ -4,7 +4,7 @@
 
 use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
 use bytes::{BufMut, BytesMut};
-use fastq::{self, Record, RecordRefIter};
+use fastq::{self, OwnedRecord, Record, RecordRefIter};
 use rand::distributions::{Distribution, Uniform};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -322,6 +322,45 @@ impl ReadPairIter {
         })
     }
 
+    pub fn is_single_ended(&self) -> Result<bool, FastqError> {
+        // We only allow parsing single ended RA files
+        if !self.r1_interleaved {
+            Ok(false)
+        } else {
+            if let Some(p) = self.iters.paths[0].as_ref() {
+                let rdr = Self::open_fastq_confirm_fmt(p)?;
+                let parser = fastq::Parser::new(rdr);
+                let mut r1_iter = parser.ref_iter();
+                r1_iter
+                    .advance()
+                    .map_err(|e| FastqError::format(format!("Ran into trouble while getting first RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 0))?;
+                let first_read_header = r1_iter
+                    .get()
+                    .map(|x| {
+                        x.head()
+                            .to_owned()
+                            .split(|x| *x == b' ' || *x == b'/')
+                            .next()
+                            .map(|x| x.to_owned())
+                    })
+                    .flatten();
+                r1_iter.advance().map_err(|e| FastqError::format(format!("Ran into trouble while getting second RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 4))?;
+                let second_read_header = r1_iter
+                    .get()
+                    .map(|x| {
+                        x.head()
+                            .split(|x| *x == b' ' || *x == b'/')
+                            .next()
+                            .map(|x| x.to_owned())
+                    })
+                    .flatten();
+                Ok(first_read_header != second_read_header)
+            } else {
+                Ok(false)
+            }
+        }
+    }
+
     pub fn illumina_r1_trim_length(mut self, r1_length: Option<usize>) -> Self {
         self.iters.read_lengths[WhichRead::R1 as usize] = r1_length.unwrap_or(std::usize::MAX);
         self
@@ -352,6 +391,7 @@ impl ReadPairIter {
         if self.buffer.remaining_mut() < 512 {
             self.buffer = BytesMut::with_capacity(BUF_SIZE)
         }
+        let is_single_ended = self.is_single_ended()?;
 
         // need these local reference to avoid borrow checker problem
         let iters = self.iters.deref_mut();
@@ -375,7 +415,7 @@ impl ReadPairIter {
                     iter.advance()
                         .fastq_err(paths[idx].as_ref().unwrap(), rec_num[idx] * 4)?;
 
-                    {
+                    let current_read_record = {
                         let record = iter.get();
 
                         // Check for non-ACGTN characters
@@ -402,19 +442,39 @@ impl ReadPairIter {
                         }
 
                         rec_num[idx] += 1;
-                    }
+                        record
+                    };
 
                     // If R1 is interleaved, read another entry
                     // and store it as R2
                     if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
-                        iter.advance()
-                            .fastq_err(paths[idx].as_ref().unwrap(), (rec_num[idx] + 1) * 4)?;
-                        let record = iter.get();
+                        if !is_single_ended {
+                            iter.advance()
+                                .fastq_err(paths[idx].as_ref().unwrap(), (rec_num[idx] + 1) * 4)?;
+                            let record = iter.get();
 
-                        // Check for non-ACGTN characters
-                        if let Some(ref rec) = record {
-                            if !fastq::Record::validate_dnan(rec) {
-                                let msg = "FASTQ contains sequence base with character other than [ACGTN].".to_string();
+                            // Check for non-ACGTN characters
+                            if let Some(ref rec) = record {
+                                if !fastq::Record::validate_dnan(rec) {
+                                    let msg = "FASTQ contains sequence base with character other than [ACGTN].".to_string();
+                                    let e = FastqError::format(
+                                        msg,
+                                        paths[idx].as_ref().unwrap(),
+                                        rec_num[idx] * 4,
+                                    );
+                                    return Err(e);
+                                }
+
+                                if sample {
+                                    let which = WhichRead::read_types()[idx + 1];
+                                    let read_length = read_lengths[which as usize];
+                                    let tr = TrimRecord::new(rec, read_length);
+                                    rp.push_read(&tr, which)
+                                }
+                            } else {
+                                // We should only hit this if the FASTQ has an odd
+                                // number of records. Throw an error
+                                let msg = "Input FASTQ file was input as interleaved R1 and R2, but contains an odd number of records".to_string();
                                 let e = FastqError::format(
                                     msg,
                                     paths[idx].as_ref().unwrap(),
@@ -423,25 +483,20 @@ impl ReadPairIter {
                                 return Err(e);
                             }
 
-                            if sample {
-                                let which = WhichRead::read_types()[idx + 1];
-                                let read_length = read_lengths[which as usize];
-                                let tr = TrimRecord::new(rec, read_length);
-                                rp.push_read(&tr, which)
-                            }
+                            rec_num[idx] += 1;
                         } else {
-                            // We should only hit this if the FASTQ has an odd
-                            // number of records. Throw an error
-                            let msg = "Input FASTQ file was input as interleaved R1 and R2, but contains an odd number of records".to_string();
-                            let e = FastqError::format(
-                                msg,
-                                paths[idx].as_ref().unwrap(),
-                                rec_num[idx] * 4,
-                            );
-                            return Err(e);
+                            if let Some(current_read_record) = current_read_record {
+                                let read_length = read_lengths[WhichRead::R2 as usize];
+                                let fake_r2_read = OwnedRecord {
+                                    head: current_read_record.head().to_owned(),
+                                    sep: Some(current_read_record.seq().to_owned()),
+                                    seq: vec![],
+                                    qual: vec![],
+                                };
+                                let tr = TrimRecord::new(&fake_r2_read, read_length);
+                                rp.push_read(&tr, WhichRead::R2)
+                            }
                         }
-
-                        rec_num[idx] += 1;
                     }
                 }
             }
@@ -583,6 +638,12 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
+        assert_eq!(
+            false,
+            it.is_single_ended()
+                .expect("Ran into trouble checking if read was single ended")
+        );
+
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 8);
@@ -598,6 +659,12 @@ mod test_read_pair_iter {
             true,
         )
         .unwrap();
+
+        assert_eq!(
+            true,
+            it.is_single_ended()
+                .expect("Ran into trouble checking if read was single ended")
+        );
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
