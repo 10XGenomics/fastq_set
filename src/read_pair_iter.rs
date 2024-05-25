@@ -4,7 +4,7 @@
 
 use crate::read_pair::{MutReadPair, ReadPair, ReadPairStorage, ReadPart, WhichRead};
 use bytes::{BufMut, BytesMut};
-use fastq::{self, OwnedRecord, Record, RecordRefIter};
+use fastq::{self, Record, RecordRefIter};
 use rand::distributions::{Distribution, Uniform};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -406,7 +406,7 @@ impl ReadPairIter {
                     iter.advance()
                         .fastq_err(paths[idx].as_ref().unwrap(), rec_num[idx] * 4)?;
 
-                    let current_read_record = {
+                    {
                         let record = iter.get();
 
                         // Check for non-ACGTN characters
@@ -433,8 +433,7 @@ impl ReadPairIter {
                         }
 
                         rec_num[idx] += 1;
-                        record
-                    };
+                    }
 
                     // If R1 is interleaved, read another entry
                     // and store it as R2
@@ -475,16 +474,6 @@ impl ReadPairIter {
                             }
 
                             rec_num[idx] += 1;
-                        } else if let Some(current_read_record) = current_read_record {
-                            let read_length = read_lengths[WhichRead::R2 as usize];
-                            let fake_r2_read = OwnedRecord {
-                                head: current_read_record.head().to_owned(),
-                                sep: Some(current_read_record.seq().to_owned()),
-                                seq: vec![],
-                                qual: vec![],
-                            };
-                            let tr = TrimRecord::new(&fake_r2_read, read_length);
-                            rp.push_read(&tr, WhichRead::R2)
                         }
                     }
                 }
@@ -653,6 +642,7 @@ mod test_read_pair_iter {
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
+        println!("{:#?}", &res);
         assert_eq!(res.unwrap().len(), 8);
     }
 
