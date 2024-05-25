@@ -326,38 +326,29 @@ impl ReadPairIter {
         // We only allow parsing single ended RA files
         if !self.r1_interleaved {
             Ok(false)
-        } else {
-            if let Some(p) = self.iters.paths[0].as_ref() {
-                let rdr = Self::open_fastq_confirm_fmt(p)?;
-                let parser = fastq::Parser::new(rdr);
-                let mut r1_iter = parser.ref_iter();
-                r1_iter
+        } else if let Some(p) = self.iters.paths[0].as_ref() {
+            let rdr = Self::open_fastq_confirm_fmt(p)?;
+            let parser = fastq::Parser::new(rdr);
+            let mut r1_iter = parser.ref_iter();
+            r1_iter
                     .advance()
                     .map_err(|e| FastqError::format(format!("Ran into trouble while getting first RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 0))?;
-                let first_read_header = r1_iter
-                    .get()
-                    .map(|x| {
-                        x.head()
-                            .to_owned()
-                            .split(|x| *x == b' ' || *x == b'/')
-                            .next()
-                            .map(|x| x.to_owned())
-                    })
-                    .flatten();
-                r1_iter.advance().map_err(|e| FastqError::format(format!("Ran into trouble while getting second RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 4))?;
-                let second_read_header = r1_iter
-                    .get()
-                    .map(|x| {
-                        x.head()
-                            .split(|x| *x == b' ' || *x == b'/')
-                            .next()
-                            .map(|x| x.to_owned())
-                    })
-                    .flatten();
-                Ok(first_read_header != second_read_header)
-            } else {
-                Ok(false)
-            }
+            let first_read_header = r1_iter.get().and_then(|x| {
+                x.head()
+                    .split(|x| *x == b' ' || *x == b'/')
+                    .next()
+                    .map(std::borrow::ToOwned::to_owned)
+            });
+            r1_iter.advance().map_err(|e| FastqError::format(format!("Ran into trouble while getting second RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 4))?;
+            let second_read_header = r1_iter.get().and_then(|x| {
+                x.head()
+                    .split(|x| *x == b' ' || *x == b'/')
+                    .next()
+                    .map(std::borrow::ToOwned::to_owned)
+            });
+            Ok(first_read_header != second_read_header)
+        } else {
+            Ok(false)
         }
     }
 
@@ -484,18 +475,16 @@ impl ReadPairIter {
                             }
 
                             rec_num[idx] += 1;
-                        } else {
-                            if let Some(current_read_record) = current_read_record {
-                                let read_length = read_lengths[WhichRead::R2 as usize];
-                                let fake_r2_read = OwnedRecord {
-                                    head: current_read_record.head().to_owned(),
-                                    sep: Some(current_read_record.seq().to_owned()),
-                                    seq: vec![],
-                                    qual: vec![],
-                                };
-                                let tr = TrimRecord::new(&fake_r2_read, read_length);
-                                rp.push_read(&tr, WhichRead::R2)
-                            }
+                        } else if let Some(current_read_record) = current_read_record {
+                            let read_length = read_lengths[WhichRead::R2 as usize];
+                            let fake_r2_read = OwnedRecord {
+                                head: current_read_record.head().to_owned(),
+                                sep: Some(current_read_record.seq().to_owned()),
+                                seq: vec![],
+                                qual: vec![],
+                            };
+                            let tr = TrimRecord::new(&fake_r2_read, read_length);
+                            rp.push_read(&tr, WhichRead::R2)
                         }
                     }
                 }
@@ -638,11 +627,9 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        assert_eq!(
-            false,
-            it.is_single_ended()
-                .expect("Ran into trouble checking if read was single ended")
-        );
+        assert!(!it
+            .is_single_ended()
+            .expect("Ran into trouble checking if read was single ended"));
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
@@ -660,11 +647,9 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        assert_eq!(
-            true,
-            it.is_single_ended()
-                .expect("Ran into trouble checking if read was single ended")
-        );
+        assert!(it
+            .is_single_ended()
+            .expect("Ran into trouble checking if read was single ended"));
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
