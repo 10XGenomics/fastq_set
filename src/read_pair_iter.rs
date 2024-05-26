@@ -268,19 +268,14 @@ impl ReadPairIter {
         Self::open_fastq_from_file(p, file)
     }
 
-    /// Open a `ReadPairIter` given of FASTQ files.
-    /// For interleaved R1/R2 files, set `r2 = None`, and set
-    /// `r1_interleaved = true`.
-    pub fn new<P: AsRef<Path>>(
-        r1: Option<P>,
-        r2: Option<P>,
-        i1: Option<P>,
-        i2: Option<P>,
+    fn is_single_ended<P: AsRef<Path>>(
+        r1: &Option<P>,
+        r2: &Option<P>,
         r1_interleaved: bool,
-    ) -> Result<ReadPairIter, FastqError> {
-        let is_single_ended = if !r1_interleaved {
+    ) -> Result<bool, FastqError> {
+        if !r1_interleaved {
             // We only allow parsing single ended RA files
-            r2.is_none()
+            Ok(r2.is_none())
         } else if let Some(p) = r1.as_ref().map(P::as_ref) {
             let rdr = Self::open_fastq_confirm_fmt(p)?;
             let parser = fastq::Parser::new(rdr);
@@ -301,10 +296,23 @@ impl ReadPairIter {
                     .next()
                     .map(std::borrow::ToOwned::to_owned)
             });
-            first_read_header != second_read_header
+            Ok(first_read_header != second_read_header)
         } else {
-            false
-        };
+            Ok(false)
+        }
+    }
+
+    /// Open a `ReadPairIter` given of FASTQ files.
+    /// For interleaved R1/R2 files, set `r2 = None`, and set
+    /// `r1_interleaved = true`.
+    pub fn new<P: AsRef<Path>>(
+        r1: Option<P>,
+        r2: Option<P>,
+        i1: Option<P>,
+        i2: Option<P>,
+        r1_interleaved: bool,
+    ) -> Result<ReadPairIter, FastqError> {
+        let is_single_ended = Self::is_single_ended(&r1, &r2, r1_interleaved)?;
         Self::_new(
             [
                 r1.as_ref().map(P::as_ref),
@@ -479,7 +487,7 @@ impl ReadPairIter {
                             let read_length = read_lengths[WhichRead::R2 as usize];
                             let fake_r2_read = OwnedRecord {
                                 head: current_read_record.head().to_owned(),
-                                sep: Some(current_read_record.seq().to_owned()),
+                                sep: None,
                                 seq: vec![],
                                 qual: vec![],
                             };
