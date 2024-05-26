@@ -381,6 +381,10 @@ impl ReadPairIter {
         self
     }
 
+    pub fn get_is_single_ended(&self) -> bool {
+        self.is_single_ended
+    }
+
     pub fn subsample_rate(mut self, subsample_rate: f64) -> Self {
         self.subsample_rate = subsample_rate;
         self
@@ -635,7 +639,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        assert!(!it.is_single_ended);
+        assert!(!it.get_is_single_ended());
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
@@ -653,7 +657,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        assert!(it.is_single_ended);
+        assert!(it.get_is_single_ended());
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
