@@ -325,7 +325,7 @@ impl ReadPairIter {
     pub fn is_single_ended(&self) -> Result<bool, FastqError> {
         // We only allow parsing single ended RA files
         if !self.r1_interleaved {
-            Ok(false)
+            Ok(self.r2.is_none())
         } else if let Some(p) = self.iters.paths[0].as_ref() {
             let rdr = Self::open_fastq_confirm_fmt(p)?;
             let parser = fastq::Parser::new(rdr);
