@@ -193,6 +193,7 @@ pub struct ReadPairIter {
     subsample_rate: f64,
     storage: ReadPairStorage,
     iters: Box<ReadPairIterSet>,
+    is_single_ended: bool,
 }
 
 impl ReadPairIter {
@@ -277,6 +278,33 @@ impl ReadPairIter {
         i2: Option<P>,
         r1_interleaved: bool,
     ) -> Result<ReadPairIter, FastqError> {
+        let is_single_ended = if !r1_interleaved {
+            // We only allow parsing single ended RA files
+            r2.is_none()
+        } else if let Some(p) = r1.as_ref().map(P::as_ref) {
+            let rdr = Self::open_fastq_confirm_fmt(p)?;
+            let parser = fastq::Parser::new(rdr);
+            let mut r1_iter = parser.ref_iter();
+            r1_iter
+                    .advance()
+                    .map_err(|e| FastqError::format(format!("Ran into trouble while getting first RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 0))?;
+            let first_read_header = r1_iter.get().and_then(|x| {
+                x.head()
+                    .split(|x| *x == b' ' || *x == b'/')
+                    .next()
+                    .map(std::borrow::ToOwned::to_owned)
+            });
+            r1_iter.advance().map_err(|e| FastqError::format(format!("Ran into trouble while getting second RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 4))?;
+            let second_read_header = r1_iter.get().and_then(|x| {
+                x.head()
+                    .split(|x| *x == b' ' || *x == b'/')
+                    .next()
+                    .map(std::borrow::ToOwned::to_owned)
+            });
+            first_read_header != second_read_header
+        } else {
+            false
+        };
         Self::_new(
             [
                 r1.as_ref().map(P::as_ref),
@@ -285,12 +313,14 @@ impl ReadPairIter {
                 i2.as_ref().map(P::as_ref),
             ],
             r1_interleaved,
+            is_single_ended,
         )
     }
 
     fn _new(
         in_paths: [Option<&Path>; 4],
         r1_interleaved: bool,
+        is_single_ended: bool,
     ) -> Result<ReadPairIter, FastqError> {
         let mut iters = [None, None, None, None];
         let mut paths = [None, None, None, None];
@@ -319,37 +349,8 @@ impl ReadPairIter {
                 records_read: [0; 4],
                 read_lengths: [std::usize::MAX; 4],
             }),
+            is_single_ended,
         })
-    }
-
-    pub fn is_single_ended(&self) -> Result<bool, FastqError> {
-        // We only allow parsing single ended RA files
-        if !self.r1_interleaved {
-            Ok(self.r2.is_none())
-        } else if let Some(p) = self.iters.paths[0].as_ref() {
-            let rdr = Self::open_fastq_confirm_fmt(p)?;
-            let parser = fastq::Parser::new(rdr);
-            let mut r1_iter = parser.ref_iter();
-            r1_iter
-                    .advance()
-                    .map_err(|e| FastqError::format(format!("Ran into trouble while getting first RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 0))?;
-            let first_read_header = r1_iter.get().and_then(|x| {
-                x.head()
-                    .split(|x| *x == b' ' || *x == b'/')
-                    .next()
-                    .map(std::borrow::ToOwned::to_owned)
-            });
-            r1_iter.advance().map_err(|e| FastqError::format(format!("Ran into trouble while getting second RA read to check if fastq was single ended.\n {:?}", e.to_string()), p, 4))?;
-            let second_read_header = r1_iter.get().and_then(|x| {
-                x.head()
-                    .split(|x| *x == b' ' || *x == b'/')
-                    .next()
-                    .map(std::borrow::ToOwned::to_owned)
-            });
-            Ok(first_read_header != second_read_header)
-        } else {
-            Ok(false)
-        }
     }
 
     pub fn illumina_r1_trim_length(mut self, r1_length: Option<usize>) -> Self {
@@ -382,7 +383,6 @@ impl ReadPairIter {
         if self.buffer.remaining_mut() < 512 {
             self.buffer = BytesMut::with_capacity(BUF_SIZE)
         }
-        let is_single_ended = self.is_single_ended()?;
 
         // need these local reference to avoid borrow checker problem
         let iters = self.iters.deref_mut();
@@ -438,7 +438,7 @@ impl ReadPairIter {
                     // If R1 is interleaved, read another entry
                     // and store it as R2
                     if idx == 0 && self.r1_interleaved && !iter_ended[idx] {
-                        if !is_single_ended {
+                        if !self.is_single_ended {
                             iter.advance()
                                 .fastq_err(paths[idx].as_ref().unwrap(), (rec_num[idx] + 1) * 4)?;
                             let record = iter.get();
@@ -616,9 +616,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        assert!(!it
-            .is_single_ended()
-            .expect("Ran into trouble checking if read was single ended"));
+        assert!(!it.is_single_ended);
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
@@ -636,9 +634,7 @@ mod test_read_pair_iter {
         )
         .unwrap();
 
-        assert!(it
-            .is_single_ended()
-            .expect("Ran into trouble checking if read was single ended"));
+        assert!(it.is_single_ended);
 
         let res: Result<Vec<ReadPair>, FastqError> = it.collect();
         assert!(res.is_ok());
