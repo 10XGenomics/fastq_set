@@ -37,7 +37,7 @@ impl ReadOffset {
 /// 'primary' reads, I1 and I2 are the two 'index' samples. I1 is
 /// often referred to as the 'sample index read', or I7.  I2 contains
 /// the 10x barcode sequence in some 10x assays.
-#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum WhichRead {
     R1 = 0,
     R2 = 1,

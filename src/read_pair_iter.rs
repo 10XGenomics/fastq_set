@@ -10,6 +10,7 @@ use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, BufReader, ErrorKind, Read, Seek, Write};
+use std::iter::zip;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -24,10 +25,10 @@ pub enum FastqError {
         file: PathBuf,
     },
 
-    #[error("Error opening FASTQ file '{}'", file.display())]
+    #[error("TENX1200001: Error opening FASTQ file: '{}'", file.display())]
     Open { file: PathBuf, source: io::Error },
 
-    #[error("IO error in FASTQ file '{}', line: {line}", file.display())]
+    #[error("TENX1200002: IO error in FASTQ file: '{}', line: {line}", file.display())]
     Io {
         file: PathBuf,
         line: usize,
@@ -47,13 +48,13 @@ impl FastqError {
 }
 
 trait FileIoError<T> {
-    fn open_err(self, path: impl Into<PathBuf>) -> Result<T, FastqError>;
-    fn fastq_err(self, path: impl Into<PathBuf>, line: usize) -> Result<T, FastqError>;
+    fn open_err(self, path: &Path) -> Result<T, FastqError>;
+    fn fastq_err(self, path: &Path, line: usize) -> Result<T, FastqError>;
 }
 
 impl<T> FileIoError<T> for Result<T, std::io::Error> {
     #[cold]
-    fn open_err(self, path: impl Into<PathBuf>) -> Result<T, FastqError> {
+    fn open_err(self, path: &Path) -> Result<T, FastqError> {
         match self {
             Ok(v) => Ok(v),
             Err(e) => {
@@ -67,20 +68,20 @@ impl<T> FileIoError<T> for Result<T, std::io::Error> {
     }
 
     #[cold]
-    fn fastq_err(self, path: impl Into<PathBuf>, line: usize) -> Result<T, FastqError> {
+    fn fastq_err(self, path: &Path, line: usize) -> Result<T, FastqError> {
         match self {
             Ok(v) => Ok(v),
             Err(e) => {
                 match e.kind() {
                     // convert InvalidData into a FastqFormat error
                     ErrorKind::InvalidData => Err(FastqError::FastqFormat {
-                        message: e.to_string(),
+                        message: format!("TENX1200003: {e}"),
                         line,
-                        file: path.into(),
+                        file: PathBuf::from(path),
                     }),
                     // convert everything else to the Io case
                     _ => Err(FastqError::Io {
-                        file: path.into(),
+                        file: PathBuf::from(path),
                         line,
                         source: e,
                     }),
@@ -501,34 +502,41 @@ impl ReadPairIter {
                 }
             }
 
-            // check that headers of all reads match
-            let mut header_slices = Vec::with_capacity(4);
+            // Check that headers of all reads match.
+            let mut headers = zip(
+                [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2],
+                rec_num.iter().copied(),
+            )
+            .filter_map(|(which_read, this_rec_num)| {
+                rp.get(which_read, ReadPart::Header).map(|header| {
+                    (
+                        which_read,
+                        this_rec_num,
+                        header.split(|&x| matches!(x, b' ' | b'/')).next(),
+                    )
+                })
+            });
 
-            for (i, w) in [WhichRead::R1, WhichRead::R2, WhichRead::I1, WhichRead::I2]
-                .iter()
-                .enumerate()
-            {
-                if let Some(header) = rp.get(*w, ReadPart::Header) {
-                    let prefix = header.split(|x| *x == b' ' || *x == b'/').next();
-                    header_slices.push((i, prefix));
-                }
-            }
-
-            if !header_slices.is_empty() {
-                for i in 1..header_slices.len() {
-                    if header_slices[i].1 != header_slices[0].1 {
-                        let msg = format!("FASTQ header mismatch detected at line {} of input files {:?} and {:?}",
-                                rec_num[0] * 4,
-                                paths[header_slices[0].0].as_ref().unwrap(),
-                                paths[header_slices[i].0].as_ref().unwrap()
-                            );
-
-                        let e = FastqError::format(
-                            msg,
-                            paths[header_slices[0].0].as_ref().unwrap(),
-                            rec_num[i] * 4,
-                        );
-                        return Err(e);
+            if let Some((first_which_read, first_rec_num, first_header)) = headers.next() {
+                for (this_which_read, this_rec_num, this_header) in headers {
+                    if first_header != this_header {
+                        let first_path = paths[first_which_read as usize].as_ref().unwrap();
+                        let this_path = paths[this_which_read as usize].as_ref().unwrap();
+                        return Err(FastqError::format(
+                            format!(
+                                "TENX1200004: FASTQ headers do not match at line {} of input files \
+                                 '{}' and '{}': '{}' and '{}'",
+                                4 * first_rec_num,
+                                first_path.display(),
+                                this_path.display(),
+                                first_header.map_or(String::new(), |s| String::from_utf8_lossy(s)
+                                    .to_string()),
+                                this_header.map_or(String::new(), |s| String::from_utf8_lossy(s)
+                                    .to_string()),
+                            ),
+                            first_path,
+                            4 * this_rec_num,
+                        ));
                     }
                 }
             }
