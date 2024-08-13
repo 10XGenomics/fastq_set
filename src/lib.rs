@@ -105,7 +105,7 @@ pub trait FastqProcessor {
     fn iter_background_with_storage(
         &self,
         read_ahead: usize,
-        storage: ReadPairStorage,
+        storage: read_pair::ReadPairStorage,
     ) -> Result<FastqProcessorIter<'_, Self>, Error>
     where
         Self: Sized,
