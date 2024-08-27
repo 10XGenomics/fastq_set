@@ -102,6 +102,17 @@ pub trait FastqProcessor {
         FastqProcessorIter::new_background(self, read_ahead)
     }
 
+    fn iter_background_with_storage(
+        &self,
+        read_ahead: usize,
+        storage: read_pair::ReadPairStorage,
+    ) -> Result<FastqProcessorIter<'_, Self>, Error>
+    where
+        Self: Sized,
+    {
+        FastqProcessorIter::new_background_with_storage(self, read_ahead, storage)
+    }
+
     fn iter_with_storage(
         &self,
         storage: read_pair::ReadPairStorage,
@@ -174,15 +185,26 @@ where
         })
     }
 
+    pub fn new_background_with_storage(
+        processor: &'a Processor,
+        readahead: usize,
+        storage: read_pair::ReadPairStorage,
+    ) -> Result<Self, Error> {
+        let iter = Self::make_read_pair_iter(processor)?.storage(storage);
+
+        let bg_iter = background_iterator::BackgroundIterator::new(iter, readahead);
+        let read_pair_iter = AnyReadPairIter::Background(bg_iter);
+        Ok(FastqProcessorIter {
+            read_pair_iter,
+            processor,
+        })
+    }
+
     pub fn with_storage(
         processor: &'a Processor,
         storage: read_pair::ReadPairStorage,
     ) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
-            .subsample_rate(processor.read_subsample_rate())
-            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
-            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
-            .storage(storage);
+        let read_pair_iter = Self::make_read_pair_iter(processor)?.storage(storage);
 
         let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
         Ok(FastqProcessorIter {
@@ -192,11 +214,7 @@ where
     }
 
     pub fn with_seed(processor: &'a Processor, seed: u64) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
-            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
-            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
-            .subsample_rate(processor.read_subsample_rate())
-            .seed(seed);
+        let read_pair_iter = Self::make_read_pair_iter(processor)?.seed(seed);
 
         let read_pair_iter = AnyReadPairIter::Direct(read_pair_iter);
         Ok(FastqProcessorIter {
@@ -210,10 +228,7 @@ where
         seed: u64,
         storage: read_pair::ReadPairStorage,
     ) -> Result<Self, Error> {
-        let read_pair_iter = ReadPairIter::from_fastq_files(&processor.fastq_files())?
-            .illumina_r1_trim_length(processor.illumina_r1_trim_length())
-            .illumina_r2_trim_length(processor.illumina_r2_trim_length())
-            .subsample_rate(processor.read_subsample_rate())
+        let read_pair_iter = Self::make_read_pair_iter(processor)?
             .seed(seed)
             .storage(storage);
 
