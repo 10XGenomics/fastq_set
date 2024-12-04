@@ -1,43 +1,15 @@
 [package]
 name = "fastq_set"
-version = "0.5.3"
-authors = [
-    "Patrick Marks <patrick@10xgenomics.com>",
-    "Sreenath Krishnan <sreenath.krishnan@10xgenomics.com>",
-]
-edition = "2021"
-license = "MIT"
+authors = ["10x Genomics"]
 description = "Utilities for reading groups of FASTQ files from different sequencing reads of the same library molecule. Encodes filename conventions used by `bcl2fastq` from Illumina"
-repository = "https://github.com/10XGenomics/fastq_set"
-keywords = ["bioinformatics", "DNA", "sequencing"]
-readme = "README.md"
+edition = "2021"
 include = ["src/**/*", "LICENSE.txt", "README.md"]
-
+keywords = ["bioinformatics", "DNA", "sequencing"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/10XGenomics/fastq_set"
 resolver = "2"
-
-[dependencies]
-flate2 = { version = "^1.0", features = ["zlib"], default-features = false }
-serde_derive = "*"
-serde = "*"
-bytes = { version = ">=0.5, <2", features = ["serde"] }
-anyhow = { version = "1", features = ["backtrace"] }
-regex = { version = "1", default-features = false, features = ["std", "perf"] }
-lazy_static = "1"
-rand = ">=0.7, <2"
-rand_xorshift = ">=0.2"
-itertools = ">=0.10,<0.13"
-lz4 = "*"
-fastq = "^0.6"
-bio = ">=0.33.0, <3"
-thiserror = "1"
-
-[dev-dependencies]
-file_diff = "1.0"
-criterion = "0.5"
-bincode = "*"
-libc = ">=0.2"
-pretty_assertions = "1"
-serde_json = "*"
+version = "0.5.3"
 
 [[bench]]
 name = "benchmarks"
@@ -47,7 +19,27 @@ harness = false
 name = "array_bench"
 harness = false
 
-[dev-dependencies.proptest]
-version = "1"
-default-features = false
-features = ["std"]
+[dependencies]
+anyhow = { version = "1", features = ["backtrace"] }
+bio = "2"
+bytes = { version = "1", features = ["serde"] }
+fastq = "0.6"
+flate2 = { version = "1", features = ["zlib"], default-features = false }
+itertools = ">=0.10,<0.13"
+lazy_static = "1"
+lz4 = "1"
+rand = ">=0.7,<1"
+rand_xorshift = ">=0.2,<1"
+regex = { version = "1", default-features = false, features = ["std", "perf"] }
+serde = "1"
+serde_derive = "1"
+thiserror = "1"
+
+[dev-dependencies]
+bincode = "1"
+criterion = "0.5"
+file_diff = "1.0"
+libc = "0.2"
+pretty_assertions = "1"
+proptest = { version = "1", default-features = false, features = ["std"] }
+serde_json = "1"
