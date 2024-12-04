@@ -25,7 +25,7 @@ regex = { version = "1", default-features = false, features = ["std", "perf"] }
 lazy_static = "1"
 rand = ">=0.7, <2"
 rand_xorshift = ">=0.2"
-itertools = ">=0.8"
+itertools = ">=0.10,<0.13"
 lz4 = "*"
 fastq = "^0.6"
 bio = ">=0.33.0, <3"
