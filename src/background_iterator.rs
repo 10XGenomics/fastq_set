@@ -93,9 +93,7 @@ mod test {
         let v = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         let iter = (0..11usize).map(move |i| {
-            if v[i] == 5 {
-                panic!("simulated panic");
-            }
+            assert!(v[i] != 5, "simulated panic");
             v[i]
         });
 

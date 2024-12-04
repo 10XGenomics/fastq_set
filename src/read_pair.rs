@@ -4,7 +4,7 @@
 //! including the primary 'R1' and 'R2' and index 'I1' and 'I2' reads.
 
 use crate::WhichEnd;
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use bytes::{Bytes, BytesMut};
 use fastq::{OwnedRecord, Record};
 use serde::{Deserialize, Serialize};
@@ -186,9 +186,9 @@ impl RpRange {
     /// # Args
     /// * `read` - Specify `WhichRead`
     /// * `offset` - Start of the interval. Must be less than 2^15 (=32,768)
-    /// * `len` - Optional length that determines the end of the interval. A
-    /// value `None` indicates everything from `offset` until the end of the
-    /// `read`. Must be less than 2^15 (=32,768)
+    /// * `len` - Optional length that determines the end of the interval.
+    ///    A value `None` indicates everything from `offset` until the end of the `read`.
+    ///    Must be less than 2^15 (=32,768)
     ///
     /// # Panics
     /// * If `offset` or `len` is >= `2^15`
@@ -205,11 +205,11 @@ impl RpRange {
     ///
     /// # Tests
     /// * `test_rprange_invalid_offset()` - Test that this function panics with
-    /// an offset that is too large
+    ///   an offset that is too large
     /// * `test_rprange_invalid_len()` - Test that this function panics with
-    /// a length that is too large
+    ///   a length that is too large
     /// * `prop_test_rprange_representation()` - Test that arbitrary construction of RpRange
-    /// stores the values correctly.
+    ///   stores the values correctly.
     pub fn new(read: WhichRead, offset: usize, len: Option<usize>) -> RpRange {
         assert!(offset < (1 << 15));
         let len_bits = match len {
@@ -296,7 +296,7 @@ impl RpRange {
     ///
     /// # Tests
     /// * `test_rprange_intersect_panic()` - Make sure that this function panics
-    /// if the reads do not match
+    ///   if the reads do not match
     /// * `test_rprange_intersect_both_open()` - Test a case when both lengths are not set
     /// * `test_rprange_intersect_self_open()` - Test a case when only self length is set
     /// * `test_rprange_intersect_other_open()` - Test a case when only other length is set
@@ -363,7 +363,7 @@ impl RpRange {
     /// * `test_shrink_invalid_range_3()`: Test for panic if shrink range start > end
     /// * `test_rprange_trivial_shrink()`: Test shrink to an empty range.
     /// * `prop_test_rprange_shrink()`: Test shrink for arbitrary values of
-    /// `RpRange` and valid `shrink_range`
+    ///   `RpRange` and valid `shrink_range`
     pub fn shrink(&mut self, shrink_range: &ops::Range<usize>) {
         assert!(
             shrink_range.start <= shrink_range.end,
@@ -496,14 +496,12 @@ impl<'a> MutReadPair<'a> {
 
     pub fn new<R: Record>(buffer: &'a mut BytesMut, rr: &[Option<R>; 4]) -> MutReadPair<'a> {
         let mut rp = MutReadPair::empty(buffer);
-
-        for (_rec, which) in rr.iter().zip(WhichRead::read_types().iter()) {
-            if let Some(ref rec) = *_rec {
-                rp.push_read(rec, *which)
+        for (rec, which) in rr.iter().zip(WhichRead::read_types()) {
+            if let Some(rec) = rec {
+                rp.push_read(rec, which);
             }
             // default ReadOffsets is exists = false
         }
-
         rp
     }
 
@@ -600,32 +598,26 @@ impl ReadPair {
 
     pub fn check_range(&self, range: &RpRange, region_name: &str) -> Result<()> {
         let req_len = range.offset() + range.len().unwrap_or(0);
-
-        match self.get(range.read(), ReadPart::Seq) {
-            Some(read) => {
-                if read.len() < req_len {
-                    bail!(
-                        "{} is expected in positions {}-{} in Read {}, but read is {} bp long.",
-                        region_name,
-                        range.offset(),
-                        req_len,
-                        range.read(),
-                        read.len()
-                    );
-                } else {
-                    Ok(())
-                }
-            }
-            None => bail!(
+        let Some(read) = self.get(range.read(), ReadPart::Seq) else {
+            bail!(
                 "{region_name} is missing from FASTQ. Read {} is not present.",
                 range.read()
-            ),
-        }
+            );
+        };
+        ensure!(
+            read.len() >= req_len,
+            "{region_name} is expected in positions {}-{} in Read {}, but read is {} bp long.",
+            range.offset(),
+            req_len,
+            range.read(),
+            read.len()
+        );
+        Ok(())
     }
 
     pub fn to_owned_record(&self) -> HashMap<WhichRead, OwnedRecord> {
         let mut result = HashMap::new();
-        for &which in WhichRead::read_types().iter() {
+        for &which in &WhichRead::read_types() {
             if self.offsets[which as usize].exists {
                 let w = self.offsets[which as usize];
                 let rec = OwnedRecord {

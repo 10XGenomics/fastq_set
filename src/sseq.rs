@@ -2,9 +2,8 @@
 
 //! Sized, stack-allocated container for a short DNA sequence.
 
-use itertools::Itertools;
-
 use crate::array::{ArrayContent, ByteArray};
+use itertools::Itertools;
 use std::iter::Iterator;
 use std::str;
 
@@ -21,9 +20,10 @@ impl ArrayContent for SSeqContents {
     /// that is not an ACGTN.
     fn validate_bytes(seq: &[u8]) {
         for (i, &s) in seq.iter().enumerate() {
-            if !UPPER_ACGTN.iter().any(|&c| c == s) {
-                panic!("Non ACGTN character {s} at position {i}");
-            };
+            assert!(
+                UPPER_ACGTN.iter().any(|&c| c == s),
+                "Non ACGTN character {s} at position {i}"
+            );
         }
     }
     fn expected_contents() -> &'static str {
@@ -156,7 +156,7 @@ pub struct SSeqChars(SSeqGen<5>);
 
 impl SSeqChars {
     pub fn new(chars: &[u8]) -> Self {
-        SSeqChars(SSeqGen::from_iter(chars.iter().unique()))
+        SSeqChars(chars.iter().unique().collect())
     }
     pub fn actg() -> Self {
         SSeqChars(SSeqGen::from_bytes_unchecked(b"ACGT"))
@@ -378,7 +378,7 @@ mod sseq_test {
             ref seq_str in "[ACGTN]{0, 23}",
         ) {
             let seq = SSeq::from_bytes(seq_str.as_bytes());
-            assert_eq!(seq.len(), seq.into_iter().count())
+            assert_eq!(seq.len(), seq.into_iter().count());
         }
     }
 

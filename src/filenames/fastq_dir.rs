@@ -37,7 +37,7 @@ impl Bcl2FastqDir {
             });
         }
 
-        let is_lane_split = match fastq_data
+        let Ok(is_lane_split) = fastq_data
             .iter()
             .map(|(g, _)| match g.lane_mode {
                 LaneMode::NoLaneSplitting => false,
@@ -45,13 +45,12 @@ impl Bcl2FastqDir {
             })
             .dedup()
             .exactly_one()
-        {
-            Ok(val) => val,
-            Err(_) => bail!(
+        else {
+            bail!(
                 "Some files in the fastq path {} are split by lane, while some are not. \
                  This is not supported.",
                 fastq_path.display()
-            ),
+            );
         };
 
         let samples = fastq_data.iter().map(|(g, _)| g.sample.clone()).collect();
@@ -230,7 +229,7 @@ impl FastqChecker {
 
         let lane_spec = match lanes {
             None => LaneSpec::Any,
-            Some(ref l) => LaneSpec::Lanes(l.iter().cloned().collect()),
+            Some(l) => LaneSpec::Lanes(l.iter().copied().collect()),
         };
 
         if bcl_dir
@@ -243,7 +242,7 @@ impl FastqChecker {
 
         Ok(match sample_name_spec {
             SampleNameSpec::Names(names) => names,
-            _ => unreachable!(),
+            SampleNameSpec::Any => unreachable!(),
         })
     }
 

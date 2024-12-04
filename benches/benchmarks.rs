@@ -115,12 +115,12 @@ fn run_fastq_lz4_benchmark(c: &mut Criterion) {
     c.bench_function("bench-lz4-wc", |b| {
         b.iter(
             || assert_eq!(lz4_count(INTERLEAVED_LZ4_FASTQ), 16000), // 16000 lines
-        )
+        );
     });
     c.bench_function("bench-lz4-read-pair-iter-count", |b| {
         b.iter(
             || assert_eq!(read_pair_count(INTERLEAVED_LZ4_FASTQ), 2000), // 2000 read pairs
-        )
+        );
     });
     // let chemistry: ChemistryDef =
     //     serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
@@ -141,12 +141,12 @@ fn run_fastq_gz_benchmark(c: &mut Criterion) {
     c.bench_function("bench-gz-wc", |b| {
         b.iter(
             || assert_eq!(gz_count(INTERLEAVED_GZ_FASTQ), 16000), // 16000 lines
-        )
+        );
     });
     c.bench_function("bench-gz-read-pair-iter-count", |b| {
         b.iter(
             || assert_eq!(read_pair_count(INTERLEAVED_GZ_FASTQ), 2000), // 2000 read pairs
-        )
+        );
     });
     // let chemistry: ChemistryDef =
     //     serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
@@ -167,12 +167,12 @@ fn run_fastq_benchmark(c: &mut Criterion) {
     c.bench_function("bench-fastq-wc", |b| {
         b.iter(
             || assert_eq!(simple_count(INTERLEAVED_FASTQ), 16000), // 16000 lines
-        )
+        );
     });
     c.bench_function("bench-fastq-read-pair-iter-count", |b| {
         b.iter(
             || assert_eq!(read_pair_count(INTERLEAVED_FASTQ), 2000), // 2000 read pairs
-        )
+        );
     });
     // let chemistry: ChemistryDef =
     //     serde_json::from_reader(File::open("tests/rna_read/sc_vdj_chemistry.json").unwrap())
@@ -222,7 +222,7 @@ fn sseq_serde_bincode(c: &mut Criterion) {
             let mut b = Vec::new();
             bincode::serialize_into(&mut b, &sseqs).unwrap();
             assert!(!b.is_empty());
-        })
+        });
     });
 }
 

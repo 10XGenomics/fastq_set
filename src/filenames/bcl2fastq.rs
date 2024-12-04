@@ -495,7 +495,7 @@ mod tests_from_tenkit {
     #[test]
     fn test_sample_name_verification() -> Result<()> {
         let path = "tests/filenames/tenkit91";
-        for &s in ["test_sample", "test_sample_suffix"].iter() {
+        for &s in &["test_sample", "test_sample_suffix"] {
             let query = Bcl2FastqDef {
                 fastq_path: path.to_string(),
                 sample_name_spec: s.into(),

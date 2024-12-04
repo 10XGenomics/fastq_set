@@ -75,7 +75,7 @@ impl FindFastqs for BclProcessorFastqDef {
             if self.sample_index_spec.matches(&bcl_proc.si)
                 && self.lane_spec.contains(bcl_proc.lane_mode())
             {
-                res.push(fastqs)
+                res.push(fastqs);
             }
         }
 
