@@ -29,7 +29,7 @@ itertools = ">=0.8"
 lz4 = "*"
 fastq = "^0.6"
 bio = ">=0.33.0, <3"
-thiserror = "1"
+thiserror = "2"
 
 [dev-dependencies]
 file_diff = "1.0"
