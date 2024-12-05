@@ -36,7 +36,7 @@ impl InputFastqs {
             .ok_or_else(|| anyhow!("No Read1 in FASTQ data"))?;
 
         let header = std::str::from_utf8(header)?;
-        let header_prefix = header.split(|x: char| x == ' ' || x == '/').next();
+        let header_prefix = header.split([' ', '/']).next();
         if header_prefix.is_none() {
             return Ok(None);
         }

@@ -1,11 +1,9 @@
 //! Trim adapters from reads using a combination of
 //! k-mer matches, sparse alignment and banded alignment.
-//! Inspired by the [cutadapt](https://cutadapt.readthedocs.io/)
-//! tool.
+//! Inspired by the [cutadapt](https://cutadapt.readthedocs.io/) tool.
 //!
 //! # Features/Limitations
-//! * Supports regular, anchored and non-internal, 3' and 5'
-//! adapter trimming
+//! * Supports regular, anchored and non-internal, 3' and 5' adapter trimming
 //! * Linked adapters are not supported as of now
 //! * Allowed error rate for the adapter is 10%
 //!
@@ -23,13 +21,10 @@ use bio::alignment::pairwise::{self, MatchParams, Scoring};
 use bio::alignment::sparse;
 use bio::alignment::sparse::HashMapFx;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
-use std::cmp::{max, min};
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::cmp::{max, min, Ordering};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::BuildHasher;
-use std::i32;
 use std::ops::Range;
 
 type Aligner = pairwise::banded::Aligner<MatchParams>;
@@ -122,7 +117,7 @@ pub enum AdapterLoc {
 /// * `end`: whether it's a `FivePrime` adapter or a `ThreePrime` adapter
 /// * `location`: Specify the location of the adapter (See [`AdapterLoc`](enum.AdapterLoc.html))
 /// * `seq`: The sequence of the adapter as a `String`. One could use a `Vec<u8>` here, but
-/// chose a String for the ease of auto (de)serialization from a json file.
+///   choose a String for the ease of auto (de)serialization from a json file.
 ///
 /// # Example
 /// The example below shows how you can create an `Adapter` from a JSON string
@@ -270,7 +265,7 @@ impl<'a> AdapterTrimmer<'a> {
     ///
     /// Ouput:
     /// * `Option<TrimResult>`: `None` if the adapter is not found,
-    /// otherwise `Some(TrimResult)` (See [`TrimResult`](struct.TrimResult.html))
+    ///   otherwise `Some(TrimResult)` (See [`TrimResult`](struct.TrimResult.html))
     pub fn find(&mut self, read: &[u8]) -> Option<TrimResult> {
         use bio::alignment::AlignmentOperation::{Del, Ins, Match, Subst};
 
@@ -642,7 +637,7 @@ fn compute_path(
     {
         let mut max_l_score = pairwise::MIN_SCORE;
         let mut max_r_score = pairwise::MIN_SCORE;
-        for &this_match in matches.iter() {
+        for &this_match in matches {
             max_l_score = max(max_l_score, l_score(this_match));
             max_r_score = max(max_r_score, r_score(this_match));
         }

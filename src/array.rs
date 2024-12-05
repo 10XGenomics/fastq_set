@@ -106,12 +106,11 @@ where
             *l = *r.borrow();
             len += 1;
         }
-        if src.next().is_some() {
-            panic!(
-                "Error: Input iter exceeds capacity of {} bytes.",
-                bytes.len()
-            );
-        }
+        assert!(
+            src.next().is_none(),
+            "Error: Input iter exceeds capacity of {} bytes.",
+            bytes.len()
+        );
 
         ByteArray {
             length: len,
@@ -200,9 +199,7 @@ where
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        if index >= self.length as usize {
-            panic!("index out of bounds")
-        }
+        assert!(index < self.length as usize, "index out of bounds");
 
         &self.bytes[index]
     }
@@ -213,9 +210,7 @@ where
     T: ArrayContent,
 {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        if index >= self.length as usize {
-            panic!("index out of bounds")
-        }
+        assert!(index < self.length as usize, "index out of bounds");
         &mut self.bytes[index]
     }
 }

@@ -10,7 +10,6 @@ use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, BufReader, ErrorKind, Read, Seek, Write};
-use std::ops::DerefMut;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -355,19 +354,19 @@ impl ReadPairIter {
                 paths,
                 iters,
                 records_read: [0; 4],
-                read_lengths: [std::usize::MAX; 4],
+                read_lengths: [usize::MAX; 4],
             }),
             is_single_ended,
         })
     }
 
     pub fn illumina_r1_trim_length(mut self, r1_length: Option<usize>) -> Self {
-        self.iters.read_lengths[WhichRead::R1 as usize] = r1_length.unwrap_or(std::usize::MAX);
+        self.iters.read_lengths[WhichRead::R1 as usize] = r1_length.unwrap_or(usize::MAX);
         self
     }
 
     pub fn illumina_r2_trim_length(mut self, r2_length: Option<usize>) -> Self {
-        self.iters.read_lengths[WhichRead::R2 as usize] = r2_length.unwrap_or(std::usize::MAX);
+        self.iters.read_lengths[WhichRead::R2 as usize] = r2_length.unwrap_or(usize::MAX);
         self
     }
 
@@ -393,11 +392,11 @@ impl ReadPairIter {
     fn get_next(&mut self) -> Result<Option<ReadPair>, FastqError> {
         // Recycle the buffer if it's almost full.
         if self.buffer.remaining_mut() < 512 {
-            self.buffer = BytesMut::with_capacity(BUF_SIZE)
+            self.buffer = BytesMut::with_capacity(BUF_SIZE);
         }
 
         // need these local reference to avoid borrow checker problem
-        let iters = self.iters.deref_mut();
+        let iters = &mut *self.iters;
         let paths = &iters.paths;
         let read_lengths = &iters.read_lengths;
         let rec_num = &mut iters.records_read;
@@ -437,7 +436,7 @@ impl ReadPairIter {
                                 let which = WhichRead::read_types()[idx];
                                 let read_length = read_lengths[which as usize];
                                 let tr = TrimRecord::new(rec, read_length);
-                                rp.push_read(&tr, which)
+                                rp.push_read(&tr, which);
                             }
                         } else {
                             // track which reader finished
@@ -472,7 +471,7 @@ impl ReadPairIter {
                                     let which = WhichRead::read_types()[idx + 1];
                                     let read_length = read_lengths[which as usize];
                                     let tr = TrimRecord::new(rec, read_length);
-                                    rp.push_read(&tr, which)
+                                    rp.push_read(&tr, which);
                                 }
                             } else {
                                 // We should only hit this if the FASTQ has an odd
@@ -496,7 +495,7 @@ impl ReadPairIter {
                                 qual: vec![],
                             };
                             let tr = TrimRecord::new(&fake_r2_read, read_length);
-                            rp.push_read(&tr, WhichRead::R2)
+                            rp.push_read(&tr, WhichRead::R2);
                         }
                     }
                 }
@@ -540,15 +539,15 @@ impl ReadPairIter {
                 let any_not_complete = IntoIterator::into_iter(iter_ended)
                     .zip(paths.iter())
                     .any(|(ended, path)| !ended && path.is_some());
-
-                if any_not_complete {
-                    let msg = "Input FASTQ file ended prematurely".to_string();
-                    let path = paths[ended_index].as_ref().unwrap();
-                    let e = FastqError::format(msg, path, rec_num[ended_index] * 4);
-                    return Err(e);
+                return if any_not_complete {
+                    Err(FastqError::format(
+                        "Input FASTQ file ended prematurely".to_string(),
+                        paths[ended_index].as_ref().unwrap(),
+                        rec_num[ended_index] * 4,
+                    ))
                 } else {
-                    return Ok(None);
-                }
+                    Ok(None)
+                };
             }
 
             if sample {
